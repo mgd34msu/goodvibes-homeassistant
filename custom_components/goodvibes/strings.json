@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GoodVibes Daemon",
+        "description": "Connect to a GoodVibes daemon with SDK 0.25.11 Home Assistant surface enabled. The Home Assistant long-lived access token is configured in the daemon as surfaces.homeassistant.accessToken; this integration only stores the daemon URL, daemon bearer token, webhook secret, and event type.",
+        "data": {
+          "daemon_url": "Daemon URL",
+          "daemon_token": "Daemon bearer token",
+          "webhook_secret": "Home Assistant webhook secret",
+          "event_type": "Home Assistant event type"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the GoodVibes daemon.",
+      "invalid_auth": "The daemon rejected the bearer token.",
+      "surface_missing": "The daemon Home Assistant surface is not available. Enable featureFlags.homeassistant-surface and surfaces.homeassistant.enabled."
+    },
+    "abort": {
+      "already_configured": "This GoodVibes daemon is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "daemon_status": {
+        "name": "Daemon status"
+      },
+      "last_reply": {
+        "name": "Last reply"
+      },
+      "active_session_id": {
+        "name": "Active session ID"
+      },
+      "active_agent_id": {
+        "name": "Active agent ID"
+      },
+      "last_error": {
+        "name": "Last error"
+      },
+      "tool_catalog_status": {
+        "name": "Tool catalog status"
+      }
+    }
+  }
+}

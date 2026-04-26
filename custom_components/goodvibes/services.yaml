@@ -1,0 +1,152 @@
+prompt:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    message:
+      required: true
+      selector:
+        text:
+    conversation_id:
+      default: home
+      selector:
+        text:
+    device_id:
+      default: goodvibes-daemon
+      selector:
+        text:
+    entity_id:
+      selector:
+        text:
+    area_id:
+      selector:
+        text:
+    user_id:
+      selector:
+        text:
+    display_name:
+      default: Home Assistant
+      selector:
+        text:
+    message_id:
+      selector:
+        text:
+    provider_id:
+      selector:
+        text:
+    model_id:
+      selector:
+        text:
+    tools:
+      selector:
+        object:
+
+run_agent:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    task:
+      required: true
+      selector:
+        text:
+          multiline: true
+    conversation_id:
+      default: home
+      selector:
+        text:
+    device_id:
+      default: goodvibes-daemon
+      selector:
+        text:
+    entity_id:
+      selector:
+        text:
+    area_id:
+      selector:
+        text:
+    user_id:
+      selector:
+        text:
+    display_name:
+      default: Home Assistant
+      selector:
+        text:
+    message_id:
+      selector:
+        text:
+    provider_id:
+      selector:
+        text:
+    model_id:
+      selector:
+        text:
+    tools:
+      selector:
+        object:
+
+status:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    agent_id:
+      selector:
+        text:
+    run_id:
+      selector:
+        text:
+    task_id:
+      selector:
+        text:
+    session_id:
+      selector:
+        text:
+
+cancel:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    agent_id:
+      selector:
+        text:
+    run_id:
+      selector:
+        text:
+    task_id:
+      selector:
+        text:
+    session_id:
+      selector:
+        text:
+    input_id:
+      selector:
+        text:
+
+call_tool:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    tool:
+      required: true
+      selector:
+        select:
+          options:
+            - homeassistant_manifest
+            - homeassistant_status
+            - homeassistant_states
+            - homeassistant_state
+            - homeassistant_services
+            - homeassistant_call_service
+            - homeassistant_fire_event
+            - homeassistant_render_template
+    input:
+      selector:
+        object:
