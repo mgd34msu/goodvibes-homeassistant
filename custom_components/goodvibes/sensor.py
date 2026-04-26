@@ -44,6 +44,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodVibesSensorDescription, ...] = (
         attrs_fn=lambda data: {
             "daemon_url": data.client.daemon_url,
             "event_type": data.event_type,
+            "health": data.health,
             "daemon": data.daemon_status,
             "homeassistant": data.homeassistant_status,
         },

@@ -33,15 +33,21 @@ DEFAULT_EVENT_TYPE = "goodvibes_message"
 DEFAULT_DEVICE_ID = "goodvibes-daemon"
 DEFAULT_DEVICE_NAME = "GoodVibes Daemon"
 DEFAULT_CONVERSATION_ID = "home"
+DEFAULT_ASSIST_CONVERSATION_PREFIX = "assist"
 DEFAULT_DISPLAY_NAME = "Home Assistant"
+DEFAULT_CONVERSATION_TIMEOUT_MS = 120000
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "conversation"]
 
 SIGNAL_UPDATE = "goodvibes_update"
 
 WEBHOOK_PATH = "/webhook/homeassistant"
 
 ENDPOINT_STATUS = "/status"
+ENDPOINT_HEALTH = "/api/homeassistant/health"
+ENDPOINT_CONVERSATION = "/api/homeassistant/conversation"
+ENDPOINT_CONVERSATION_STREAM = "/api/homeassistant/conversation/stream"
+ENDPOINT_CONVERSATION_CANCEL = "/api/homeassistant/conversation/cancel"
 ENDPOINT_MANIFEST = "/api/channels/actions/homeassistant/homeassistant-manifest"
 ENDPOINT_HOMEASSISTANT_STATUS = (
     "/api/channels/actions/homeassistant/homeassistant-status"

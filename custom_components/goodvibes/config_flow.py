@@ -65,7 +65,11 @@ class GoodVibesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 message = str(err).lower()
                 if "401" in message or "403" in message or "unauthorized" in message:
                     errors["base"] = "invalid_auth"
-                elif "unknown channel action" in message or "404" in message:
+                elif (
+                    "unknown channel action" in message
+                    or "home assistant surface is disabled" in message
+                    or "404" in message
+                ):
                     errors["base"] = "surface_missing"
                 else:
                     errors["base"] = "cannot_connect"
@@ -101,6 +105,9 @@ async def _validate_input(
 
     client = GoodVibesClient(hass, daemon_url, daemon_token, webhook_secret)
     await client.status()
+    health = await client.health()
+    if health.get("ok") is False:
+        raise GoodVibesClientError("Home Assistant surface is disabled")
     raw_manifest = await client.manifest()
     manifest = raw_manifest.get("result", raw_manifest)
 

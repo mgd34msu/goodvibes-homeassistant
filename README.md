@@ -1,11 +1,12 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.25.11`.
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.25.13`.
 
 This integration keeps Home Assistant-specific behavior in Home Assistant:
 
 - config flow for daemon URL, daemon bearer token, webhook secret, and event type
 - device registry entry for the GoodVibes daemon
+- Assist conversation agent support through `/api/homeassistant/conversation`
 - services for prompts, agent tasks, status, cancellation, and daemon-exposed HA tools
 - local event listener for `goodvibes_message`
 - sensors for daemon status, last reply, active session/agent IDs, last error, and tool catalog status
@@ -38,8 +39,18 @@ Important daemon keys:
 - `surfaces.homeassistant.deviceId`
 - `surfaces.homeassistant.deviceName`
 - `surfaces.homeassistant.eventType`, default `goodvibes_message`
+- `surfaces.homeassistant.remoteSessionTtlMs`, default `1200000`
 
 The Home Assistant long-lived access token belongs in the daemon config as `surfaces.homeassistant.accessToken`. The integration stores the webhook secret so Home Assistant can submit prompts to `/webhook/homeassistant`.
+
+Assist conversation turns use the daemon bearer token and the synchronous daemon endpoint:
+
+```http
+POST /api/homeassistant/conversation
+Authorization: Bearer <daemon operator token>
+```
+
+The webhook endpoint remains for automation/service calls that intentionally want queued async behavior.
 
 ## Installation
 
@@ -48,7 +59,14 @@ Copy `custom_components/goodvibes` into your Home Assistant `custom_components` 
 The config flow validates:
 
 - `GET /status`
+- `GET /api/homeassistant/health`
 - `POST /api/channels/actions/homeassistant/homeassistant-manifest`
+
+## Assist
+
+After setup, select the GoodVibes conversation entity as the conversation agent in a Home Assistant Assist pipeline. Assist turns are sent to `/api/homeassistant/conversation`, which waits for the final daemon response and returns `assistant.speechText` or `assistant.text` directly.
+
+The daemon owns Home Assistant remote sessions and expires idle sessions after `surfaces.homeassistant.remoteSessionTtlMs`.
 
 ## Services
 

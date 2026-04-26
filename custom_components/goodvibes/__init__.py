@@ -106,6 +106,7 @@ CANCEL_SCHEMA = vol.Schema(
         vol.Optional(CONF_TASK_ID): cv.string,
         vol.Optional(CONF_SESSION_ID): cv.string,
         vol.Optional(CONF_INPUT_ID): cv.string,
+        vol.Optional(CONF_MESSAGE_ID): cv.string,
     }
 )
 
@@ -143,6 +144,7 @@ class GoodVibesRuntimeData:
     client: GoodVibesClient
     event_type: str
     manifest: dict[str, Any] = field(default_factory=dict)
+    health: dict[str, Any] = field(default_factory=dict)
     daemon_status: dict[str, Any] = field(default_factory=dict)
     homeassistant_status: dict[str, Any] = field(default_factory=dict)
     tool_catalog: dict[str, Any] = field(default_factory=dict)
@@ -209,6 +211,7 @@ class GoodVibesRuntimeData:
         """Refresh daemon status and tool catalog."""
 
         try:
+            self.health = await self.client.health()
             self.daemon_status = await self.client.status()
             self.status = str(self.daemon_status.get("status") or "running")
             raw_surface_status = await self.client.homeassistant_status()
@@ -281,6 +284,26 @@ class GoodVibesRuntimeData:
         self.status = "queued" if response.get("queued") else "acknowledged"
         async_dispatcher_send(self.hass, self.signal)
 
+    @callback
+    def async_apply_conversation_response(self, response: dict[str, Any]) -> None:
+        """Update runtime state from a synchronous conversation response."""
+
+        if session_id := response.get("sessionId"):
+            self.active_session_id = str(session_id)
+        if agent_id := response.get("agentId"):
+            self.active_agent_id = str(agent_id)
+        assistant = response.get("assistant")
+        if isinstance(assistant, dict):
+            reply = assistant.get("speechText") or assistant.get("text")
+            if reply:
+                self.last_reply = str(reply)
+        self.status = str(response.get("status") or response.get("mode") or "conversation")
+        if response.get("ok") is False:
+            self.last_error = str(response.get("error") or "GoodVibes conversation failed")
+        else:
+            self.last_error = None
+        async_dispatcher_send(self.hass, self.signal)
+
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up GoodVibes services."""
@@ -332,18 +355,22 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
                 )
             )
         else:
-            identifier = (
-                call.data.get(CONF_AGENT_ID)
-                or call.data.get(CONF_RUN_ID)
-                or runtime.active_agent_id
-                or runtime.active_run_id
-            )
-            if not identifier:
-                raise HomeAssistantError(
-                    "cancel requires agent_id, run_id, task_id, session_id/input_id, "
-                    "or an active GoodVibes run"
+            agent_id = call.data.get(CONF_AGENT_ID) or runtime.active_agent_id
+            message_id = call.data.get(CONF_MESSAGE_ID)
+            if agent_id or message_id:
+                response = await _call_client(
+                    runtime.client.cancel_conversation(
+                        agent_id=agent_id,
+                        message_id=message_id,
+                    )
                 )
-            response = await _call_client(runtime.client.control_command("cancel", identifier))
+            elif run_id := call.data.get(CONF_RUN_ID) or runtime.active_run_id:
+                response = await _call_client(runtime.client.control_command("cancel", run_id))
+            else:
+                raise HomeAssistantError(
+                    "cancel requires agent_id, message_id, run_id, task_id, "
+                    "session_id/input_id, or an active GoodVibes run"
+                )
         runtime.status = "cancelled"
         runtime.active_agent_id = None
         runtime.active_run_id = None

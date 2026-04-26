@@ -115,6 +115,9 @@ cancel:
     agent_id:
       selector:
         text:
+    message_id:
+      selector:
+        text:
     run_id:
       selector:
         text:

@@ -11,10 +11,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     ENDPOINT_AGENT_TOOLS,
+    ENDPOINT_CONVERSATION,
+    ENDPOINT_CONVERSATION_CANCEL,
+    ENDPOINT_HEALTH,
     ENDPOINT_HOMEASSISTANT_STATUS,
     ENDPOINT_MANIFEST,
     ENDPOINT_STATUS,
     ENDPOINT_TOOLS,
+    DEFAULT_CONVERSATION_TIMEOUT_MS,
     TOOL_NAME_TO_ID,
     WEBHOOK_PATH,
 )
@@ -63,6 +67,11 @@ class GoodVibesClient:
 
         return await self._request("GET", ENDPOINT_STATUS)
 
+    async def health(self) -> dict[str, Any]:
+        """Return the daemon Home Assistant health endpoint."""
+
+        return await self._request("GET", ENDPOINT_HEALTH)
+
     async def manifest(self) -> dict[str, Any]:
         """Return the Home Assistant surface manifest from the daemon."""
 
@@ -78,7 +87,10 @@ class GoodVibesClient:
 
         tools = await self._request("GET", ENDPOINT_TOOLS)
         agent_tools = await self._request("GET", ENDPOINT_AGENT_TOOLS)
-        return {"tools": tools.get("tools", []), "agent_tools": agent_tools.get("tools", [])}
+        return {
+            "tools": tools.get("tools", []),
+            "agent_tools": agent_tools.get("tools", []),
+        }
 
     async def prompt(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Submit a Home Assistant prompt webhook payload."""
@@ -90,6 +102,36 @@ class GoodVibesClient:
 
         merged = {"type": "agent", **dict(payload)}
         return await self._webhook(merged)
+
+    async def conversation(
+        self,
+        payload: Mapping[str, Any],
+        timeout_ms: int = DEFAULT_CONVERSATION_TIMEOUT_MS,
+    ) -> dict[str, Any]:
+        """Submit an Assist conversation turn and wait for the final response."""
+
+        request_timeout = max(5, int(timeout_ms / 1000) + 10)
+        return await self._request(
+            "POST",
+            ENDPOINT_CONVERSATION,
+            json=dict(payload),
+            timeout=request_timeout,
+        )
+
+    async def cancel_conversation(
+        self,
+        *,
+        agent_id: str | None = None,
+        message_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Cancel a Home Assistant conversation turn."""
+
+        payload: dict[str, Any] = {}
+        if agent_id:
+            payload["agentId"] = agent_id
+        if message_id:
+            payload["messageId"] = message_id
+        return await self._request("POST", ENDPOINT_CONVERSATION_CANCEL, json=payload)
 
     async def control_command(self, action: str, identifier: str) -> dict[str, Any]:
         """Send a daemon surface control command through the HA webhook."""
@@ -120,7 +162,9 @@ class GoodVibesClient:
     async def session(self, session_id: str) -> dict[str, Any]:
         """Return a shared session record."""
 
-        return await self._request("GET", f"/api/sessions/{quote(session_id, safe='')}")
+        return await self._request(
+            "GET", f"/api/sessions/{quote(session_id, safe='')}"
+        )
 
     async def cancel_session_input(
         self, session_id: str, input_id: str
@@ -133,7 +177,9 @@ class GoodVibesClient:
         )
         return await self._request("POST", path, json={})
 
-    async def call_tool(self, tool: str, input_payload: Mapping[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self, tool: str, input_payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
         """Invoke a daemon-exposed Home Assistant tool."""
 
         tool_id = TOOL_NAME_TO_ID.get(tool, tool)
@@ -163,6 +209,7 @@ class GoodVibesClient:
         json: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         include_daemon_auth: bool = True,
+        timeout: int = 20,
     ) -> dict[str, Any]:
         """Request JSON from the daemon."""
 
@@ -178,7 +225,7 @@ class GoodVibesClient:
                 f"{self._daemon_url}{path}",
                 json=json,
                 headers=request_headers,
-                timeout=aiohttp.ClientTimeout(total=20),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 text = await response.text()
                 if response.status >= 400:
