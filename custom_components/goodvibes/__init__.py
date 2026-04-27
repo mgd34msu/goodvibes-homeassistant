@@ -26,7 +26,6 @@ from .const import (
     CONF_ENTITY_ID,
     CONF_EVENT_TYPE,
     CONF_INPUT,
-    CONF_INPUT_ID,
     CONF_MESSAGE_ID,
     CONF_MODEL_ID,
     CONF_PROVIDER_ID,
@@ -101,11 +100,9 @@ STATUS_SCHEMA = vol.Schema(
 CANCEL_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
-        vol.Optional(CONF_AGENT_ID): cv.string,
         vol.Optional(CONF_RUN_ID): cv.string,
         vol.Optional(CONF_TASK_ID): cv.string,
         vol.Optional(CONF_SESSION_ID): cv.string,
-        vol.Optional(CONF_INPUT_ID): cv.string,
         vol.Optional(CONF_MESSAGE_ID): cv.string,
     }
 )
@@ -154,6 +151,7 @@ class GoodVibesRuntimeData:
     last_error: str | None = None
     last_event_at: str | None = None
     active_session_id: str | None = None
+    active_message_id: str | None = None
     active_agent_id: str | None = None
     active_run_id: str | None = None
     unsubscribe_event: Any | None = None
@@ -249,11 +247,14 @@ class GoodVibesRuntimeData:
             self.last_reply = str(title)
 
         session_id = payload.get("sessionId") or payload.get("session_id")
+        message_id = payload.get("messageId") or payload.get("message_id")
         agent_id = payload.get("agentId") or payload.get("agent_id")
         run_id = payload.get("runId") or payload.get("run_id") or payload.get("jobId")
 
         status_lower = str(event_status).lower()
         if status_lower in TERMINAL_STATUSES:
+            if message_id is None or str(message_id) == self.active_message_id:
+                self.active_message_id = None
             if agent_id is None or str(agent_id) == self.active_agent_id:
                 self.active_agent_id = None
             if session_id is None or str(session_id) == self.active_session_id:
@@ -263,6 +264,8 @@ class GoodVibesRuntimeData:
         else:
             if session_id:
                 self.active_session_id = str(session_id)
+            if message_id:
+                self.active_message_id = str(message_id)
             if agent_id:
                 self.active_agent_id = str(agent_id)
             if run_id:
@@ -279,17 +282,36 @@ class GoodVibesRuntimeData:
 
         if session_id := response.get("sessionId"):
             self.active_session_id = str(session_id)
+        if message_id := response.get("messageId"):
+            self.active_message_id = str(message_id)
         if agent_id := response.get("agentId"):
             self.active_agent_id = str(agent_id)
         self.status = "queued" if response.get("queued") else "acknowledged"
         async_dispatcher_send(self.hass, self.signal)
 
     @callback
+    def async_start_conversation_turn(self, message_id: str) -> None:
+        """Mark a synchronous remote-chat conversation turn as in progress."""
+
+        self.active_message_id = message_id
+        self.status = "processing"
+        self.last_error = None
+        async_dispatcher_send(self.hass, self.signal)
+
+    @callback
     def async_apply_conversation_response(self, response: dict[str, Any]) -> None:
         """Update runtime state from a synchronous conversation response."""
 
+        response_status = (
+            response.get("status") or response.get("mode") or "conversation"
+        )
         if session_id := response.get("sessionId"):
             self.active_session_id = str(session_id)
+        if message_id := response.get("messageId"):
+            if str(message_id) == self.active_message_id:
+                self.active_message_id = None
+        elif str(response_status).lower() in TERMINAL_STATUSES:
+            self.active_message_id = None
         if agent_id := response.get("agentId"):
             self.active_agent_id = str(agent_id)
         assistant = response.get("assistant")
@@ -297,11 +319,23 @@ class GoodVibesRuntimeData:
             reply = assistant.get("speechText") or assistant.get("text")
             if reply:
                 self.last_reply = str(reply)
-        self.status = str(response.get("status") or response.get("mode") or "conversation")
+        self.status = str(response_status)
         if response.get("ok") is False:
-            self.last_error = str(response.get("error") or "GoodVibes conversation failed")
+            self.last_error = str(
+                response.get("error") or "GoodVibes conversation failed"
+            )
         else:
             self.last_error = None
+        async_dispatcher_send(self.hass, self.signal)
+
+    @callback
+    def async_apply_conversation_error(self, message_id: str, error: str) -> None:
+        """Update runtime state when a synchronous conversation request fails."""
+
+        if self.active_message_id == message_id:
+            self.active_message_id = None
+        self.status = "error"
+        self.last_error = error
         async_dispatcher_send(self.hass, self.signal)
 
 
@@ -334,7 +368,15 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         if agent_id := call.data.get(CONF_AGENT_ID):
             return await _call_client(runtime.client.agent_status(agent_id))
         if session_id := call.data.get(CONF_SESSION_ID):
-            return await _call_client(runtime.client.session(session_id))
+            await runtime.async_refresh()
+            return {
+                "sessionId": session_id,
+                "active": session_id == runtime.active_session_id,
+                "activeMessageId": runtime.active_message_id,
+                "status": runtime.status,
+                "homeassistant": runtime.homeassistant_status,
+                "health": runtime.health,
+            }
         if run_id := call.data.get(CONF_RUN_ID):
             return await _call_client(runtime.client.control_command("status", run_id))
         await runtime.async_refresh()
@@ -348,30 +390,39 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime = _runtime_from_service_call(hass, call)
         if task_id := call.data.get(CONF_TASK_ID):
             response = await _call_client(runtime.client.cancel_task(task_id))
-        elif call.data.get(CONF_SESSION_ID) and call.data.get(CONF_INPUT_ID):
+        elif call.data.get(CONF_SESSION_ID) or call.data.get(CONF_MESSAGE_ID):
             response = await _call_client(
-                runtime.client.cancel_session_input(
-                    call.data[CONF_SESSION_ID], call.data[CONF_INPUT_ID]
+                runtime.client.cancel_conversation(
+                    session_id=call.data.get(CONF_SESSION_ID),
+                    message_id=call.data.get(CONF_MESSAGE_ID),
                 )
             )
+        elif run_id := call.data.get(CONF_RUN_ID):
+            response = await _call_client(
+                runtime.client.control_command("cancel", run_id)
+            )
         else:
-            agent_id = call.data.get(CONF_AGENT_ID) or runtime.active_agent_id
-            message_id = call.data.get(CONF_MESSAGE_ID)
-            if agent_id or message_id:
+            session_id = runtime.active_session_id
+            message_id = runtime.active_message_id
+            if session_id or message_id:
                 response = await _call_client(
                     runtime.client.cancel_conversation(
-                        agent_id=agent_id,
+                        session_id=session_id,
                         message_id=message_id,
                     )
                 )
-            elif run_id := call.data.get(CONF_RUN_ID) or runtime.active_run_id:
-                response = await _call_client(runtime.client.control_command("cancel", run_id))
+            elif run_id := runtime.active_run_id:
+                response = await _call_client(
+                    runtime.client.control_command("cancel", run_id)
+                )
             else:
                 raise HomeAssistantError(
-                    "cancel requires agent_id, message_id, run_id, task_id, "
-                    "session_id/input_id, or an active GoodVibes run"
+                    "cancel requires session_id, message_id, run_id, task_id, "
+                    "or an active GoodVibes conversation"
                 )
         runtime.status = "cancelled"
+        runtime.active_message_id = None
+        runtime.active_session_id = None
         runtime.active_agent_id = None
         runtime.active_run_id = None
         async_dispatcher_send(hass, runtime.signal)

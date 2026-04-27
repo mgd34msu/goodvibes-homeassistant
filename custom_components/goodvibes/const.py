@@ -24,7 +24,6 @@ CONF_AGENT_ID = "agent_id"
 CONF_RUN_ID = "run_id"
 CONF_TASK_ID = "task_id"
 CONF_SESSION_ID = "session_id"
-CONF_INPUT_ID = "input_id"
 CONF_TOOL = "tool"
 CONF_INPUT = "input"
 

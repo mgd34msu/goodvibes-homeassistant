@@ -1,4 +1,5 @@
 prompt:
+  description: Submit an async prompt through the GoodVibes Home Assistant webhook.
   fields:
     config_entry_id:
       selector:
@@ -43,6 +44,7 @@ prompt:
         object:
 
 run_agent:
+  description: Submit an async task-style prompt through the GoodVibes remote-chat webhook.
   fields:
     config_entry_id:
       selector:
@@ -88,6 +90,7 @@ run_agent:
         object:
 
 status:
+  description: Inspect daemon, Home Assistant surface, or local remote-chat status.
   fields:
     config_entry_id:
       selector:
@@ -107,17 +110,12 @@ status:
         text:
 
 cancel:
+  description: Cancel a GoodVibes Home Assistant remote-chat session or message.
   fields:
     config_entry_id:
       selector:
         config_entry:
           integration: goodvibes
-    agent_id:
-      selector:
-        text:
-    message_id:
-      selector:
-        text:
     run_id:
       selector:
         text:
@@ -125,13 +123,16 @@ cancel:
       selector:
         text:
     session_id:
+      description: Remote-chat session ID returned by the daemon.
       selector:
         text:
-    input_id:
+    message_id:
+      description: Message ID sent to the daemon for an active conversation turn.
       selector:
         text:
 
 call_tool:
+  description: Invoke a daemon-exposed Home Assistant tool.
   fields:
     config_entry_id:
       selector:

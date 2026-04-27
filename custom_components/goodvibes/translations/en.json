@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "GoodVibes Daemon",
-        "description": "Connect to a GoodVibes daemon with SDK 0.25.13 Home Assistant surface enabled. The Home Assistant long-lived access token is configured in the daemon as surfaces.homeassistant.accessToken; this integration stores the daemon URL, daemon bearer token, webhook secret, and event type. Assist conversation turns use /api/homeassistant/conversation.",
+        "description": "Connect to a GoodVibes daemon with SDK 0.25.14 Home Assistant surface enabled. The Home Assistant long-lived access token is configured in the daemon as surfaces.homeassistant.accessToken; this integration stores the daemon URL, daemon bearer token, webhook secret, and event type. Assist conversation turns use the remote-chat /api/homeassistant/conversation endpoint.",
         "data": {
           "daemon_url": "Daemon URL",
           "daemon_token": "Daemon bearer token",
@@ -31,6 +31,9 @@
       },
       "active_session_id": {
         "name": "Active session ID"
+      },
+      "active_message_id": {
+        "name": "Active message ID"
       },
       "active_agent_id": {
         "name": "Active agent ID"

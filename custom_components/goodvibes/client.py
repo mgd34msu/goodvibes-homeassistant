@@ -98,7 +98,7 @@ class GoodVibesClient:
         return await self._webhook(payload)
 
     async def run_agent(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """Submit a Home Assistant agent-task webhook payload."""
+        """Submit a compatibility run-agent webhook payload."""
 
         merged = {"type": "agent", **dict(payload)}
         return await self._webhook(merged)
@@ -121,14 +121,14 @@ class GoodVibesClient:
     async def cancel_conversation(
         self,
         *,
-        agent_id: str | None = None,
+        session_id: str | None = None,
         message_id: str | None = None,
     ) -> dict[str, Any]:
-        """Cancel a Home Assistant conversation turn."""
+        """Cancel a Home Assistant remote-chat conversation."""
 
         payload: dict[str, Any] = {}
-        if agent_id:
-            payload["agentId"] = agent_id
+        if session_id:
+            payload["sessionId"] = session_id
         if message_id:
             payload["messageId"] = message_id
         return await self._request("POST", ENDPOINT_CONVERSATION_CANCEL, json=payload)
@@ -158,24 +158,6 @@ class GoodVibesClient:
         """Return a runtime task record."""
 
         return await self._request("GET", f"/api/tasks/{quote(task_id, safe='')}")
-
-    async def session(self, session_id: str) -> dict[str, Any]:
-        """Return a shared session record."""
-
-        return await self._request(
-            "GET", f"/api/sessions/{quote(session_id, safe='')}"
-        )
-
-    async def cancel_session_input(
-        self, session_id: str, input_id: str
-    ) -> dict[str, Any]:
-        """Cancel a queued shared-session input."""
-
-        path = (
-            f"/api/sessions/{quote(session_id, safe='')}/inputs/"
-            f"{quote(input_id, safe='')}/cancel"
-        )
-        return await self._request("POST", path, json={})
 
     async def call_tool(
         self, tool: str, input_payload: Mapping[str, Any]

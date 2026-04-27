@@ -68,6 +68,14 @@ SENSOR_DESCRIPTIONS: tuple[GoodVibesSensorDescription, ...] = (
         attrs_fn=lambda data: {"active_session_id": data.active_session_id},
     ),
     GoodVibesSensorDescription(
+        key="active_message_id",
+        translation_key="active_message_id",
+        icon="mdi:message-processing",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _state(data.active_message_id, "none"),
+        attrs_fn=lambda data: {"active_message_id": data.active_message_id},
+    ),
+    GoodVibesSensorDescription(
         key="active_agent_id",
         translation_key="active_agent_id",
         icon="mdi:robot",

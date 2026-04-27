@@ -85,6 +85,7 @@ class GoodVibesConversationEntity(ConversationEntity):
         )
         message_id = f"ha-assist-{uuid4()}"
         payload = self._build_payload(user_input, conversation_id, message_id)
+        self._runtime.async_start_conversation_turn(message_id)
 
         try:
             result = await self._runtime.client.conversation(
@@ -94,6 +95,7 @@ class GoodVibesConversationEntity(ConversationEntity):
         except GoodVibesClientError as err:
             speech = f"GoodVibes is unavailable: {err}"
             result_conversation_id = conversation_id
+            self._runtime.async_apply_conversation_error(message_id, str(err))
         else:
             self._runtime.async_apply_conversation_response(result)
             assistant = result.get("assistant")

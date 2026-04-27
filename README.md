@@ -1,17 +1,18 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.25.13`.
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.25.14`.
 
 This integration keeps Home Assistant-specific behavior in Home Assistant:
 
 - config flow for daemon URL, daemon bearer token, webhook secret, and event type
 - device registry entry for the GoodVibes daemon
-- Assist conversation agent support through `/api/homeassistant/conversation`
-- services for prompts, agent tasks, status, cancellation, and daemon-exposed HA tools
+- Assist conversation agent support through the remote-chat `/api/homeassistant/conversation` endpoint
+- services for prompts, task-style prompts, status, cancellation, and daemon-exposed HA tools
 - local event listener for `goodvibes_message`
-- sensors for daemon status, last reply, active session/agent IDs, last error, and tool catalog status
+- sensors for daemon status, last reply, active session/message/agent IDs, last error, and tool catalog status
 
 It does not reimplement GoodVibes routing, tool catalogs, provider/model resolution, or agent spawning.
+Assist chat stays in isolated daemon remote-chat sessions; it does not use shared TUI sessions, WRFC review/fix chains, or agent task report output.
 
 ## Daemon Configuration
 
@@ -51,6 +52,7 @@ Authorization: Bearer <daemon operator token>
 ```
 
 The webhook endpoint remains for automation/service calls that intentionally want queued async behavior.
+Use SDK `0.25.14` or newer for the remote-chat behavior, then restart the daemon after upgrading.
 
 ## Installation
 
@@ -64,9 +66,9 @@ The config flow validates:
 
 ## Assist
 
-After setup, select the GoodVibes conversation entity as the conversation agent in a Home Assistant Assist pipeline. Assist turns are sent to `/api/homeassistant/conversation`, which waits for the final daemon response and returns `assistant.speechText` or `assistant.text` directly.
+After setup, select the GoodVibes conversation entity as the conversation agent in a Home Assistant Assist pipeline. Assist turns are sent to `/api/homeassistant/conversation`, which waits for the final remote-chat response and returns `assistant.speechText` or `assistant.text` directly.
 
-The daemon owns Home Assistant remote sessions and expires idle sessions after `surfaces.homeassistant.remoteSessionTtlMs`.
+The daemon owns Home Assistant remote-chat sessions and expires idle sessions after `surfaces.homeassistant.remoteSessionTtlMs`, which defaults to 20 minutes. Cancellation uses the daemon remote-chat cancel endpoint with a `sessionId` or `messageId`.
 
 ## Services
 
@@ -91,7 +93,7 @@ data:
     - homeassistant_call_service
 ```
 
-Example agent task:
+Example task-style prompt:
 
 ```yaml
 action: goodvibes.run_agent
@@ -102,6 +104,14 @@ data:
   tools:
     - homeassistant_states
     - homeassistant_call_service
+```
+
+Example cancellation:
+
+```yaml
+action: goodvibes.cancel
+data:
+  session_id: ha-chat-sess-1234
 ```
 
 Example daemon-exposed tool call:
