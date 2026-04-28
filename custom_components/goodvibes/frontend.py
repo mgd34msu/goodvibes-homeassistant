@@ -11,7 +11,7 @@ from typing import Any
 from aiohttp import web
 import voluptuous as vol
 
-from homeassistant.components import frontend, websocket_api
+from homeassistant.components import frontend, panel_custom, websocket_api
 from homeassistant.components.http import KEY_HASS, HomeAssistantView, StaticPathConfig
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -53,6 +53,7 @@ PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = f"{STATIC_URL}/goodvibes-home-panel.js"
 ICON_MODULE_URL = f"{STATIC_URL}/goodvibes-icons.js"
+PANEL_ICON = "mdi:home-assistant"
 UPLOAD_URL = "/api/goodvibes/home-graph/upload"
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
 
@@ -84,16 +85,14 @@ async def async_setup_frontend(hass: HomeAssistant) -> None:
             [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), True)]
         )
         frontend.add_extra_js_url(hass, ICON_MODULE_URL)
-        frontend.add_extra_js_url(hass, PANEL_MODULE_URL)
         websocket_api.async_register_command(hass, websocket_home_graph_call)
         hass.http.register_view(GoodVibesHomeGraphUploadView())
         data["frontend_registered"] = True
 
-    async_register_frontend_panel(hass)
+    await async_register_frontend_panel(hass)
 
 
-@callback
-def async_register_frontend_panel(hass: HomeAssistant) -> None:
+async def async_register_frontend_panel(hass: HomeAssistant) -> None:
     """Show the GoodVibes Home panel in the sidebar."""
 
     data = hass.data.setdefault(DOMAIN, {})
@@ -104,20 +103,24 @@ def async_register_frontend_panel(hass: HomeAssistant) -> None:
         and hasattr(value, "client")
         and hasattr(value, "entry")
     ]
-    frontend.async_register_built_in_panel(
+    if data.get("frontend_panel_registered"):
+        frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
+
+    await panel_custom.async_register_panel(
         hass,
-        PANEL_COMPONENT,
+        webcomponent_name=PANEL_COMPONENT,
         sidebar_title="GoodVibes Home",
-        sidebar_icon="goodvibes:home",
+        sidebar_icon=PANEL_ICON,
         frontend_url_path=PANEL_URL_PATH,
+        module_url=PANEL_MODULE_URL,
         config={
             "domain": DOMAIN,
             "configEntryId": entry_ids[0] if len(entry_ids) == 1 else None,
+            "sidebarIcon": PANEL_ICON,
             "uploadUrl": UPLOAD_URL,
             "wsType": WS_HOME_GRAPH_CALL,
         },
         require_admin=True,
-        update=bool(data.get("frontend_panel_registered")),
     )
     data["frontend_panel_registered"] = True
 

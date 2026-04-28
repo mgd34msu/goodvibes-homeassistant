@@ -73,7 +73,7 @@ Config fields:
 
 ## GoodVibes Home Sidebar
 
-The integration registers an admin-only Home Assistant sidebar panel named `GoodVibes Home`. The integration brand icon lives at `custom_components/goodvibes/brand/icon.png`; the sidebar icon uses the local custom iconset `goodvibes:home`, generated from `custom_components/goodvibes/frontend/gv-icon-sidebar.svg`.
+The integration registers an admin-only Home Assistant sidebar panel named `GoodVibes Home`. Home Assistant custom panels load their page code through `panel_custom`, so the sidebar uses the stable `mdi:home-assistant` icon while the integration brand icon lives at `custom_components/goodvibes/brand/icon.png`.
 
 The panel talks to Home Assistant, not directly to the daemon:
 
