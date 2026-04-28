@@ -93,18 +93,37 @@ z`,
   viewBox: "0 0 600 600",
 };
 
+const GOODVIBES_ICONS = {
+  home: {
+    path: HOME_ICON.path,
+    viewBox: HOME_ICON.viewBox,
+    keywords: ["goodvibes", "home", "graph"],
+  },
+};
+
 window.customIconsets = window.customIconsets || {};
 window.customIcons = window.customIcons || {};
 
-const getGoodVibesIcon = async (name) => {
-  if (name !== "home") {
+const getGoodVibesIcon = async (iconName) => {
+  const icon = GOODVIBES_ICONS[iconName];
+  if (!icon) {
     return undefined;
   }
-  return HOME_ICON;
+  return {
+    path: icon.path,
+    viewBox: icon.viewBox,
+  };
 };
 
-window.customIconsets.goodvibes = getGoodVibesIcon;
-window.customIcons.goodvibes = { getIcon: getGoodVibesIcon };
+window.customIcons["goodvibes"] = {
+  getIcon: getGoodVibesIcon,
+  getIconList: async () =>
+    Object.entries(GOODVIBES_ICONS).map(([name, icon]) => ({
+      name,
+      keywords: icon.keywords,
+    })),
+};
+window.customIconsets["goodvibes"] = getGoodVibesIcon;
 
 function patchGoodVibesSidebarIcon() {
   const item = findInOpenRoots(document, "#sidebar-panel-goodvibes-home");

@@ -11,7 +11,7 @@ from typing import Any
 from aiohttp import web
 import voluptuous as vol
 
-from homeassistant.components import frontend, panel_custom, websocket_api
+from homeassistant.components import frontend, websocket_api
 from homeassistant.components.http import KEY_HASS, HomeAssistantView, StaticPathConfig
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -50,7 +50,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.3"
+FRONTEND_ASSET_VERSION = "0.5.4"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -111,14 +111,19 @@ async def async_register_frontend_panel(hass: HomeAssistant) -> None:
     if data.get("frontend_panel_registered"):
         frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
 
-    await panel_custom.async_register_panel(
+    frontend.async_register_built_in_panel(
         hass,
-        webcomponent_name=PANEL_COMPONENT,
+        component_name="custom",
         sidebar_title="GoodVibes Home",
         sidebar_icon=PANEL_ICON,
         frontend_url_path=PANEL_URL_PATH,
-        module_url=PANEL_MODULE_URL,
         config={
+            "_panel_custom": {
+                "name": PANEL_COMPONENT,
+                "embed_iframe": False,
+                "trust_external": False,
+                "module_url": PANEL_MODULE_URL,
+            },
             "domain": DOMAIN,
             "configEntryId": entry_ids[0] if len(entry_ids) == 1 else None,
             "sidebarIcon": PANEL_ICON,
