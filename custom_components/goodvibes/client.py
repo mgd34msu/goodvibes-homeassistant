@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json as json_lib
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -190,7 +192,9 @@ class GoodVibesClient:
     ) -> dict[str, Any]:
         """Return daemon Home Graph status."""
 
-        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_STATUS, payload))
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_STATUS, payload)
+        )
 
     async def home_graph_sync(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Submit a Home Graph snapshot sync."""
@@ -223,6 +227,44 @@ class GoodVibesClient:
         return await self._request(
             "POST", ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT, json=dict(payload)
         )
+
+    async def home_graph_upload_artifact(
+        self,
+        payload: Mapping[str, Any],
+        file_path: str,
+        *,
+        filename: str,
+        content_type: str | None = None,
+        timeout: int = 3600,
+    ) -> dict[str, Any]:
+        """Upload a local file to Home Graph with multipart/form-data."""
+
+        form = aiohttp.FormData()
+        for key, value in payload.items():
+            if value in (None, ""):
+                continue
+            if isinstance(value, (dict, list)):
+                form.add_field(
+                    key,
+                    json_lib.dumps(value, separators=(",", ":")),
+                    content_type="application/json",
+                )
+            else:
+                form.add_field(key, str(value))
+
+        with Path(file_path).open("rb") as upload_file:
+            form.add_field(
+                "file",
+                upload_file,
+                filename=filename,
+                content_type=content_type or "application/octet-stream",
+            )
+            return await self._request(
+                "POST",
+                ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT,
+                data=form,
+                timeout=timeout,
+            )
 
     async def home_graph_link(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Link a Home Graph source or node to a Home Assistant object."""
@@ -262,14 +304,18 @@ class GoodVibesClient:
     async def home_graph_packet(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Generate a scoped Home Graph packet."""
 
-        return await self._request("POST", ENDPOINT_HOME_GRAPH_PACKET, json=dict(payload))
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_PACKET, json=dict(payload)
+        )
 
     async def home_graph_issues(
         self, payload: Mapping[str, Any]
     ) -> dict[str, Any]:
         """List Home Graph issues."""
 
-        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_ISSUES, payload))
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_ISSUES, payload)
+        )
 
     async def home_graph_review_fact(
         self, payload: Mapping[str, Any]
@@ -285,22 +331,30 @@ class GoodVibesClient:
     ) -> dict[str, Any]:
         """List Home Graph sources."""
 
-        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_SOURCES, payload))
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_SOURCES, payload)
+        )
 
     async def home_graph_browse(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Browse Home Graph nodes and links."""
 
-        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_BROWSE, payload))
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_BROWSE, payload)
+        )
 
     async def home_graph_export(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Request a daemon-owned Home Graph export."""
 
-        return await self._request("POST", ENDPOINT_HOME_GRAPH_EXPORT, json=dict(payload))
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_EXPORT, json=dict(payload)
+        )
 
     async def home_graph_import(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Request a daemon-owned Home Graph import."""
 
-        return await self._request("POST", ENDPOINT_HOME_GRAPH_IMPORT, json=dict(payload))
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_IMPORT, json=dict(payload)
+        )
 
     async def _webhook(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """POST a payload to the daemon Home Assistant webhook."""
@@ -323,6 +377,7 @@ class GoodVibesClient:
         path: str,
         *,
         json: Mapping[str, Any] | None = None,
+        data: Any = None,
         headers: Mapping[str, str] | None = None,
         include_daemon_auth: bool = True,
         timeout: int = 20,
@@ -340,6 +395,7 @@ class GoodVibesClient:
                 method,
                 f"{self._daemon_url}{path}",
                 json=json,
+                data=data,
                 headers=request_headers,
                 timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
@@ -368,7 +424,10 @@ def _query_path(path: str, payload: Mapping[str, Any]) -> str:
     query = {
         key: value
         for key, value in payload.items()
-        if value not in (None, "", {}, []) and isinstance(value, (str, int, float, bool))
+        if (
+            value not in (None, "", {}, [])
+            and isinstance(value, (str, int, float, bool))
+        )
     }
     if not query:
         return path

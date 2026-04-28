@@ -185,10 +185,32 @@ ingest_url:
     title:
       selector:
         text:
+    tags:
+      selector:
+        object:
+    allow_private_hosts:
+      selector:
+        boolean:
     target_kind:
       selector:
         select:
           options:
+            - ha_entity
+            - ha_device
+            - ha_area
+            - ha_room
+            - ha_automation
+            - ha_script
+            - ha_scene
+            - ha_label
+            - ha_integration
+            - ha_device_passport
+            - ha_maintenance_item
+            - ha_troubleshooting_case
+            - ha_purchase
+            - ha_network_node
+            - source
+            - node
             - entity
             - device
             - area
@@ -220,10 +242,32 @@ ingest_note:
     title:
       selector:
         text:
+    category:
+      selector:
+        text:
+    tags:
+      selector:
+        object:
     target_kind:
       selector:
         select:
           options:
+            - ha_entity
+            - ha_device
+            - ha_area
+            - ha_room
+            - ha_automation
+            - ha_script
+            - ha_scene
+            - ha_label
+            - ha_integration
+            - ha_device_passport
+            - ha_maintenance_item
+            - ha_troubleshooting_case
+            - ha_purchase
+            - ha_network_node
+            - source
+            - node
             - entity
             - device
             - area
@@ -241,7 +285,7 @@ ingest_note:
         object:
 
 ingest_artifact:
-  description: Ingest a GoodVibes artifact, media item, file path, or URL into Home Graph.
+  description: Ingest a GoodVibes artifact, daemon-local file path, or URI into Home Graph.
   fields:
     config_entry_id:
       selector:
@@ -250,25 +294,45 @@ ingest_artifact:
     artifact_id:
       selector:
         text:
-    media_id:
-      selector:
-        text:
     path:
       selector:
         text:
+    uri:
+      selector:
+        text:
     url:
+      description: Compatibility alias for uri.
       selector:
         text:
     title:
       selector:
         text:
-    content_type:
+    tags:
       selector:
-        text:
+        object:
+    allow_private_hosts:
+      selector:
+        boolean:
     target_kind:
       selector:
         select:
           options:
+            - ha_entity
+            - ha_device
+            - ha_area
+            - ha_room
+            - ha_automation
+            - ha_script
+            - ha_scene
+            - ha_label
+            - ha_integration
+            - ha_device_passport
+            - ha_maintenance_item
+            - ha_troubleshooting_case
+            - ha_purchase
+            - ha_network_node
+            - source
+            - node
             - entity
             - device
             - area
@@ -303,6 +367,22 @@ link_knowledge:
       selector:
         select:
           options:
+            - ha_entity
+            - ha_device
+            - ha_area
+            - ha_room
+            - ha_automation
+            - ha_script
+            - ha_scene
+            - ha_label
+            - ha_integration
+            - ha_device_passport
+            - ha_maintenance_item
+            - ha_troubleshooting_case
+            - ha_purchase
+            - ha_network_node
+            - source
+            - node
             - entity
             - device
             - area
@@ -335,6 +415,22 @@ unlink_knowledge:
       selector:
         select:
           options:
+            - ha_entity
+            - ha_device
+            - ha_area
+            - ha_room
+            - ha_automation
+            - ha_script
+            - ha_scene
+            - ha_label
+            - ha_integration
+            - ha_device_passport
+            - ha_maintenance_item
+            - ha_troubleshooting_case
+            - ha_purchase
+            - ha_network_node
+            - source
+            - node
             - entity
             - device
             - area
@@ -380,9 +476,6 @@ device_passport:
     device_id:
       selector:
         text:
-    entity_id:
-      selector:
-        entity:
 
 room_page:
   description: Request generation of a GoodVibes Home Graph room page.
@@ -404,6 +497,7 @@ home_graph_packet:
           integration: goodvibes
     packet_type:
       required: true
+      description: Sent to the SDK as packetKind.
       selector:
         select:
           options:
@@ -436,32 +530,50 @@ home_graph_issues:
           integration: goodvibes
 
 review_fact:
-  description: Review a GoodVibes Home Graph fact.
+  description: Review, resolve, edit, or forget a GoodVibes Home Graph issue, source, or node.
   fields:
     config_entry_id:
       selector:
         config_entry:
           integration: goodvibes
-    fact_id:
-      required: true
+    issue_id:
       selector:
         text:
-    decision:
-      required: true
+    fact_id:
+      description: Compatibility alias for issue_id.
+      selector:
+        text:
+    node_id:
+      selector:
+        text:
+    source_id:
+      selector:
+        text:
+    action:
       selector:
         select:
           options:
             - accept
             - reject
+            - resolve
             - edit
-            - merge
+            - forget
+    decision:
+      description: Compatibility alias for action.
+      selector:
+        select:
+          options:
+            - accept
+            - reject
+            - resolve
+            - edit
             - forget
     value:
       selector:
         object:
-    metadata:
+    reviewer:
       selector:
-        object:
+        text:
 
 home_graph_sources:
   description: List GoodVibes Home Graph sources.

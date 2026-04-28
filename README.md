@@ -1,12 +1,12 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.0`.
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.3`.
 
-This integration is the Home Assistant side of the GoodVibes daemon contract. It provides setup, Assist integration, services, sensors, repairs, event handling, and Home Graph snapshot collection. The daemon owns GoodVibes routing, model/provider selection, tool catalogs, remote-chat sessions, knowledge storage, graph search, projections, packets, and wiki rendering.
+This integration is the Home Assistant side of the GoodVibes daemon contract. It provides setup, Assist integration, services, sensors, repairs, event handling, a GoodVibes Home sidebar panel, upload proxying, and Home Graph snapshot collection. The daemon owns GoodVibes routing, model/provider selection, tool catalogs, remote-chat sessions, knowledge storage, graph search, projections, packets, artifacts, and wiki rendering.
 
 ## Requirements
 
-- GoodVibes daemon using `@pellux/goodvibes-sdk@0.26.0` or newer.
+- GoodVibes daemon using `@pellux/goodvibes-sdk@0.26.3` or newer.
 - Home Assistant custom integration installed under `custom_components/goodvibes`.
 - A daemon operator bearer token for authenticated daemon APIs.
 - A Home Assistant webhook secret configured in the daemon and entered in this integration.
@@ -71,6 +71,20 @@ Config fields:
 - `Home Graph installation ID`: stable Home Assistant installation id. Leave blank to derive from `hass.config.uuid`.
 - `Home Graph knowledge space ID`: optional explicit daemon knowledge space. Leave blank to use `homeassistant:<installationId>`.
 
+## GoodVibes Home Sidebar
+
+The integration registers an admin-only Home Assistant sidebar panel named `GoodVibes Home`. The integration brand icon lives at `custom_components/goodvibes/brand/icon.png`; the sidebar icon uses the local custom iconset `goodvibes:home`, generated from `custom_components/goodvibes/frontend/gv-icon-sidebar.svg`.
+
+The panel talks to Home Assistant, not directly to the daemon:
+
+- Browser UI calls the authenticated Home Assistant websocket command `goodvibes/home_graph/call`.
+- Browser file uploads go to `POST /api/goodvibes/home-graph/upload`.
+- Home Assistant forwards those calls to the daemon with the stored daemon bearer token.
+
+The browser never receives the daemon token.
+
+Panel actions include Home Graph status, sync, source/node/edge/issue browsing, URL ingest, note ingest, artifact reference ingest, multipart file upload, source-backed questions, link/unlink, review/forget, device passports, room pages, and packets.
+
 ## Assist
 
 After setup, select the GoodVibes conversation entity as the conversation agent in a Home Assistant Assist pipeline.
@@ -102,8 +116,10 @@ Default knowledge space:
 homeassistant:<installationId>
 ```
 
-The integration supports the SDK `0.26.0` Home Graph daemon routes:
+The integration supports the SDK `0.26.3` Home Graph daemon routes:
 
+- `POST /api/artifacts`
+- `POST /api/knowledge/ingest/artifact`
 - `GET /api/homeassistant/home-graph/status`
 - `POST /api/homeassistant/home-graph/sync`
 - `POST /api/homeassistant/home-graph/ingest/url`
@@ -123,6 +139,14 @@ The integration supports the SDK `0.26.0` Home Graph daemon routes:
 All Home Graph routes use normal daemon auth. Mutating routes require a daemon token with admin privileges.
 
 The SDK also owns Home Graph export/import and wiki rendering. Those are daemon/web UI concerns, not local Home Assistant storage.
+
+Artifact ingest supports:
+
+- JSON control payloads for `artifactId`, `path`, or `uri`.
+- `multipart/form-data` uploads with a `file` field.
+- Raw binary uploads when the bridge controls the request.
+
+Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards multipart metadata fields such as `installationId`, `knowledgeSpaceId`, `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` to the daemon. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.3` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
 
 ## Home Graph Workflow
 
@@ -148,7 +172,7 @@ action: goodvibes.ingest_url
 data:
   url: https://example.com/front-door-lock-manual.pdf
   title: Front door lock manual
-  target_kind: device
+  target_kind: ha_device
   target_id: front-door-lock
   relation: has_manual
 ```
@@ -160,25 +184,24 @@ action: goodvibes.ingest_note
 data:
   title: Front door lock offline fix
   note: Last time the front door lock went offline, replacing the CR123A batteries fixed it.
-  target_kind: device
+  target_kind: ha_device
   target_id: front-door-lock
   relation: has_issue
 ```
 
-Example document or photo ingest:
+Example document or photo ingest by daemon-local path:
 
 ```yaml
 action: goodvibes.ingest_artifact
 data:
-  path: /config/www/manuals/front-door-lock.pdf
+  path: /data/manuals/front-door-lock.pdf
   title: Front door lock manual
-  content_type: application/pdf
-  target_kind: device
+  target_kind: ha_device
   target_id: front-door-lock
   relation: has_manual
 ```
 
-`ingest_artifact` accepts one of `artifact_id`, `media_id`, `path`, or `url`. The daemon owns artifact processing and extraction.
+`ingest_artifact` accepts one of `artifact_id`, `path`, `uri`, or compatibility `url`. The daemon owns artifact storage, processing, extraction, indexing, and linking. Use the `GoodVibes Home` sidebar panel for normal browser file uploads.
 
 Example graph question:
 
@@ -210,12 +233,18 @@ Use `target_kind`, `target_id`, and optional `relation` when ingesting or linkin
 
 Common target kinds:
 
-- `entity`: use a Home Assistant `entity_id`, such as `binary_sensor.front_door`.
-- `device`: use a Home Assistant device registry id.
-- `area`: use a Home Assistant area id.
-- `automation`: use an automation entity id or daemon-supported automation id.
-- `script`: use a script entity id.
-- `scene`: use a scene entity id.
+- `ha_entity`: use a Home Assistant `entity_id`, such as `binary_sensor.front_door`.
+- `ha_device`: use a Home Assistant device registry id.
+- `ha_area`: use a Home Assistant area id.
+- `ha_room`: use a daemon/Home Graph room id when available.
+- `ha_automation`: use an automation entity id or daemon-supported automation id.
+- `ha_script`: use a script entity id.
+- `ha_scene`: use a scene entity id.
+- `ha_label`: use a Home Assistant label id.
+- `ha_integration`: use a Home Assistant integration/config entry id.
+- `ha_device_passport`, `ha_maintenance_item`, `ha_troubleshooting_case`, `ha_purchase`, and `ha_network_node`: use SDK-owned Home Graph ids.
+
+The older `entity`, `device`, `area`, `automation`, `script`, and `scene` strings remain accepted by the service schema for compatibility.
 
 Common relations:
 
@@ -235,7 +264,7 @@ Example link after ingest:
 action: goodvibes.link_knowledge
 data:
   source_id: src_123
-  target_kind: entity
+  target_kind: ha_entity
   target_id: binary_sensor.front_door
   relation: source_for
 ```
@@ -245,8 +274,8 @@ Example review:
 ```yaml
 action: goodvibes.review_fact
 data:
-  fact_id: fact_123
-  decision: accept
+  issue_id: issue_123
+  action: resolve
 ```
 
 Example issue/source inspection:

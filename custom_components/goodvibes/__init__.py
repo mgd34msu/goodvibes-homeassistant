@@ -17,9 +17,9 @@ from homeassistant.util import dt as dt_util
 from .client import GoodVibesClient, GoodVibesClientError
 from .const import (
     CONF_AGENT_ID,
+    CONF_ALLOW_PRIVATE_HOSTS,
     CONF_AREA_ID,
     CONF_ARTIFACT_ID,
-    CONF_CONTENT_TYPE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CONVERSATION_ID,
     CONF_DAEMON_TOKEN,
@@ -36,7 +36,6 @@ from .const import (
     CONF_INPUT,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
-    CONF_MEDIA_ID,
     CONF_MESSAGE_ID,
     CONF_MODEL_ID,
     CONF_NODE_ID,
@@ -56,6 +55,8 @@ from .const import (
     CONF_TITLE,
     CONF_TOOL,
     CONF_TOOLS,
+    CONF_TAGS,
+    CONF_URI,
     CONF_URL,
     CONF_USER_ID,
     CONF_VALUE,
@@ -77,6 +78,7 @@ from .home_graph import (
     default_knowledge_space_id,
     derive_installation_id,
 )
+from .frontend import async_setup_frontend, async_unload_frontend_panel
 
 SERVICE_PROMPT = "prompt"
 SERVICE_RUN_AGENT = "run_agent"
@@ -190,6 +192,8 @@ INGEST_URL_SCHEMA = vol.Schema(
         **_home_graph_common_schema(),
         vol.Required(CONF_URL): cv.string,
         vol.Optional(CONF_TITLE): cv.string,
+        vol.Optional(CONF_TAGS): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional(CONF_ALLOW_PRIVATE_HOSTS): bool,
         vol.Optional("metadata", default=dict): dict,
         **_home_graph_target_schema(),
     }
@@ -200,6 +204,8 @@ INGEST_NOTE_SCHEMA = vol.Schema(
         **_home_graph_common_schema(),
         vol.Required(CONF_NOTE): cv.string,
         vol.Optional(CONF_TITLE): cv.string,
+        vol.Optional("category"): cv.string,
+        vol.Optional(CONF_TAGS): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional("metadata", default=dict): dict,
         **_home_graph_target_schema(),
     }
@@ -209,11 +215,12 @@ INGEST_ARTIFACT_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
         vol.Optional(CONF_ARTIFACT_ID): cv.string,
-        vol.Optional(CONF_MEDIA_ID): cv.string,
         vol.Optional(CONF_PATH): cv.string,
+        vol.Optional(CONF_URI): cv.string,
         vol.Optional(CONF_URL): cv.string,
         vol.Optional(CONF_TITLE): cv.string,
-        vol.Optional(CONF_CONTENT_TYPE): cv.string,
+        vol.Optional(CONF_TAGS): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional(CONF_ALLOW_PRIVATE_HOSTS): bool,
         vol.Optional("metadata", default=dict): dict,
         **_home_graph_target_schema(),
     }
@@ -245,7 +252,6 @@ DEVICE_PASSPORT_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
         vol.Optional(CONF_DEVICE_ID): cv.string,
-        vol.Optional(CONF_ENTITY_ID): cv.string,
     }
 )
 
@@ -270,10 +276,14 @@ HOME_GRAPH_PACKET_SCHEMA = vol.Schema(
 REVIEW_FACT_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
-        vol.Required(CONF_FACT_ID): cv.string,
-        vol.Required(CONF_DECISION): cv.string,
+        vol.Optional("issue_id"): cv.string,
+        vol.Optional(CONF_FACT_ID): cv.string,
+        vol.Optional(CONF_NODE_ID): cv.string,
+        vol.Optional(CONF_SOURCE_ID): cv.string,
+        vol.Optional("action"): cv.string,
+        vol.Optional(CONF_DECISION): cv.string,
         vol.Optional(CONF_VALUE): object,
-        vol.Optional("metadata", default=dict): dict,
+        vol.Optional("reviewer"): cv.string,
     }
 )
 
@@ -722,6 +732,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             "url": call.data[CONF_URL],
         }
         _copy_optional(call.data, payload, CONF_TITLE, "title")
+        _copy_tags_and_private_hosts(call.data, payload)
         response = await _call_client(runtime.client.home_graph_ingest_url(payload))
         runtime.async_apply_home_graph_response(response)
         return response
@@ -730,9 +741,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime = _runtime_from_service_call(hass, call)
         payload = {
             **_home_graph_payload(runtime, call.data),
-            "note": call.data[CONF_NOTE],
+            "body": call.data[CONF_NOTE],
         }
         _copy_optional(call.data, payload, CONF_TITLE, "title")
+        _copy_optional(call.data, payload, "category", "category")
+        _copy_tags_and_private_hosts(call.data, payload, private_hosts=False)
         response = await _call_client(runtime.client.home_graph_ingest_note(payload))
         runtime.async_apply_home_graph_response(response)
         return response
@@ -742,16 +755,17 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         payload = _home_graph_payload(runtime, call.data)
         for source_key, payload_key in (
             (CONF_ARTIFACT_ID, "artifactId"),
-            (CONF_MEDIA_ID, "mediaId"),
             (CONF_PATH, "path"),
-            (CONF_URL, "url"),
+            (CONF_URI, "uri"),
             (CONF_TITLE, "title"),
-            (CONF_CONTENT_TYPE, "contentType"),
         ):
             _copy_optional(call.data, payload, source_key, payload_key)
-        if not any(key in payload for key in ("artifactId", "mediaId", "path", "url")):
+        if CONF_URL in call.data and "uri" not in payload:
+            payload["uri"] = call.data[CONF_URL]
+        _copy_tags_and_private_hosts(call.data, payload)
+        if not any(key in payload for key in ("artifactId", "path", "uri")):
             raise HomeAssistantError(
-                "ingest_artifact requires artifact_id, media_id, path, or url"
+                "ingest_artifact requires artifact_id, path, uri, or url"
             )
         response = await _call_client(
             runtime.client.home_graph_ingest_artifact(payload)
@@ -789,9 +803,8 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
         _copy_optional(call.data, payload, CONF_DEVICE_ID, "deviceId")
-        _copy_optional(call.data, payload, CONF_ENTITY_ID, "entityId")
-        if "deviceId" not in payload and "entityId" not in payload:
-            raise HomeAssistantError("device_passport requires device_id or entity_id")
+        if "deviceId" not in payload:
+            raise HomeAssistantError("device_passport requires device_id")
         response = await _call_client(
             runtime.client.home_graph_device_passport(payload)
         )
@@ -810,7 +823,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime = _runtime_from_service_call(hass, call)
         payload = {
             **runtime.home_graph_base_payload(call.data),
-            "packetType": call.data[CONF_PACKET_TYPE],
+            "packetKind": call.data[CONF_PACKET_TYPE],
         }
         _copy_optional(call.data, payload, CONF_AREA_ID, "areaId")
         _copy_optional(call.data, payload, CONF_DEVICE_ID, "deviceId")
@@ -833,13 +846,21 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime = _runtime_from_service_call(hass, call)
         payload = {
             **runtime.home_graph_base_payload(call.data),
-            "factId": call.data[CONF_FACT_ID],
-            "decision": call.data[CONF_DECISION],
+            "action": call.data.get("action") or call.data.get(CONF_DECISION),
         }
+        if not payload["action"]:
+            raise HomeAssistantError("review_fact requires action or decision")
+        if issue_id := call.data.get("issue_id") or call.data.get(CONF_FACT_ID):
+            payload["issueId"] = issue_id
+        _copy_optional(call.data, payload, CONF_NODE_ID, "nodeId")
+        _copy_optional(call.data, payload, CONF_SOURCE_ID, "sourceId")
+        _copy_optional(call.data, payload, "reviewer", "reviewer")
+        if not any(key in payload for key in ("issueId", "nodeId", "sourceId")):
+            raise HomeAssistantError(
+                "review_fact requires issue_id, node_id, source_id, or fact_id"
+            )
         if CONF_VALUE in call.data:
             payload["value"] = call.data[CONF_VALUE]
-        if metadata := call.data.get("metadata"):
-            payload["metadata"] = metadata
         response = await _call_client(runtime.client.home_graph_review_fact(payload))
         runtime.async_apply_home_graph_response(response)
         await runtime.async_refresh_home_graph()
@@ -1027,6 +1048,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = runtime
 
+    await async_setup_frontend(hass)
     await runtime.async_initial_refresh()
     runtime.unsubscribe_event = hass.bus.async_listen(
         runtime.event_type, runtime.async_handle_event
@@ -1054,6 +1076,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         runtime = hass.data[DOMAIN].pop(entry.entry_id, None)
         if runtime and runtime.unsubscribe_event:
             runtime.unsubscribe_event()
+        if not any(
+            isinstance(value, GoodVibesRuntimeData)
+            for value in hass.data.get(DOMAIN, {}).values()
+        ):
+            async_unload_frontend_panel(hass)
     return unload_ok
 
 
@@ -1170,6 +1197,20 @@ def _copy_optional(
 
     if value := source.get(source_key):
         target[target_key] = value
+
+
+def _copy_tags_and_private_hosts(
+    source: dict[str, Any],
+    target: dict[str, Any],
+    *,
+    private_hosts: bool = True,
+) -> None:
+    """Copy Home Graph ingest tags and remote fetch policy."""
+
+    if tags := source.get(CONF_TAGS):
+        target["tags"] = list(tags)
+    if private_hosts and CONF_ALLOW_PRIVATE_HOSTS in source:
+        target["allowPrivateHosts"] = source[CONF_ALLOW_PRIVATE_HOSTS]
 
 
 def _ensure_home_graph_enabled(runtime: GoodVibesRuntimeData) -> None:
