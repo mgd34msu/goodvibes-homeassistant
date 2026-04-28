@@ -50,7 +50,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.7"
+FRONTEND_ASSET_VERSION = "0.5.8"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -201,6 +201,7 @@ class GoodVibesHomeGraphUploadView(HomeAssistantView):
                 payload["allowPrivateHosts"] = _truthy(
                     _first_value(fields, CONF_ALLOW_PRIVATE_HOSTS, "allowPrivateHosts")
                 )
+            await _async_sync_home_graph_context(hass, runtime, fields)
             response = await runtime.client.home_graph_upload_artifact(
                 payload,
                 temp_path,
@@ -258,6 +259,8 @@ async def _handle_home_graph_action(
         payload = _query_payload(runtime, data, {"limit"})
         return await runtime.client.home_graph_browse(payload)
     if action == "ask":
+        if not runtime.home_graph_last_sync_at:
+            await _async_sync_home_graph_context(hass, runtime, data)
         payload = {
             **_base_payload(runtime, data),
             "query": _required_text(data, CONF_QUERY, "query"),
@@ -277,6 +280,7 @@ async def _handle_home_graph_action(
         runtime.async_apply_home_graph_response(response)
         return response
     if action == "ingest_url":
+        await _async_sync_home_graph_context(hass, runtime, data)
         payload = {
             **_home_graph_payload(runtime, data),
             "url": _required_text(data, CONF_URL, "url"),
@@ -287,6 +291,7 @@ async def _handle_home_graph_action(
         runtime.async_apply_home_graph_response(response)
         return response
     if action == "ingest_note":
+        await _async_sync_home_graph_context(hass, runtime, data)
         payload = {
             **_home_graph_payload(runtime, data),
             "body": _required_text(data, "body", "note"),
@@ -298,6 +303,7 @@ async def _handle_home_graph_action(
         runtime.async_apply_home_graph_response(response)
         return response
     if action == "ingest_artifact":
+        await _async_sync_home_graph_context(hass, runtime, data)
         payload = _artifact_payload(runtime, data)
         response = await runtime.client.home_graph_ingest_artifact(payload)
         runtime.async_apply_home_graph_response(response)
@@ -366,6 +372,25 @@ def _status_payload(runtime: Any) -> dict[str, Any]:
         "lastSyncAt": runtime.home_graph_last_sync_at,
         "lastError": runtime.home_graph_last_error,
     }
+
+
+async def _async_sync_home_graph_context(
+    hass: HomeAssistant,
+    runtime: Any,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send current Home Assistant context before source classification."""
+
+    base_payload = _base_payload(runtime, data or {})
+    snapshot = await async_build_home_graph_snapshot(
+        hass,
+        runtime.entry,
+        base_payload["installationId"],
+        base_payload.get("knowledgeSpaceId"),
+    )
+    response = await runtime.client.home_graph_sync(snapshot)
+    runtime.async_apply_home_graph_response(response, sync=True)
+    return response
 
 
 def _runtime_from_data(hass: HomeAssistant, data: dict[str, Any]) -> Any:

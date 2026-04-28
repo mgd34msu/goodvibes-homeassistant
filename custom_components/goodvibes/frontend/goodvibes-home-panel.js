@@ -125,7 +125,9 @@ class GoodVibesHomePanel extends HTMLElement {
         config_entry_id: this._configEntryId || undefined,
         payload,
       });
-      this._lastResult = result || {};
+      if (!options.quiet || options.recordResult) {
+        this._lastResult = result || {};
+      }
       if (action === "status") {
         this._status = result || {};
       } else if (action === "sources") {

@@ -83,7 +83,7 @@ The panel talks to Home Assistant, not directly to the daemon:
 
 The browser never receives the daemon token.
 
-Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases.
+Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
 
 ## Assist
 
@@ -158,6 +158,8 @@ Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar up
 6. Surface daemon-reported status, issues, and review items through sensors, repairs, and services.
 
 The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, and selected current state attributes.
+
+The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup.
 
 Example sync:
 

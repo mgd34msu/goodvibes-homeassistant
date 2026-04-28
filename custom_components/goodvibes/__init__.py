@@ -725,8 +725,25 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         await runtime.async_refresh_home_graph()
         return response
 
+    async def async_sync_home_graph_context(
+        runtime: GoodVibesRuntimeData,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _ensure_home_graph_enabled(runtime)
+        base_payload = runtime.home_graph_base_payload(data or {})
+        snapshot = await async_build_home_graph_snapshot(
+            hass,
+            runtime.entry,
+            base_payload["installationId"],
+            base_payload.get("knowledgeSpaceId"),
+        )
+        response = await _call_client(runtime.client.home_graph_sync(snapshot))
+        runtime.async_apply_home_graph_response(response, sync=True)
+        return response
+
     async def async_ingest_url(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
+        await async_sync_home_graph_context(runtime, call.data)
         payload = {
             **_home_graph_payload(runtime, call.data),
             "url": call.data[CONF_URL],
@@ -739,6 +756,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def async_ingest_note(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
+        await async_sync_home_graph_context(runtime, call.data)
         payload = {
             **_home_graph_payload(runtime, call.data),
             "body": call.data[CONF_NOTE],
@@ -752,6 +770,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def async_ingest_artifact(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
+        await async_sync_home_graph_context(runtime, call.data)
         payload = _home_graph_payload(runtime, call.data)
         for source_key, payload_key in (
             (CONF_ARTIFACT_ID, "artifactId"),
@@ -789,6 +808,8 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def async_ask_home_graph(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
+        if not runtime.home_graph_last_sync_at:
+            await async_sync_home_graph_context(runtime, call.data)
         payload = {
             **runtime.home_graph_base_payload(call.data),
             "query": call.data[CONF_QUERY],
