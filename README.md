@@ -1,12 +1,12 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.3`.
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.5`.
 
 This integration is the Home Assistant side of the GoodVibes daemon contract. It provides setup, Assist integration, services, sensors, repairs, event handling, a GoodVibes Home sidebar panel, upload proxying, and Home Graph snapshot collection. The daemon owns GoodVibes routing, model/provider selection, tool catalogs, remote-chat sessions, knowledge storage, graph search, projections, packets, artifacts, and wiki rendering.
 
 ## Requirements
 
-- GoodVibes daemon using `@pellux/goodvibes-sdk@0.26.3` or newer.
+- GoodVibes daemon using `@pellux/goodvibes-sdk@0.26.5` or newer.
 - Home Assistant custom integration installed under `custom_components/goodvibes`.
 - A daemon operator bearer token for authenticated daemon APIs.
 - A Home Assistant webhook secret configured in the daemon and entered in this integration.
@@ -116,7 +116,7 @@ Default knowledge space:
 homeassistant:<installationId>
 ```
 
-The integration supports the SDK `0.26.3` Home Graph daemon routes:
+The integration supports the SDK `0.26.5` Home Graph daemon routes:
 
 - `POST /api/artifacts`
 - `POST /api/knowledge/ingest/artifact`
@@ -135,10 +135,12 @@ The integration supports the SDK `0.26.3` Home Graph daemon routes:
 - `POST /api/homeassistant/home-graph/facts/review`
 - `GET /api/homeassistant/home-graph/sources`
 - `GET /api/homeassistant/home-graph/browse`
+- `POST /api/homeassistant/home-graph/export`
+- `POST /api/homeassistant/home-graph/import`
 
 All Home Graph routes use normal daemon auth. Mutating routes require a daemon token with admin privileges.
 
-The SDK also owns Home Graph export/import and wiki rendering. Those are daemon/web UI concerns, not local Home Assistant storage.
+The SDK also owns Home Graph wiki rendering. This integration exposes export/import as thin daemon calls, but it does not store or render the wiki locally.
 
 Artifact ingest supports:
 
@@ -146,7 +148,7 @@ Artifact ingest supports:
 - `multipart/form-data` uploads with a `file` field.
 - Raw binary uploads when the bridge controls the request.
 
-Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.3` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
+Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.5` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
 
 ## Home Graph Workflow
 
@@ -200,6 +202,7 @@ Example graph question:
 action: goodvibes.ask_home_graph
 data:
   query: What battery does the front door lock use?
+  include_confidence: true
 ```
 
 Example room page request:
@@ -308,6 +311,8 @@ Home Graph services:
 - `goodvibes.review_fact`
 - `goodvibes.home_graph_sources`
 - `goodvibes.home_graph_browse`
+- `goodvibes.home_graph_export`
+- `goodvibes.home_graph_import`
 
 Example async prompt:
 

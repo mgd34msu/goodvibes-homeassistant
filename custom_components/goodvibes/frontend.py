@@ -27,22 +27,28 @@ from .const import (
     CONF_CONFIG_ENTRY_ID,
     CONF_DEVICE_ID,
     CONF_ENTITY_ID,
+    CONF_INCLUDE_CONFIDENCE,
     CONF_INCLUDE_LINKED_OBJECTS,
     CONF_INCLUDE_SOURCES,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
+    CONF_LIMIT,
+    CONF_MODE,
     CONF_NODE_ID,
     CONF_PACKET_TYPE,
     CONF_PATH,
     CONF_QUERY,
     CONF_RELATION,
+    CONF_SEVERITY,
     CONF_SOURCE_ID,
+    CONF_STATUS,
     CONF_TAGS,
     CONF_TARGET_ID,
     CONF_TARGET_KIND,
     CONF_TITLE,
     CONF_URI,
     CONF_URL,
+    CONF_CODE,
     DOMAIN,
 )
 from .home_graph import async_build_home_graph_snapshot
@@ -50,7 +56,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.8"
+FRONTEND_ASSET_VERSION = "0.5.9"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -65,9 +71,11 @@ SUPPORTED_ACTIONS = {
     "ask",
     "browse",
     "device_passport",
+    "export",
     "ingest_artifact",
     "ingest_note",
     "ingest_url",
+    "import",
     "issues",
     "link",
     "packet",
@@ -246,26 +254,63 @@ async def _handle_home_graph_action(
         await runtime.async_refresh_home_graph()
         return response
     if action == "sources":
-        response = await runtime.client.home_graph_sources(_base_payload(runtime, data))
+        response = await runtime.client.home_graph_sources(
+            _query_payload(runtime, data, {CONF_LIMIT, "limit"})
+        )
         runtime.home_graph_sources = response
         async_dispatcher_send(hass, runtime.signal)
         return response
     if action == "issues":
-        response = await runtime.client.home_graph_issues(_base_payload(runtime, data))
+        response = await runtime.client.home_graph_issues(
+            _query_payload(
+                runtime,
+                data,
+                {
+                    CONF_STATUS,
+                    "status",
+                    CONF_SEVERITY,
+                    "severity",
+                    CONF_CODE,
+                    "code",
+                    CONF_LIMIT,
+                    "limit",
+                },
+            )
+        )
         runtime.home_graph_issues = response
         async_dispatcher_send(hass, runtime.signal)
         return response
     if action == "browse":
         payload = _query_payload(runtime, data, {"limit"})
         return await runtime.client.home_graph_browse(payload)
+    if action == "export":
+        return await runtime.client.home_graph_export(_base_payload(runtime, data))
+    if action == "import":
+        payload = {
+            **_base_payload(runtime, data),
+            "data": _required_object(data, "data"),
+        }
+        response = await runtime.client.home_graph_import(payload)
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+        return response
     if action == "ask":
         if not runtime.home_graph_last_sync_at:
             await _async_sync_home_graph_context(hass, runtime, data)
         payload = {
             **_base_payload(runtime, data),
             "query": _required_text(data, CONF_QUERY, "query"),
+            **_query_payload(runtime, data, {CONF_LIMIT, "limit", CONF_MODE, "mode"}),
             "includeSources": _truthy(
                 _first_value(data, CONF_INCLUDE_SOURCES, "includeSources", default=True)
+            ),
+            "includeConfidence": _truthy(
+                _first_value(
+                    data,
+                    CONF_INCLUDE_CONFIDENCE,
+                    "includeConfidence",
+                    default=False,
+                )
             ),
             "includeLinkedObjects": _truthy(
                 _first_value(
@@ -536,8 +581,22 @@ def _query_payload(
             and isinstance(value, (str, int, float, bool))
             and value != ""
         ):
-            payload[key] = value
+            payload[key] = _coerce_query_value(key, value)
     return payload
+
+
+def _coerce_query_value(
+    key: str,
+    value: str | int | float | bool,
+) -> str | int | float | bool:
+    """Coerce known query scalars to the daemon contract shape."""
+
+    if key in {CONF_LIMIT, "limit"}:
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return value
+    return value
 
 
 async def _read_multipart_upload(
@@ -617,6 +676,15 @@ def _required_text(data: dict[str, Any], *names: str) -> str:
     if value in (None, ""):
         raise HomeAssistantError(f"Missing required field: {names[0]}")
     return str(value)
+
+
+def _required_object(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Return a required object field."""
+
+    value = data.get(name)
+    if not isinstance(value, dict):
+        raise HomeAssistantError(f"Missing required object field: {name}")
+    return value
 
 
 def _copy_optional_any(

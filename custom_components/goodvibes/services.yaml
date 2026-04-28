@@ -457,8 +457,20 @@ ask_home_graph:
       selector:
         text:
           multiline: true
+    limit:
+      selector:
+        number:
+          min: 1
+          mode: box
+    mode:
+      selector:
+        text:
     include_sources:
       default: true
+      selector:
+        boolean:
+    include_confidence:
+      default: false
       selector:
         boolean:
     include_linked_objects:
@@ -528,6 +540,20 @@ home_graph_issues:
       selector:
         config_entry:
           integration: goodvibes
+    status:
+      selector:
+        text:
+    severity:
+      selector:
+        text:
+    code:
+      selector:
+        text:
+    limit:
+      selector:
+        number:
+          min: 1
+          mode: box
 
 review_fact:
   description: Review, resolve, edit, or forget a GoodVibes Home Graph issue, source, or node.
@@ -582,6 +608,11 @@ home_graph_sources:
       selector:
         config_entry:
           integration: goodvibes
+    limit:
+      selector:
+        number:
+          min: 1
+          mode: box
 
 home_graph_browse:
   description: Browse GoodVibes Home Graph nodes and links.
@@ -590,3 +621,28 @@ home_graph_browse:
       selector:
         config_entry:
           integration: goodvibes
+    limit:
+      selector:
+        number:
+          min: 1
+          mode: box
+
+home_graph_export:
+  description: Export the daemon-owned Home Graph knowledge space.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+
+home_graph_import:
+  description: Import a daemon-owned Home Graph knowledge space export.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    data:
+      required: true
+      selector:
+        object:

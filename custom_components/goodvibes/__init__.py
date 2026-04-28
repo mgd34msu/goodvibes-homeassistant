@@ -20,6 +20,7 @@ from .const import (
     CONF_ALLOW_PRIVATE_HOSTS,
     CONF_AREA_ID,
     CONF_ARTIFACT_ID,
+    CONF_CODE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CONVERSATION_ID,
     CONF_DAEMON_TOKEN,
@@ -31,12 +32,15 @@ from .const import (
     CONF_EVENT_TYPE,
     CONF_FACT_ID,
     CONF_HOME_GRAPH_ENABLED,
+    CONF_INCLUDE_CONFIDENCE,
     CONF_INCLUDE_LINKED_OBJECTS,
     CONF_INCLUDE_SOURCES,
     CONF_INPUT,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
+    CONF_LIMIT,
     CONF_MESSAGE_ID,
+    CONF_MODE,
     CONF_MODEL_ID,
     CONF_NODE_ID,
     CONF_NOTE,
@@ -47,7 +51,9 @@ from .const import (
     CONF_RELATION,
     CONF_RUN_ID,
     CONF_SESSION_ID,
+    CONF_SEVERITY,
     CONF_SOURCE_ID,
+    CONF_STATUS,
     CONF_TASK,
     CONF_TASK_ID,
     CONF_TARGET_ID,
@@ -100,6 +106,8 @@ SERVICE_HOME_GRAPH_ISSUES = "home_graph_issues"
 SERVICE_REVIEW_FACT = "review_fact"
 SERVICE_HOME_GRAPH_SOURCES = "home_graph_sources"
 SERVICE_HOME_GRAPH_BROWSE = "home_graph_browse"
+SERVICE_HOME_GRAPH_EXPORT = "home_graph_export"
+SERVICE_HOME_GRAPH_IMPORT = "home_graph_import"
 
 
 def _optional_context_schema() -> dict[Any, Any]:
@@ -243,7 +251,10 @@ ASK_HOME_GRAPH_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
         vol.Required(CONF_QUERY): cv.string,
+        vol.Optional(CONF_LIMIT): vol.Coerce(int),
+        vol.Optional(CONF_MODE): cv.string,
         vol.Optional(CONF_INCLUDE_SOURCES, default=True): bool,
+        vol.Optional(CONF_INCLUDE_CONFIDENCE, default=False): bool,
         vol.Optional(CONF_INCLUDE_LINKED_OBJECTS, default=True): bool,
     }
 )
@@ -284,6 +295,30 @@ REVIEW_FACT_SCHEMA = vol.Schema(
         vol.Optional(CONF_DECISION): cv.string,
         vol.Optional(CONF_VALUE): object,
         vol.Optional("reviewer"): cv.string,
+    }
+)
+
+HOME_GRAPH_ISSUES_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_STATUS): cv.string,
+        vol.Optional(CONF_SEVERITY): cv.string,
+        vol.Optional(CONF_CODE): cv.string,
+        vol.Optional(CONF_LIMIT): vol.Coerce(int),
+    }
+)
+
+HOME_GRAPH_LIST_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_LIMIT): vol.Coerce(int),
+    }
+)
+
+HOME_GRAPH_IMPORT_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required("data"): dict,
     }
 )
 
@@ -814,8 +849,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             **runtime.home_graph_base_payload(call.data),
             "query": call.data[CONF_QUERY],
             "includeSources": call.data.get(CONF_INCLUDE_SOURCES, True),
+            "includeConfidence": call.data.get(CONF_INCLUDE_CONFIDENCE, False),
             "includeLinkedObjects": call.data.get(CONF_INCLUDE_LINKED_OBJECTS, True),
         }
+        _copy_optional(call.data, payload, CONF_LIMIT, "limit")
+        _copy_optional(call.data, payload, CONF_MODE, "mode")
         response = await _call_client(runtime.client.home_graph_ask(payload))
         runtime.async_apply_home_graph_response(response)
         return response
@@ -858,6 +896,8 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     async def async_home_graph_issues(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
+        for key in (CONF_STATUS, CONF_SEVERITY, CONF_CODE, CONF_LIMIT):
+            _copy_optional(call.data, payload, key, key)
         response = await _call_client(runtime.client.home_graph_issues(payload))
         runtime.home_graph_issues = response
         async_dispatcher_send(hass, runtime.signal)
@@ -890,6 +930,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     async def async_home_graph_sources(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
+        _copy_optional(call.data, payload, CONF_LIMIT, "limit")
         response = await _call_client(runtime.client.home_graph_sources(payload))
         runtime.home_graph_sources = response
         async_dispatcher_send(hass, runtime.signal)
@@ -898,7 +939,24 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     async def async_home_graph_browse(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
+        _copy_optional(call.data, payload, CONF_LIMIT, "limit")
         return await _call_client(runtime.client.home_graph_browse(payload))
+
+    async def async_home_graph_export(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        return await _call_client(runtime.client.home_graph_export(payload))
+
+    async def async_home_graph_import(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = {
+            **runtime.home_graph_base_payload(call.data),
+            "data": call.data["data"],
+        }
+        response = await _call_client(runtime.client.home_graph_import(payload))
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+        return response
 
     hass.services.async_register(
         DOMAIN,
@@ -1016,7 +1074,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         DOMAIN,
         SERVICE_HOME_GRAPH_ISSUES,
         async_home_graph_issues,
-        schema=HOME_GRAPH_COMMON_SCHEMA,
+        schema=HOME_GRAPH_ISSUES_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
@@ -1030,14 +1088,28 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         DOMAIN,
         SERVICE_HOME_GRAPH_SOURCES,
         async_home_graph_sources,
-        schema=HOME_GRAPH_COMMON_SCHEMA,
+        schema=HOME_GRAPH_LIST_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_HOME_GRAPH_BROWSE,
         async_home_graph_browse,
+        schema=HOME_GRAPH_LIST_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_EXPORT,
+        async_home_graph_export,
         schema=HOME_GRAPH_COMMON_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_IMPORT,
+        async_home_graph_import,
+        schema=HOME_GRAPH_IMPORT_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.data[DOMAIN]["services_registered"] = True

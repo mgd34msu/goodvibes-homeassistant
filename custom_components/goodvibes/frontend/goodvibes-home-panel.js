@@ -242,11 +242,14 @@ class GoodVibesHomePanel extends HTMLElement {
     const name = form.dataset.form;
     const fields = this._formValues(form);
     if (name === "ask") {
-      await this._call("ask", {
+      await this._call("ask", this._compact({
         query: fields.query,
-        includeSources: true,
-        includeLinkedObjects: true,
-      });
+        limit: fields.limit,
+        mode: fields.mode,
+        includeSources: fields.includeSources,
+        includeConfidence: fields.includeConfidence,
+        includeLinkedObjects: fields.includeLinkedObjects,
+      }));
       return;
     }
     if (name === "browse") {
@@ -315,6 +318,16 @@ class GoodVibesHomePanel extends HTMLElement {
         packetKind: fields.packetKind,
         title: fields.title,
         sharingProfile: fields.sharingProfile,
+      });
+      return;
+    }
+    if (name === "export") {
+      await this._call("export");
+      return;
+    }
+    if (name === "import") {
+      await this._call("import", {
+        data: this._jsonFromText(fields.data),
       });
     }
   }
@@ -533,6 +546,12 @@ class GoodVibesHomePanel extends HTMLElement {
             <div><dt>Status</dt><dd>${escapeHtml(statusValue(this._status.status))}</dd></div>
             <div><dt>Knowledge Space</dt><dd>${escapeHtml(this._status.knowledgeSpaceId || "")}</dd></div>
             <div><dt>Last Sync</dt><dd>${escapeHtml(this._status.lastSyncAt || "")}</dd></div>
+            <div><dt>Sources</dt><dd>${escapeHtml(statusCount(this._status, "sourceCount"))}</dd></div>
+            <div><dt>Nodes</dt><dd>${escapeHtml(statusCount(this._status, "nodeCount"))}</dd></div>
+            <div><dt>Edges</dt><dd>${escapeHtml(statusCount(this._status, "edgeCount"))}</dd></div>
+            <div><dt>Issues</dt><dd>${escapeHtml(statusCount(this._status, "issueCount"))}</dd></div>
+            <div><dt>Extractions</dt><dd>${escapeHtml(statusCount(this._status, "extractionCount"))}</dd></div>
+            <div><dt>Capabilities</dt><dd>${escapeHtml(statusCapabilities(this._status))}</dd></div>
           </dl>
         </article>
         <article class="panel">
@@ -609,6 +628,16 @@ class GoodVibesHomePanel extends HTMLElement {
           <h2>Ask The House</h2>
           <form data-form="ask">
             <label><span>Question</span><textarea name="query" rows="6"></textarea></label>
+            <details class="advanced">
+              <summary>Advanced</summary>
+              <div class="advanced-fields">
+                ${textInput("limit", "Result Limit", "number")}
+                ${textInput("mode", "Mode")}
+                <label class="check"><input name="includeSources" type="checkbox" checked><span>Include sources</span></label>
+                <label class="check"><input name="includeLinkedObjects" type="checkbox" checked><span>Include linked objects</span></label>
+                <label class="check"><input name="includeConfidence" type="checkbox"><span>Include confidence</span></label>
+              </div>
+            </details>
             <button type="submit"><ha-icon icon="mdi:message-processing-outline"></ha-icon><span>Ask</span></button>
           </form>
         </article>
@@ -705,6 +734,19 @@ class GoodVibesHomePanel extends HTMLElement {
         <article class="panel">
           <h2>Generated Content</h2>
           ${this._markdownPreview()}
+        </article>
+        <article class="panel">
+          <h2>Export</h2>
+          <form data-form="export">
+            <button type="submit"><ha-icon icon="mdi:export"></ha-icon><span>Export Home Graph</span></button>
+          </form>
+        </article>
+        <article class="panel">
+          <h2>Import</h2>
+          <form data-form="import">
+            <label><span>Export JSON</span><textarea name="data" rows="7"></textarea></label>
+            <button type="submit"><ha-icon icon="mdi:import"></ha-icon><span>Import Home Graph</span></button>
+          </form>
         </article>
       </section>
       ${this._resultPanel()}
@@ -1088,6 +1130,16 @@ function statusValue(status) {
     return "ok";
   }
   return JSON.stringify(status);
+}
+
+function statusCount(payload, key) {
+  const value = payload?.[key] ?? payload?.status?.[key];
+  return value === undefined || value === null ? "" : String(value);
+}
+
+function statusCapabilities(payload) {
+  const value = payload?.capabilities ?? payload?.status?.capabilities;
+  return Array.isArray(value) ? value.join(", ") : "";
 }
 
 function itemsFromPayload(payload, keys) {
