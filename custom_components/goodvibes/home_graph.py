@@ -123,13 +123,16 @@ async def async_build_home_graph_snapshot(
 
 def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:
     entity_id = str(getattr(entity, "entity_id", ""))
+    domain = entity_id.split(".", 1)[0] if "." in entity_id else None
+    platform = getattr(entity, "platform", None)
     state = hass.states.get(entity_id) if entity_id else None
     return _clean_dict(
         {
             "entityId": entity_id,
-            "domain": entity_id.split(".", 1)[0] if "." in entity_id else None,
+            "domain": domain,
             "uniqueId": getattr(entity, "unique_id", None),
-            "platform": getattr(entity, "platform", None),
+            "platform": platform,
+            "integrationId": platform,
             "deviceId": getattr(entity, "device_id", None),
             "areaId": getattr(entity, "area_id", None),
             "name": getattr(entity, "name", None),
@@ -142,6 +145,16 @@ def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:
             "aliases": _jsonable(getattr(entity, "aliases", None)),
             "state": state.state if state else None,
             "attributes": _state_attributes(state),
+            "metadata": {
+                "source": "entity_registry",
+                "domain": domain,
+                "platform": platform,
+                "uniqueId": getattr(entity, "unique_id", None),
+                "translationKey": getattr(entity, "translation_key", None),
+                "entityCategory": _jsonable(getattr(entity, "entity_category", None)),
+                "disabledBy": _jsonable(getattr(entity, "disabled_by", None)),
+                "hiddenBy": _jsonable(getattr(entity, "hidden_by", None)),
+            },
         }
     )
 
@@ -163,10 +176,27 @@ def _device_snapshot(device: Any) -> dict[str, Any]:
             "entryType": _jsonable(getattr(device, "entry_type", None)),
             "disabledBy": _jsonable(getattr(device, "disabled_by", None)),
             "viaDeviceId": getattr(device, "via_device_id", None),
+            "configEntries": _jsonable(getattr(device, "config_entries", None)),
             "identifiers": _jsonable(getattr(device, "identifiers", None)),
             "connections": _jsonable(getattr(device, "connections", None)),
             "labels": _jsonable(getattr(device, "labels", None)),
             "suggestedArea": getattr(device, "suggested_area", None),
+            "metadata": {
+                "source": "device_registry",
+                "nameByUser": getattr(device, "name_by_user", None),
+                "modelId": getattr(device, "model_id", None),
+                "swVersion": getattr(device, "sw_version", None),
+                "hwVersion": getattr(device, "hw_version", None),
+                "serialNumber": getattr(device, "serial_number", None),
+                "configurationUrl": getattr(device, "configuration_url", None),
+                "entryType": _jsonable(getattr(device, "entry_type", None)),
+                "disabledBy": _jsonable(getattr(device, "disabled_by", None)),
+                "viaDeviceId": getattr(device, "via_device_id", None),
+                "configEntries": _jsonable(getattr(device, "config_entries", None)),
+                "identifiers": _jsonable(getattr(device, "identifiers", None)),
+                "connections": _jsonable(getattr(device, "connections", None)),
+                "suggestedArea": getattr(device, "suggested_area", None),
+            },
         }
     )
 
@@ -179,6 +209,10 @@ def _area_snapshot(area: Any) -> dict[str, Any]:
             "aliases": _jsonable(getattr(area, "aliases", None)),
             "labels": _jsonable(getattr(area, "labels", None)),
             "picture": getattr(area, "picture", None),
+            "metadata": {
+                "source": "area_registry",
+                "picture": getattr(area, "picture", None),
+            },
         }
     )
 
@@ -195,6 +229,11 @@ def _label_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
                 "description": getattr(label, "description", None),
                 "icon": getattr(label, "icon", None),
                 "color": getattr(label, "color", None),
+                "metadata": {
+                    "source": "label_registry",
+                    "icon": getattr(label, "icon", None),
+                    "color": getattr(label, "color", None),
+                },
             }
         )
         for label in _registry_items(label_registry, "labels")
@@ -202,13 +241,13 @@ def _label_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
 
 
 def _integration_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
-    snapshots = []
+    entries_by_domain: dict[str, list[dict[str, Any]]] = {}
     for config_entry in hass.config_entries.async_entries():
-        snapshots.append(
+        domain = str(config_entry.domain)
+        entries_by_domain.setdefault(domain, []).append(
             _clean_dict(
                 {
                     "entryId": config_entry.entry_id,
-                    "domain": config_entry.domain,
                     "title": config_entry.title,
                     "uniqueId": config_entry.unique_id,
                     "source": getattr(config_entry, "source", None),
@@ -216,6 +255,23 @@ def _integration_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
                         getattr(config_entry, "disabled_by", None)
                     ),
                     "state": _jsonable(getattr(config_entry, "state", None)),
+                }
+            )
+        )
+    snapshots = []
+    for domain, entries in sorted(entries_by_domain.items()):
+        snapshots.append(
+            _clean_dict(
+                {
+                    "id": domain,
+                    "integrationId": domain,
+                    "domain": domain,
+                    "title": entries[0].get("title") if len(entries) == 1 else domain,
+                    "metadata": {
+                        "source": "config_entries",
+                        "entryCount": len(entries),
+                        "entries": entries,
+                    },
                 }
             )
         )
