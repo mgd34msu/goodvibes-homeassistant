@@ -424,7 +424,7 @@ class GoodVibesHomePanel extends HTMLElement {
         <header class="topbar">
           <div class="identity">
             <span class="logo">
-              <ha-icon icon="${escapeAttr(this._panel?.config?.sidebarIcon || "mdi:home-assistant")}"></ha-icon>
+              <ha-icon icon="${escapeAttr(this._panel?.config?.sidebarIcon || "goodvibes:home")}"></ha-icon>
             </span>
             <div>
               <h1>GoodVibes Home</h1>

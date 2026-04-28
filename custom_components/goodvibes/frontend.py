@@ -49,11 +49,15 @@ from .home_graph import async_build_home_graph_snapshot
 
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
+STATIC_CACHE_HEADERS = False
+FRONTEND_ASSET_VERSION = "0.5.1"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
-PANEL_MODULE_URL = f"{STATIC_URL}/goodvibes-home-panel.js"
-ICON_MODULE_URL = f"{STATIC_URL}/goodvibes-icons.js"
-PANEL_ICON = "mdi:home-assistant"
+PANEL_MODULE_URL = (
+    f"{STATIC_URL}/goodvibes-home-panel.js?v={FRONTEND_ASSET_VERSION}"
+)
+ICON_MODULE_URL = f"{STATIC_URL}/goodvibes-icons.js?v={FRONTEND_ASSET_VERSION}"
+PANEL_ICON = "goodvibes:home"
 UPLOAD_URL = "/api/goodvibes/home-graph/upload"
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
 
@@ -82,7 +86,7 @@ async def async_setup_frontend(hass: HomeAssistant) -> None:
     data = hass.data.setdefault(DOMAIN, {})
     if not data.get("frontend_registered"):
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), True)]
+            [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), STATIC_CACHE_HEADERS)]
         )
         frontend.add_extra_js_url(hass, ICON_MODULE_URL)
         websocket_api.async_register_command(hass, websocket_home_graph_call)
