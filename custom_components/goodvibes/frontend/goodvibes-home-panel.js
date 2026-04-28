@@ -53,15 +53,22 @@ class GoodVibesHomePanel extends HTMLElement {
     this._lastResult = {};
     this._filter = "";
     this._loaded = false;
+    this._pendingBackgroundRender = false;
+    this.shadowRoot.addEventListener("focusout", () => {
+      queueMicrotask(() => this._flushPendingBackgroundRender());
+    });
   }
 
   set hass(hass) {
+    const hadHass = Boolean(this._hass);
     this._hass = hass;
     if (!this._loaded && hass) {
       this._loaded = true;
-      this._refreshAll();
+      this._refreshAll({ background: true });
     }
-    this._render();
+    if (!hadHass) {
+      this._render();
+    }
   }
 
   get hass() {
@@ -88,13 +95,17 @@ class GoodVibesHomePanel extends HTMLElement {
     this._render();
   }
 
-  async _refreshAll() {
+  async _refreshAll(options = {}) {
     await this._call("status", {}, { quiet: true });
     await Promise.all([
       this._call("sources", {}, { quiet: true }),
       this._call("browse", {}, { quiet: true }),
       this._call("issues", {}, { quiet: true }),
     ]);
+    if (options.background) {
+      this._renderAfterBackgroundUpdate();
+      return;
+    }
     this._render();
   }
 
@@ -414,10 +425,40 @@ class GoodVibesHomePanel extends HTMLElement {
     this._render();
   }
 
+  _renderAfterBackgroundUpdate() {
+    if (this._hasActiveOrDirtyForm()) {
+      this._pendingBackgroundRender = true;
+      return;
+    }
+    this._render();
+  }
+
+  _flushPendingBackgroundRender() {
+    if (!this._pendingBackgroundRender || this._hasActiveOrDirtyForm()) {
+      return;
+    }
+    this._render();
+  }
+
+  _hasActiveOrDirtyForm() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return false;
+    }
+    const active = root.activeElement;
+    if (isFormControl(active)) {
+      return true;
+    }
+    return Array.from(root.querySelectorAll("input, select, textarea")).some((field) =>
+      isDirtyField(field)
+    );
+  }
+
   _render() {
     if (!this.shadowRoot) {
       return;
     }
+    this._pendingBackgroundRender = false;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
       <section class="shell">
@@ -1064,6 +1105,33 @@ function itemsFromPayload(payload, keys) {
     return itemsFromPayload(payload.result, keys);
   }
   return [];
+}
+
+function isFormControl(element) {
+  return Boolean(
+    element &&
+      ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName)
+  );
+}
+
+function isDirtyField(field) {
+  if (!field?.name) {
+    return false;
+  }
+  if (field.type === "file") {
+    return Boolean(field.files?.length);
+  }
+  if (field.type === "checkbox" || field.type === "radio") {
+    return field.checked !== field.defaultChecked;
+  }
+  if (field.tagName === "SELECT") {
+    const defaultOption = Array.from(field.options).find(
+      (option) => option.defaultSelected
+    );
+    const defaultValue = defaultOption?.value || field.options[0]?.value || "";
+    return field.value !== defaultValue;
+  }
+  return field.value !== field.defaultValue;
 }
 
 function escapeHtml(value) {
