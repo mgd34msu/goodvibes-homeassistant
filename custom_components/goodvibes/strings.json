@@ -3,12 +3,15 @@
     "step": {
       "user": {
         "title": "GoodVibes Daemon",
-        "description": "Connect to a GoodVibes daemon with SDK 0.25.14 Home Assistant surface enabled. The Home Assistant long-lived access token is configured in the daemon as surfaces.homeassistant.accessToken; this integration stores the daemon URL, daemon bearer token, webhook secret, and event type. Assist conversation turns use the remote-chat /api/homeassistant/conversation endpoint.",
+        "description": "Connect to a GoodVibes daemon with SDK 0.26.0 Home Assistant surface enabled. The Home Assistant long-lived access token is configured in the daemon as surfaces.homeassistant.accessToken; this integration stores the daemon URL, daemon bearer token, webhook secret, event type, and Home Graph settings. Assist conversation turns use the remote-chat /api/homeassistant/conversation endpoint.",
         "data": {
           "daemon_url": "Daemon URL",
           "daemon_token": "Daemon bearer token",
           "webhook_secret": "Home Assistant webhook secret",
-          "event_type": "Home Assistant event type"
+          "event_type": "Home Assistant event type",
+          "home_graph_enabled": "Enable Home Graph",
+          "installation_id": "Home Graph installation ID",
+          "knowledge_space_id": "Home Graph knowledge space ID"
         }
       }
     },
@@ -43,7 +46,26 @@
       },
       "tool_catalog_status": {
         "name": "Tool catalog status"
+      },
+      "home_graph_status": {
+        "name": "Home Graph status"
+      },
+      "home_graph_issues": {
+        "name": "Home Graph issues"
+      },
+      "home_graph_sources": {
+        "name": "Home Graph sources"
       }
+    }
+  },
+  "issues": {
+    "home_graph_unavailable": {
+      "title": "GoodVibes Home Graph is unavailable",
+      "description": "The GoodVibes daemon Home Graph endpoint is unavailable: {error}"
+    },
+    "home_graph_issues": {
+      "title": "GoodVibes Home Graph has unresolved issues",
+      "description": "GoodVibes reported {count} unresolved Home Graph issue(s). Check the Home Graph issues sensor or call goodvibes.home_graph_issues for details."
     }
   }
 }

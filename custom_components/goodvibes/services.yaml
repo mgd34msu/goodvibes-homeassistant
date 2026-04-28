@@ -154,3 +154,327 @@ call_tool:
     input:
       selector:
         object:
+
+home_graph_status:
+  description: Inspect daemon Home Graph status for this Home Assistant installation.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+
+sync_home_graph:
+  description: Send Home Assistant registry and entity context to GoodVibes Home Graph.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+
+ingest_url:
+  description: Ingest a URL into GoodVibes Home Graph.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    url:
+      required: true
+      selector:
+        text:
+    title:
+      selector:
+        text:
+    target_kind:
+      selector:
+        select:
+          options:
+            - entity
+            - device
+            - area
+            - automation
+            - script
+            - scene
+    target_id:
+      selector:
+        text:
+    relation:
+      selector:
+        text:
+    metadata:
+      selector:
+        object:
+
+ingest_note:
+  description: Ingest a note into GoodVibes Home Graph.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    note:
+      required: true
+      selector:
+        text:
+          multiline: true
+    title:
+      selector:
+        text:
+    target_kind:
+      selector:
+        select:
+          options:
+            - entity
+            - device
+            - area
+            - automation
+            - script
+            - scene
+    target_id:
+      selector:
+        text:
+    relation:
+      selector:
+        text:
+    metadata:
+      selector:
+        object:
+
+ingest_artifact:
+  description: Ingest a GoodVibes artifact, media item, file path, or URL into Home Graph.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    artifact_id:
+      selector:
+        text:
+    media_id:
+      selector:
+        text:
+    path:
+      selector:
+        text:
+    url:
+      selector:
+        text:
+    title:
+      selector:
+        text:
+    content_type:
+      selector:
+        text:
+    target_kind:
+      selector:
+        select:
+          options:
+            - entity
+            - device
+            - area
+            - automation
+            - script
+            - scene
+    target_id:
+      selector:
+        text:
+    relation:
+      selector:
+        text:
+    metadata:
+      selector:
+        object:
+
+link_knowledge:
+  description: Link a Home Graph source or node to a Home Assistant object.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    source_id:
+      selector:
+        text:
+    node_id:
+      selector:
+        text:
+    target_kind:
+      required: true
+      selector:
+        select:
+          options:
+            - entity
+            - device
+            - area
+            - automation
+            - script
+            - scene
+    target_id:
+      required: true
+      selector:
+        text:
+    relation:
+      selector:
+        text:
+
+unlink_knowledge:
+  description: Unlink a Home Graph source or node from a Home Assistant object.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    source_id:
+      selector:
+        text:
+    node_id:
+      selector:
+        text:
+    target_kind:
+      required: true
+      selector:
+        select:
+          options:
+            - entity
+            - device
+            - area
+            - automation
+            - script
+            - scene
+    target_id:
+      required: true
+      selector:
+        text:
+    relation:
+      selector:
+        text:
+
+ask_home_graph:
+  description: Ask a source-backed question against the GoodVibes Home Graph.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    query:
+      required: true
+      selector:
+        text:
+          multiline: true
+    include_sources:
+      default: true
+      selector:
+        boolean:
+    include_linked_objects:
+      default: true
+      selector:
+        boolean:
+
+device_passport:
+  description: Refresh or retrieve a GoodVibes Home Graph device passport.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    device_id:
+      selector:
+        text:
+    entity_id:
+      selector:
+        entity:
+
+room_page:
+  description: Request generation of a GoodVibes Home Graph room page.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    area_id:
+      selector:
+        area:
+
+home_graph_packet:
+  description: Request generation of a scoped GoodVibes Home Graph packet.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    packet_type:
+      required: true
+      selector:
+        select:
+          options:
+            - guest_guide
+            - pet_sitter
+            - hvac_notes
+            - electrician_notes
+            - network_closet
+            - emergency_sheet
+            - house_sitter
+    area_id:
+      selector:
+        area:
+    device_id:
+      selector:
+        text:
+    entity_id:
+      selector:
+        entity:
+    metadata:
+      selector:
+        object:
+
+home_graph_issues:
+  description: List GoodVibes Home Graph issues.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+
+review_fact:
+  description: Review a GoodVibes Home Graph fact.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    fact_id:
+      required: true
+      selector:
+        text:
+    decision:
+      required: true
+      selector:
+        select:
+          options:
+            - accept
+            - reject
+            - edit
+            - merge
+            - forget
+    value:
+      selector:
+        object:
+    metadata:
+      selector:
+        object:
+
+home_graph_sources:
+  description: List GoodVibes Home Graph sources.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+
+home_graph_browse:
+  description: Browse GoodVibes Home Graph nodes and links.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes

@@ -26,6 +26,28 @@ CONF_TASK_ID = "task_id"
 CONF_SESSION_ID = "session_id"
 CONF_TOOL = "tool"
 CONF_INPUT = "input"
+CONF_HOME_GRAPH_ENABLED = "home_graph_enabled"
+CONF_INSTALLATION_ID = "installation_id"
+CONF_KNOWLEDGE_SPACE_ID = "knowledge_space_id"
+CONF_URL = "url"
+CONF_NOTE = "note"
+CONF_TITLE = "title"
+CONF_SOURCE_ID = "source_id"
+CONF_NODE_ID = "node_id"
+CONF_TARGET_KIND = "target_kind"
+CONF_TARGET_ID = "target_id"
+CONF_RELATION = "relation"
+CONF_QUERY = "query"
+CONF_INCLUDE_SOURCES = "include_sources"
+CONF_INCLUDE_LINKED_OBJECTS = "include_linked_objects"
+CONF_ARTIFACT_ID = "artifact_id"
+CONF_MEDIA_ID = "media_id"
+CONF_PATH = "path"
+CONF_CONTENT_TYPE = "content_type"
+CONF_FACT_ID = "fact_id"
+CONF_DECISION = "decision"
+CONF_VALUE = "value"
+CONF_PACKET_TYPE = "packet_type"
 
 DEFAULT_DAEMON_URL = "http://127.0.0.1:3210"
 DEFAULT_EVENT_TYPE = "goodvibes_message"
@@ -35,6 +57,7 @@ DEFAULT_CONVERSATION_ID = "home"
 DEFAULT_ASSIST_CONVERSATION_PREFIX = "assist"
 DEFAULT_DISPLAY_NAME = "Home Assistant"
 DEFAULT_CONVERSATION_TIMEOUT_MS = 120000
+DEFAULT_HOME_GRAPH_ENABLED = True
 
 PLATFORMS = ["sensor", "conversation"]
 
@@ -53,6 +76,25 @@ ENDPOINT_HOMEASSISTANT_STATUS = (
 )
 ENDPOINT_TOOLS = "/api/channels/tools/homeassistant"
 ENDPOINT_AGENT_TOOLS = "/api/channels/agent-tools/homeassistant"
+ENDPOINT_HOME_GRAPH_STATUS = "/api/homeassistant/home-graph/status"
+ENDPOINT_HOME_GRAPH_SYNC = "/api/homeassistant/home-graph/sync"
+ENDPOINT_HOME_GRAPH_INGEST_URL = "/api/homeassistant/home-graph/ingest/url"
+ENDPOINT_HOME_GRAPH_INGEST_NOTE = "/api/homeassistant/home-graph/ingest/note"
+ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT = "/api/homeassistant/home-graph/ingest/artifact"
+ENDPOINT_HOME_GRAPH_LINK = "/api/homeassistant/home-graph/link"
+ENDPOINT_HOME_GRAPH_UNLINK = "/api/homeassistant/home-graph/unlink"
+ENDPOINT_HOME_GRAPH_ASK = "/api/homeassistant/home-graph/ask"
+ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT = (
+    "/api/homeassistant/home-graph/device-passport"
+)
+ENDPOINT_HOME_GRAPH_ROOM_PAGE = "/api/homeassistant/home-graph/room-page"
+ENDPOINT_HOME_GRAPH_PACKET = "/api/homeassistant/home-graph/packet"
+ENDPOINT_HOME_GRAPH_ISSUES = "/api/homeassistant/home-graph/issues"
+ENDPOINT_HOME_GRAPH_FACT_REVIEW = "/api/homeassistant/home-graph/facts/review"
+ENDPOINT_HOME_GRAPH_SOURCES = "/api/homeassistant/home-graph/sources"
+ENDPOINT_HOME_GRAPH_BROWSE = "/api/homeassistant/home-graph/browse"
+ENDPOINT_HOME_GRAPH_EXPORT = "/api/homeassistant/home-graph/export"
+ENDPOINT_HOME_GRAPH_IMPORT = "/api/homeassistant/home-graph/import"
 
 TOOL_NAME_TO_ID = {
     "homeassistant_manifest": "homeassistant:manifest",

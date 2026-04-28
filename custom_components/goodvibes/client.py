@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import aiohttp
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -15,6 +15,23 @@ from .const import (
     ENDPOINT_CONVERSATION_CANCEL,
     ENDPOINT_HEALTH,
     ENDPOINT_HOMEASSISTANT_STATUS,
+    ENDPOINT_HOME_GRAPH_ASK,
+    ENDPOINT_HOME_GRAPH_BROWSE,
+    ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT,
+    ENDPOINT_HOME_GRAPH_EXPORT,
+    ENDPOINT_HOME_GRAPH_FACT_REVIEW,
+    ENDPOINT_HOME_GRAPH_IMPORT,
+    ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT,
+    ENDPOINT_HOME_GRAPH_INGEST_NOTE,
+    ENDPOINT_HOME_GRAPH_INGEST_URL,
+    ENDPOINT_HOME_GRAPH_ISSUES,
+    ENDPOINT_HOME_GRAPH_LINK,
+    ENDPOINT_HOME_GRAPH_PACKET,
+    ENDPOINT_HOME_GRAPH_ROOM_PAGE,
+    ENDPOINT_HOME_GRAPH_SOURCES,
+    ENDPOINT_HOME_GRAPH_STATUS,
+    ENDPOINT_HOME_GRAPH_SYNC,
+    ENDPOINT_HOME_GRAPH_UNLINK,
     ENDPOINT_MANIFEST,
     ENDPOINT_STATUS,
     ENDPOINT_TOOLS,
@@ -168,6 +185,123 @@ class GoodVibesClient:
         path = f"/api/channels/tools/homeassistant/{quote(tool_id, safe='')}"
         return await self._request("POST", path, json=dict(input_payload))
 
+    async def home_graph_status(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Return daemon Home Graph status."""
+
+        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_STATUS, payload))
+
+    async def home_graph_sync(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Submit a Home Graph snapshot sync."""
+
+        return await self._request("POST", ENDPOINT_HOME_GRAPH_SYNC, json=dict(payload))
+
+    async def home_graph_ingest_url(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Ingest a URL into Home Graph."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_INGEST_URL, json=dict(payload)
+        )
+
+    async def home_graph_ingest_note(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Ingest a note into Home Graph."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_INGEST_NOTE, json=dict(payload)
+        )
+
+    async def home_graph_ingest_artifact(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Ingest an artifact, document, or photo into Home Graph."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT, json=dict(payload)
+        )
+
+    async def home_graph_link(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Link a Home Graph source or node to a Home Assistant object."""
+
+        return await self._request("POST", ENDPOINT_HOME_GRAPH_LINK, json=dict(payload))
+
+    async def home_graph_unlink(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Unlink a Home Graph source or node from a Home Assistant object."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_UNLINK, json=dict(payload)
+        )
+
+    async def home_graph_ask(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Ask a source-backed Home Graph question."""
+
+        return await self._request("POST", ENDPOINT_HOME_GRAPH_ASK, json=dict(payload))
+
+    async def home_graph_device_passport(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Refresh or retrieve a Home Graph device passport."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT, json=dict(payload)
+        )
+
+    async def home_graph_room_page(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Generate or refresh a Home Graph room page."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_ROOM_PAGE, json=dict(payload)
+        )
+
+    async def home_graph_packet(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Generate a scoped Home Graph packet."""
+
+        return await self._request("POST", ENDPOINT_HOME_GRAPH_PACKET, json=dict(payload))
+
+    async def home_graph_issues(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """List Home Graph issues."""
+
+        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_ISSUES, payload))
+
+    async def home_graph_review_fact(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Review a Home Graph fact."""
+
+        return await self._request(
+            "POST", ENDPOINT_HOME_GRAPH_FACT_REVIEW, json=dict(payload)
+        )
+
+    async def home_graph_sources(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """List Home Graph sources."""
+
+        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_SOURCES, payload))
+
+    async def home_graph_browse(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Browse Home Graph nodes and links."""
+
+        return await self._request("GET", _query_path(ENDPOINT_HOME_GRAPH_BROWSE, payload))
+
+    async def home_graph_export(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Request a daemon-owned Home Graph export."""
+
+        return await self._request("POST", ENDPOINT_HOME_GRAPH_EXPORT, json=dict(payload))
+
+    async def home_graph_import(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Request a daemon-owned Home Graph import."""
+
+        return await self._request("POST", ENDPOINT_HOME_GRAPH_IMPORT, json=dict(payload))
+
     async def _webhook(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """POST a payload to the daemon Home Assistant webhook."""
 
@@ -226,3 +360,16 @@ class GoodVibesClient:
             raise GoodVibesClientError("GoodVibes daemon request timed out") from err
         except aiohttp.ClientError as err:
             raise GoodVibesClientError(str(err)) from err
+
+
+def _query_path(path: str, payload: Mapping[str, Any]) -> str:
+    """Build a path with non-empty scalar query parameters."""
+
+    query = {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", {}, []) and isinstance(value, (str, int, float, bool))
+    }
+    if not query:
+        return path
+    return f"{path}?{urlencode(query)}"

@@ -1,6 +1,6 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.25.14`.
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.0`.
 
 This integration keeps Home Assistant-specific behavior in Home Assistant:
 
@@ -8,11 +8,13 @@ This integration keeps Home Assistant-specific behavior in Home Assistant:
 - device registry entry for the GoodVibes daemon
 - Assist conversation agent support through the remote-chat `/api/homeassistant/conversation` endpoint
 - services for prompts, task-style prompts, status, cancellation, and daemon-exposed HA tools
+- Home Graph services that sync HA context into the daemon-owned knowledge/wiki
 - local event listener for `goodvibes_message`
-- sensors for daemon status, last reply, active session/message/agent IDs, last error, and tool catalog status
+- sensors for daemon status, last reply, active session/message/agent IDs, last error, tool catalog status, and Home Graph status
 
 It does not reimplement GoodVibes routing, tool catalogs, provider/model resolution, or agent spawning.
 Assist chat stays in isolated daemon remote-chat sessions; it does not use shared TUI sessions, WRFC review/fix chains, or agent task report output.
+Home Graph data is stored and rendered by the daemon knowledge/wiki in a space like `homeassistant:<installationId>`.
 
 ## Daemon Configuration
 
@@ -52,7 +54,7 @@ Authorization: Bearer <daemon operator token>
 ```
 
 The webhook endpoint remains for automation/service calls that intentionally want queued async behavior.
-Use SDK `0.25.14` or newer for the remote-chat behavior, then restart the daemon after upgrading.
+Use SDK `0.26.0` or newer for Home Graph support, then restart the daemon after upgrading.
 
 ## Installation
 
@@ -63,6 +65,7 @@ The config flow validates:
 - `GET /status`
 - `GET /api/homeassistant/health`
 - `POST /api/channels/actions/homeassistant/homeassistant-manifest`
+- `GET /api/homeassistant/home-graph/status` when Home Graph is enabled
 
 ## Assist
 
@@ -79,6 +82,20 @@ The integration registers these services:
 - `goodvibes.status`
 - `goodvibes.cancel`
 - `goodvibes.call_tool`
+- `goodvibes.sync_home_graph`
+- `goodvibes.ingest_url`
+- `goodvibes.ingest_note`
+- `goodvibes.ingest_artifact`
+- `goodvibes.link_knowledge`
+- `goodvibes.unlink_knowledge`
+- `goodvibes.ask_home_graph`
+- `goodvibes.device_passport`
+- `goodvibes.room_page`
+- `goodvibes.home_graph_packet`
+- `goodvibes.home_graph_issues`
+- `goodvibes.review_fact`
+- `goodvibes.home_graph_sources`
+- `goodvibes.home_graph_browse`
 
 Example prompt:
 
@@ -122,6 +139,43 @@ data:
   tool: homeassistant_state
   input:
     entityId: light.kitchen
+```
+
+## Home Graph
+
+Home Graph is SDK/daemon-owned. This integration collects Home Assistant context and calls daemon APIs; it does not store, search, or render graph data locally.
+
+The default knowledge space is:
+
+```text
+homeassistant:<installationId>
+```
+
+Example sync:
+
+```yaml
+action: goodvibes.sync_home_graph
+data: {}
+```
+
+Example manual URL ingest linked to a device:
+
+```yaml
+action: goodvibes.ingest_url
+data:
+  url: https://example.com/manual.pdf
+  title: Front door lock manual
+  target_kind: device
+  target_id: front-door-lock
+  relation: has_manual
+```
+
+Example graph question:
+
+```yaml
+action: goodvibes.ask_home_graph
+data:
+  query: What battery does the front door sensor use?
 ```
 
 ## Event Handling

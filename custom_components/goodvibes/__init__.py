@@ -11,41 +11,71 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, cal
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 
 from .client import GoodVibesClient, GoodVibesClientError
 from .const import (
     CONF_AGENT_ID,
     CONF_AREA_ID,
+    CONF_ARTIFACT_ID,
+    CONF_CONTENT_TYPE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CONVERSATION_ID,
     CONF_DAEMON_TOKEN,
     CONF_DAEMON_URL,
+    CONF_DECISION,
     CONF_DEVICE_ID,
     CONF_DISPLAY_NAME,
     CONF_ENTITY_ID,
     CONF_EVENT_TYPE,
+    CONF_FACT_ID,
+    CONF_HOME_GRAPH_ENABLED,
+    CONF_INCLUDE_LINKED_OBJECTS,
+    CONF_INCLUDE_SOURCES,
     CONF_INPUT,
+    CONF_INSTALLATION_ID,
+    CONF_KNOWLEDGE_SPACE_ID,
+    CONF_MEDIA_ID,
     CONF_MESSAGE_ID,
     CONF_MODEL_ID,
+    CONF_NODE_ID,
+    CONF_NOTE,
+    CONF_PACKET_TYPE,
+    CONF_PATH,
     CONF_PROVIDER_ID,
+    CONF_QUERY,
+    CONF_RELATION,
     CONF_RUN_ID,
     CONF_SESSION_ID,
+    CONF_SOURCE_ID,
     CONF_TASK,
     CONF_TASK_ID,
+    CONF_TARGET_ID,
+    CONF_TARGET_KIND,
+    CONF_TITLE,
     CONF_TOOL,
     CONF_TOOLS,
+    CONF_URL,
     CONF_USER_ID,
+    CONF_VALUE,
     CONF_WEBHOOK_SECRET,
     DEFAULT_CONVERSATION_ID,
     DEFAULT_DEVICE_ID,
     DEFAULT_DEVICE_NAME,
     DEFAULT_DISPLAY_NAME,
     DEFAULT_EVENT_TYPE,
+    DEFAULT_HOME_GRAPH_ENABLED,
     DOMAIN,
     PLATFORMS,
     SIGNAL_UPDATE,
     TERMINAL_STATUSES,
+)
+from .home_graph import (
+    async_build_home_graph_snapshot,
+    build_home_graph_base_payload,
+    default_knowledge_space_id,
+    derive_installation_id,
 )
 
 SERVICE_PROMPT = "prompt"
@@ -53,6 +83,21 @@ SERVICE_RUN_AGENT = "run_agent"
 SERVICE_STATUS = "status"
 SERVICE_CANCEL = "cancel"
 SERVICE_CALL_TOOL = "call_tool"
+SERVICE_HOME_GRAPH_STATUS = "home_graph_status"
+SERVICE_SYNC_HOME_GRAPH = "sync_home_graph"
+SERVICE_INGEST_URL = "ingest_url"
+SERVICE_INGEST_NOTE = "ingest_note"
+SERVICE_INGEST_ARTIFACT = "ingest_artifact"
+SERVICE_LINK_KNOWLEDGE = "link_knowledge"
+SERVICE_UNLINK_KNOWLEDGE = "unlink_knowledge"
+SERVICE_ASK_HOME_GRAPH = "ask_home_graph"
+SERVICE_DEVICE_PASSPORT = "device_passport"
+SERVICE_ROOM_PAGE = "room_page"
+SERVICE_HOME_GRAPH_PACKET = "home_graph_packet"
+SERVICE_HOME_GRAPH_ISSUES = "home_graph_issues"
+SERVICE_REVIEW_FACT = "review_fact"
+SERVICE_HOME_GRAPH_SOURCES = "home_graph_sources"
+SERVICE_HOME_GRAPH_BROWSE = "home_graph_browse"
 
 
 def _optional_context_schema() -> dict[Any, Any]:
@@ -116,6 +161,123 @@ CALL_TOOL_SCHEMA = vol.Schema(
 )
 
 
+def _home_graph_common_schema() -> dict[Any, Any]:
+    """Return common Home Graph service fields."""
+
+    return {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Optional(CONF_INSTALLATION_ID): cv.string,
+        vol.Optional(CONF_KNOWLEDGE_SPACE_ID): cv.string,
+    }
+
+
+def _home_graph_target_schema() -> dict[Any, Any]:
+    """Return optional Home Graph target fields."""
+
+    return {
+        vol.Optional(CONF_TARGET_KIND): cv.string,
+        vol.Optional(CONF_TARGET_ID): cv.string,
+        vol.Optional(CONF_RELATION): cv.string,
+    }
+
+
+HOME_GRAPH_COMMON_SCHEMA = vol.Schema(_home_graph_common_schema())
+
+SYNC_HOME_GRAPH_SCHEMA = vol.Schema(_home_graph_common_schema())
+
+INGEST_URL_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required(CONF_URL): cv.string,
+        vol.Optional(CONF_TITLE): cv.string,
+        vol.Optional("metadata", default=dict): dict,
+        **_home_graph_target_schema(),
+    }
+)
+
+INGEST_NOTE_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required(CONF_NOTE): cv.string,
+        vol.Optional(CONF_TITLE): cv.string,
+        vol.Optional("metadata", default=dict): dict,
+        **_home_graph_target_schema(),
+    }
+)
+
+INGEST_ARTIFACT_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_ARTIFACT_ID): cv.string,
+        vol.Optional(CONF_MEDIA_ID): cv.string,
+        vol.Optional(CONF_PATH): cv.string,
+        vol.Optional(CONF_URL): cv.string,
+        vol.Optional(CONF_TITLE): cv.string,
+        vol.Optional(CONF_CONTENT_TYPE): cv.string,
+        vol.Optional("metadata", default=dict): dict,
+        **_home_graph_target_schema(),
+    }
+)
+
+LINK_KNOWLEDGE_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_SOURCE_ID): cv.string,
+        vol.Optional(CONF_NODE_ID): cv.string,
+        vol.Required(CONF_TARGET_KIND): cv.string,
+        vol.Required(CONF_TARGET_ID): cv.string,
+        vol.Optional(CONF_RELATION): cv.string,
+    }
+)
+
+UNLINK_KNOWLEDGE_SCHEMA = LINK_KNOWLEDGE_SCHEMA
+
+ASK_HOME_GRAPH_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required(CONF_QUERY): cv.string,
+        vol.Optional(CONF_INCLUDE_SOURCES, default=True): bool,
+        vol.Optional(CONF_INCLUDE_LINKED_OBJECTS, default=True): bool,
+    }
+)
+
+DEVICE_PASSPORT_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_DEVICE_ID): cv.string,
+        vol.Optional(CONF_ENTITY_ID): cv.string,
+    }
+)
+
+ROOM_PAGE_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_AREA_ID): cv.string,
+    }
+)
+
+HOME_GRAPH_PACKET_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required(CONF_PACKET_TYPE): cv.string,
+        vol.Optional(CONF_AREA_ID): cv.string,
+        vol.Optional(CONF_DEVICE_ID): cv.string,
+        vol.Optional(CONF_ENTITY_ID): cv.string,
+        vol.Optional("metadata", default=dict): dict,
+    }
+)
+
+REVIEW_FACT_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required(CONF_FACT_ID): cv.string,
+        vol.Required(CONF_DECISION): cv.string,
+        vol.Optional(CONF_VALUE): object,
+        vol.Optional("metadata", default=dict): dict,
+    }
+)
+
+
 def _result_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Unwrap daemon channel action envelopes."""
 
@@ -140,16 +302,25 @@ class GoodVibesRuntimeData:
     entry: ConfigEntry
     client: GoodVibesClient
     event_type: str
+    home_graph_enabled: bool
+    installation_id: str
+    knowledge_space_id: str | None
     manifest: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
     daemon_status: dict[str, Any] = field(default_factory=dict)
     homeassistant_status: dict[str, Any] = field(default_factory=dict)
     tool_catalog: dict[str, Any] = field(default_factory=dict)
+    home_graph_status: dict[str, Any] = field(default_factory=dict)
+    home_graph_issues: dict[str, Any] = field(default_factory=dict)
+    home_graph_sources: dict[str, Any] = field(default_factory=dict)
     status: str = "unknown"
     last_reply: str | None = None
     last_payload: dict[str, Any] = field(default_factory=dict)
     last_error: str | None = None
     last_event_at: str | None = None
+    home_graph_last_sync_at: str | None = None
+    home_graph_last_response: dict[str, Any] = field(default_factory=dict)
+    home_graph_last_error: str | None = None
     active_session_id: str | None = None
     active_message_id: str | None = None
     active_agent_id: str | None = None
@@ -161,6 +332,26 @@ class GoodVibesRuntimeData:
         """Return this entry's dispatcher signal."""
 
         return f"{SIGNAL_UPDATE}_{self.entry.entry_id}"
+
+    @property
+    def effective_knowledge_space_id(self) -> str:
+        """Return the Home Graph knowledge space id."""
+
+        return self.knowledge_space_id or default_knowledge_space_id(
+            self.installation_id
+        )
+
+    def home_graph_base_payload(
+        self, data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return common Home Graph payload fields for this config entry."""
+
+        data = data or {}
+        installation_id = str(data.get(CONF_INSTALLATION_ID) or self.installation_id)
+        knowledge_space_id = str(
+            data.get(CONF_KNOWLEDGE_SPACE_ID) or self.effective_knowledge_space_id
+        )
+        return build_home_graph_base_payload(installation_id, knowledge_space_id)
 
     @property
     def device_identifier(self) -> str:
@@ -226,7 +417,45 @@ class GoodVibesRuntimeData:
             self.status = "error"
             self.last_error = str(err)
         finally:
+            await self.async_refresh_home_graph()
             async_dispatcher_send(self.hass, self.signal)
+
+    async def async_refresh_home_graph(self) -> None:
+        """Refresh daemon Home Graph status without failing core status."""
+
+        if not self.home_graph_enabled:
+            self.home_graph_status = {"enabled": False, "status": "disabled"}
+            self.home_graph_issues = {}
+            self.home_graph_last_error = None
+            _async_clear_home_graph_issue(self.hass, "home_graph_unavailable")
+            _async_clear_home_graph_issue(self.hass, "home_graph_issues")
+            return
+        try:
+            base_payload = self.home_graph_base_payload()
+            self.home_graph_status = await self.client.home_graph_status(base_payload)
+            self.home_graph_issues = await self.client.home_graph_issues(base_payload)
+            self.home_graph_last_error = None
+            _async_clear_home_graph_issue(self.hass, "home_graph_unavailable")
+            issue_count = _home_graph_issue_count(self.home_graph_issues)
+            if issue_count > 0:
+                _async_create_home_graph_issue(
+                    self.hass,
+                    "home_graph_issues",
+                    "home_graph_issues",
+                    {"count": str(issue_count)},
+                )
+            else:
+                _async_clear_home_graph_issue(self.hass, "home_graph_issues")
+        except GoodVibesClientError as err:
+            self.home_graph_status = {"ok": False, "status": "error"}
+            self.home_graph_last_error = str(err)
+            _async_clear_home_graph_issue(self.hass, "home_graph_issues")
+            _async_create_home_graph_issue(
+                self.hass,
+                "home_graph_unavailable",
+                "home_graph_unavailable",
+                {"error": str(err)[:200]},
+            )
 
     @callback
     def async_handle_event(self, event) -> None:
@@ -338,6 +567,31 @@ class GoodVibesRuntimeData:
         self.last_error = error
         async_dispatcher_send(self.hass, self.signal)
 
+    @callback
+    def async_apply_home_graph_response(
+        self,
+        response: dict[str, Any],
+        *,
+        sync: bool = False,
+    ) -> None:
+        """Update runtime state from a Home Graph response."""
+
+        self.home_graph_last_response = response
+        if sync:
+            self.home_graph_last_sync_at = dt_util.utcnow().isoformat()
+        if response.get("ok") is False:
+            self.home_graph_last_error = str(
+                response.get("error") or "Home Graph request failed"
+            )
+        else:
+            self.home_graph_last_error = None
+        if status := response.get("status"):
+            self.home_graph_status = {
+                **self.home_graph_status,
+                "status": status,
+            }
+        async_dispatcher_send(self.hass, self.signal)
+
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up GoodVibes services."""
@@ -434,6 +688,176 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             runtime.client.call_tool(call.data[CONF_TOOL], call.data.get(CONF_INPUT, {}))
         )
 
+    async def async_home_graph_status(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        _ensure_home_graph_enabled(runtime)
+        await runtime.async_refresh_home_graph()
+        return {
+            "status": runtime.home_graph_status,
+            "issues": runtime.home_graph_issues,
+            "sources": runtime.home_graph_sources,
+            "lastSyncAt": runtime.home_graph_last_sync_at,
+            "lastError": runtime.home_graph_last_error,
+        }
+
+    async def async_sync_home_graph(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        _ensure_home_graph_enabled(runtime)
+        base_payload = runtime.home_graph_base_payload(call.data)
+        snapshot = await async_build_home_graph_snapshot(
+            hass,
+            runtime.entry,
+            base_payload["installationId"],
+            base_payload.get("knowledgeSpaceId"),
+        )
+        response = await _call_client(runtime.client.home_graph_sync(snapshot))
+        runtime.async_apply_home_graph_response(response, sync=True)
+        await runtime.async_refresh_home_graph()
+        return response
+
+    async def async_ingest_url(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = {
+            **_home_graph_payload(runtime, call.data),
+            "url": call.data[CONF_URL],
+        }
+        _copy_optional(call.data, payload, CONF_TITLE, "title")
+        response = await _call_client(runtime.client.home_graph_ingest_url(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_ingest_note(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = {
+            **_home_graph_payload(runtime, call.data),
+            "note": call.data[CONF_NOTE],
+        }
+        _copy_optional(call.data, payload, CONF_TITLE, "title")
+        response = await _call_client(runtime.client.home_graph_ingest_note(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_ingest_artifact(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = _home_graph_payload(runtime, call.data)
+        for source_key, payload_key in (
+            (CONF_ARTIFACT_ID, "artifactId"),
+            (CONF_MEDIA_ID, "mediaId"),
+            (CONF_PATH, "path"),
+            (CONF_URL, "url"),
+            (CONF_TITLE, "title"),
+            (CONF_CONTENT_TYPE, "contentType"),
+        ):
+            _copy_optional(call.data, payload, source_key, payload_key)
+        if not any(key in payload for key in ("artifactId", "mediaId", "path", "url")):
+            raise HomeAssistantError(
+                "ingest_artifact requires artifact_id, media_id, path, or url"
+            )
+        response = await _call_client(
+            runtime.client.home_graph_ingest_artifact(payload)
+        )
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_link_knowledge(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = _knowledge_link_payload(runtime, call.data)
+        response = await _call_client(runtime.client.home_graph_link(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_unlink_knowledge(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = _knowledge_link_payload(runtime, call.data)
+        response = await _call_client(runtime.client.home_graph_unlink(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_ask_home_graph(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = {
+            **runtime.home_graph_base_payload(call.data),
+            "query": call.data[CONF_QUERY],
+            "includeSources": call.data.get(CONF_INCLUDE_SOURCES, True),
+            "includeLinkedObjects": call.data.get(CONF_INCLUDE_LINKED_OBJECTS, True),
+        }
+        response = await _call_client(runtime.client.home_graph_ask(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_device_passport(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        _copy_optional(call.data, payload, CONF_DEVICE_ID, "deviceId")
+        _copy_optional(call.data, payload, CONF_ENTITY_ID, "entityId")
+        if "deviceId" not in payload and "entityId" not in payload:
+            raise HomeAssistantError("device_passport requires device_id or entity_id")
+        response = await _call_client(
+            runtime.client.home_graph_device_passport(payload)
+        )
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_room_page(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        _copy_optional(call.data, payload, CONF_AREA_ID, "areaId")
+        response = await _call_client(runtime.client.home_graph_room_page(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_home_graph_packet(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = {
+            **runtime.home_graph_base_payload(call.data),
+            "packetType": call.data[CONF_PACKET_TYPE],
+        }
+        _copy_optional(call.data, payload, CONF_AREA_ID, "areaId")
+        _copy_optional(call.data, payload, CONF_DEVICE_ID, "deviceId")
+        _copy_optional(call.data, payload, CONF_ENTITY_ID, "entityId")
+        if metadata := call.data.get("metadata"):
+            payload["metadata"] = metadata
+        response = await _call_client(runtime.client.home_graph_packet(payload))
+        runtime.async_apply_home_graph_response(response)
+        return response
+
+    async def async_home_graph_issues(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        response = await _call_client(runtime.client.home_graph_issues(payload))
+        runtime.home_graph_issues = response
+        async_dispatcher_send(hass, runtime.signal)
+        return response
+
+    async def async_review_fact(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = {
+            **runtime.home_graph_base_payload(call.data),
+            "factId": call.data[CONF_FACT_ID],
+            "decision": call.data[CONF_DECISION],
+        }
+        if CONF_VALUE in call.data:
+            payload["value"] = call.data[CONF_VALUE]
+        if metadata := call.data.get("metadata"):
+            payload["metadata"] = metadata
+        response = await _call_client(runtime.client.home_graph_review_fact(payload))
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+        return response
+
+    async def async_home_graph_sources(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        response = await _call_client(runtime.client.home_graph_sources(payload))
+        runtime.home_graph_sources = response
+        async_dispatcher_send(hass, runtime.signal)
+        return response
+
+    async def async_home_graph_browse(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        return await _call_client(runtime.client.home_graph_browse(payload))
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_PROMPT,
@@ -469,6 +893,111 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         schema=CALL_TOOL_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_STATUS,
+        async_home_graph_status,
+        schema=HOME_GRAPH_COMMON_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SYNC_HOME_GRAPH,
+        async_sync_home_graph,
+        schema=SYNC_HOME_GRAPH_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_INGEST_URL,
+        async_ingest_url,
+        schema=INGEST_URL_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_INGEST_NOTE,
+        async_ingest_note,
+        schema=INGEST_NOTE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_INGEST_ARTIFACT,
+        async_ingest_artifact,
+        schema=INGEST_ARTIFACT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LINK_KNOWLEDGE,
+        async_link_knowledge,
+        schema=LINK_KNOWLEDGE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UNLINK_KNOWLEDGE,
+        async_unlink_knowledge,
+        schema=UNLINK_KNOWLEDGE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ASK_HOME_GRAPH,
+        async_ask_home_graph,
+        schema=ASK_HOME_GRAPH_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DEVICE_PASSPORT,
+        async_device_passport,
+        schema=DEVICE_PASSPORT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ROOM_PAGE,
+        async_room_page,
+        schema=ROOM_PAGE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_PACKET,
+        async_home_graph_packet,
+        schema=HOME_GRAPH_PACKET_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_ISSUES,
+        async_home_graph_issues,
+        schema=HOME_GRAPH_COMMON_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REVIEW_FACT,
+        async_review_fact,
+        schema=REVIEW_FACT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_SOURCES,
+        async_home_graph_sources,
+        schema=HOME_GRAPH_COMMON_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_BROWSE,
+        async_home_graph_browse,
+        schema=HOME_GRAPH_COMMON_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.data[DOMAIN]["services_registered"] = True
     return True
 
@@ -487,6 +1016,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry=entry,
         client=client,
         event_type=entry.data.get(CONF_EVENT_TYPE, DEFAULT_EVENT_TYPE),
+        home_graph_enabled=entry.data.get(
+            CONF_HOME_GRAPH_ENABLED, DEFAULT_HOME_GRAPH_ENABLED
+        ),
+        installation_id=entry.data.get(CONF_INSTALLATION_ID)
+        or derive_installation_id(hass, entry),
+        knowledge_space_id=entry.data.get(CONF_KNOWLEDGE_SPACE_ID) or None,
     )
 
     hass.data.setdefault(DOMAIN, {})
@@ -571,6 +1106,112 @@ def _prompt_payload(
     if tools := data.get(CONF_TOOLS):
         payload["tools"] = list(tools)
     return payload
+
+
+def _home_graph_payload(
+    runtime: GoodVibesRuntimeData,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a Home Graph payload with optional target and metadata."""
+
+    _ensure_home_graph_enabled(runtime)
+    payload = runtime.home_graph_base_payload(data)
+    if metadata := data.get("metadata"):
+        payload["metadata"] = metadata
+    if target := _target_payload(data):
+        payload["target"] = target
+    return payload
+
+
+def _knowledge_link_payload(
+    runtime: GoodVibesRuntimeData,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a Home Graph link or unlink payload."""
+
+    _ensure_home_graph_enabled(runtime)
+    if not data.get(CONF_SOURCE_ID) and not data.get(CONF_NODE_ID):
+        raise HomeAssistantError("linking requires source_id or node_id")
+    payload = runtime.home_graph_base_payload(data)
+    _copy_optional(data, payload, CONF_SOURCE_ID, "sourceId")
+    _copy_optional(data, payload, CONF_NODE_ID, "nodeId")
+    payload["target"] = {
+        "kind": data[CONF_TARGET_KIND],
+        "id": data[CONF_TARGET_ID],
+    }
+    if relation := data.get(CONF_RELATION):
+        payload["target"]["relation"] = relation
+    return payload
+
+
+def _target_payload(data: dict[str, Any]) -> dict[str, Any] | None:
+    """Return an optional Home Graph target payload."""
+
+    if not data.get(CONF_TARGET_KIND) and not data.get(CONF_TARGET_ID):
+        return None
+    if not data.get(CONF_TARGET_KIND) or not data.get(CONF_TARGET_ID):
+        raise HomeAssistantError("target_kind and target_id must be provided together")
+    target = {
+        "kind": data[CONF_TARGET_KIND],
+        "id": data[CONF_TARGET_ID],
+    }
+    if relation := data.get(CONF_RELATION):
+        target["relation"] = relation
+    return target
+
+
+def _copy_optional(
+    source: dict[str, Any],
+    target: dict[str, Any],
+    source_key: str,
+    target_key: str,
+) -> None:
+    """Copy a non-empty service field into a daemon payload."""
+
+    if value := source.get(source_key):
+        target[target_key] = value
+
+
+def _ensure_home_graph_enabled(runtime: GoodVibesRuntimeData) -> None:
+    """Raise if Home Graph is disabled for this config entry."""
+
+    if not runtime.home_graph_enabled:
+        raise HomeAssistantError("Home Graph is disabled for this GoodVibes entry")
+
+
+def _async_create_home_graph_issue(
+    hass: HomeAssistant,
+    issue_id: str,
+    translation_key: str,
+    placeholders: dict[str, str] | None = None,
+) -> None:
+    """Create a Home Assistant repair issue for Home Graph."""
+
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=translation_key,
+        translation_placeholders=placeholders,
+    )
+
+
+def _async_clear_home_graph_issue(hass: HomeAssistant, issue_id: str) -> None:
+    """Clear a Home Assistant repair issue for Home Graph."""
+
+    ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
+def _home_graph_issue_count(payload: dict[str, Any]) -> int:
+    """Return the number of daemon-reported Home Graph issues."""
+
+    issues = payload.get("issues")
+    if isinstance(issues, list):
+        return len(issues)
+    count = payload.get("count")
+    return count if isinstance(count, int) else 0
 
 
 async def _call_client(awaitable) -> dict[str, Any]:

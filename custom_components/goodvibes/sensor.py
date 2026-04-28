@@ -112,6 +112,37 @@ SENSOR_DESCRIPTIONS: tuple[GoodVibesSensorDescription, ...] = (
             ],
         },
     ),
+    GoodVibesSensorDescription(
+        key="home_graph_status",
+        translation_key="home_graph_status",
+        icon="mdi:graph",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _home_graph_state(data),
+        attrs_fn=lambda data: {
+            "enabled": data.home_graph_enabled,
+            "installation_id": data.installation_id,
+            "knowledge_space_id": data.effective_knowledge_space_id,
+            "status": data.home_graph_status,
+            "last_sync_at": data.home_graph_last_sync_at,
+            "last_error": data.home_graph_last_error,
+        },
+    ),
+    GoodVibesSensorDescription(
+        key="home_graph_issues",
+        translation_key="home_graph_issues",
+        icon="mdi:alert-rhombus",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _home_graph_issue_count(data),
+        attrs_fn=lambda data: {"issues": data.home_graph_issues},
+    ),
+    GoodVibesSensorDescription(
+        key="home_graph_sources",
+        translation_key="home_graph_sources",
+        icon="mdi:book-search",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _home_graph_source_count(data),
+        attrs_fn=lambda data: {"sources": data.home_graph_sources},
+    ),
 )
 
 
@@ -123,6 +154,45 @@ def _tool_state(data: GoodVibesRuntimeData) -> str:
     if not data.tool_catalog:
         return "unknown"
     return f"{tool_count} tools, {agent_tool_count} agent tools"
+
+
+def _home_graph_state(data: GoodVibesRuntimeData) -> str:
+    """Return a compact Home Graph state."""
+
+    if not data.home_graph_enabled:
+        return "disabled"
+    if data.home_graph_last_error:
+        return "error"
+    status = data.home_graph_status.get("status")
+    if status:
+        return _state(status, "unknown") or "unknown"
+    if data.home_graph_status.get("ok") is True:
+        return "ready"
+    return "unknown"
+
+
+def _home_graph_issue_count(data: GoodVibesRuntimeData) -> int:
+    """Return the number of Home Graph issues."""
+
+    issues = data.home_graph_issues.get("issues")
+    if isinstance(issues, list):
+        return len(issues)
+    count = data.home_graph_issues.get("count")
+    if isinstance(count, int):
+        return count
+    return 0
+
+
+def _home_graph_source_count(data: GoodVibesRuntimeData) -> int:
+    """Return the number of Home Graph sources."""
+
+    sources = data.home_graph_sources.get("sources")
+    if isinstance(sources, list):
+        return len(sources)
+    count = data.home_graph_sources.get("count")
+    if isinstance(count, int):
+        return count
+    return 0
 
 
 async def async_setup_entry(
