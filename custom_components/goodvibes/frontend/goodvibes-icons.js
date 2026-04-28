@@ -94,9 +94,84 @@ z`,
 };
 
 window.customIconsets = window.customIconsets || {};
-window.customIconsets.goodvibes = async (name) => {
+window.customIcons = window.customIcons || {};
+
+const getGoodVibesIcon = async (name) => {
   if (name !== "home") {
     return undefined;
   }
   return HOME_ICON;
 };
+
+window.customIconsets.goodvibes = getGoodVibesIcon;
+window.customIcons.goodvibes = { getIcon: getGoodVibesIcon };
+
+function patchGoodVibesSidebarIcon() {
+  const item = findInOpenRoots(document, "#sidebar-panel-goodvibes-home");
+  if (!item) {
+    return false;
+  }
+
+  const current = item.querySelector('[slot="start"]');
+  if (current?.classList?.contains("goodvibes-sidebar-icon")) {
+    return true;
+  }
+
+  const icon = document.createElement("ha-svg-icon");
+  icon.classList.add("goodvibes-sidebar-icon");
+  icon.slot = "start";
+  icon.path = HOME_ICON.path;
+  icon.viewBox = HOME_ICON.viewBox;
+  current?.replaceWith(icon);
+  if (!current) {
+    item.prepend(icon);
+  }
+  return true;
+}
+
+function findInOpenRoots(root, selector) {
+  const direct = root.querySelector?.(selector);
+  if (direct) {
+    return direct;
+  }
+
+  const children = root.querySelectorAll?.("*") || [];
+  for (const child of children) {
+    if (!child.shadowRoot) {
+      continue;
+    }
+    const found = findInOpenRoots(child.shadowRoot, selector);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+let sidebarPatchScheduled = false;
+
+function scheduleSidebarPatch() {
+  if (sidebarPatchScheduled) {
+    return;
+  }
+  sidebarPatchScheduled = true;
+  patchGoodVibesSidebarIcon();
+  requestAnimationFrame(() => {
+    sidebarPatchScheduled = false;
+    patchGoodVibesSidebarIcon();
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", scheduleSidebarPatch, { once: true });
+} else {
+  scheduleSidebarPatch();
+}
+
+new MutationObserver(scheduleSidebarPatch).observe(document.documentElement, {
+  childList: true,
+  subtree: true,
+});
+
+setTimeout(scheduleSidebarPatch, 500);
+setTimeout(scheduleSidebarPatch, 1500);
