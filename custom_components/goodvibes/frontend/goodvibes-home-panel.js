@@ -161,10 +161,10 @@ class GoodVibesHomePanel extends HTMLElement {
     const data = new FormData();
     data.append("file", file, file.name);
     this._appendFormField(data, "config_entry_id", this._configEntryId);
-    this._appendFormField(data, "title", fields.title || file.name);
+    this._appendFormField(data, "title", fields.title);
     this._appendFormField(data, "tags", this._tagsFromText(fields.tags));
     this._appendFormField(data, "target", this._targetFromFields(fields));
-    this._appendJsonTextField(data, "metadata", fields.metadata);
+    this._appendFormField(data, "metadata", this._jsonFromText(fields.metadata));
     if (fields.allowPrivateHosts) {
       data.append("allowPrivateHosts", "true");
     }
@@ -262,7 +262,6 @@ class GoodVibesHomePanel extends HTMLElement {
         "ingest_note",
         this._ingestPayload(fields, {
           body: fields.body,
-          category: fields.category,
         })
       );
       await this._refreshAll();
@@ -275,9 +274,6 @@ class GoodVibesHomePanel extends HTMLElement {
           artifactId: fields.artifactId,
           path: fields.path,
           uri: fields.uri,
-          title: fields.title,
-          tags: this._tagsFromText(fields.tags),
-          allowPrivateHosts: Boolean(fields.allowPrivateHosts),
         })
       );
       await this._refreshAll();
@@ -328,7 +324,7 @@ class GoodVibesHomePanel extends HTMLElement {
       tags: this._tagsFromText(fields.tags),
       target: this._targetFromFields(fields),
       metadata: this._jsonFromText(fields.metadata),
-      allowPrivateHosts: Boolean(fields.allowPrivateHosts),
+      allowPrivateHosts: fields.allowPrivateHosts ? true : undefined,
     });
   }
 
@@ -368,13 +364,6 @@ class GoodVibesHomePanel extends HTMLElement {
       return;
     }
     formData.append(key, typeof value === "string" ? value : JSON.stringify(value));
-  }
-
-  _appendJsonTextField(formData, key, value) {
-    const parsed = this._jsonFromText(value);
-    if (parsed) {
-      formData.append(key, JSON.stringify(parsed));
-    }
   }
 
   _jsonFromText(value) {
@@ -573,44 +562,36 @@ class GoodVibesHomePanel extends HTMLElement {
     return `
       <section class="grid two">
         <article class="panel">
+          <h2>File</h2>
+          <form data-form="upload">
+            <label><span>File</span><input name="file" type="file"></label>
+            ${this._advancedIngestFields({ privateHosts: true })}
+            <button type="submit"><ha-icon icon="mdi:file-upload-outline"></ha-icon><span>Upload</span></button>
+          </form>
+        </article>
+        <article class="panel">
           <h2>URL</h2>
           <form data-form="url">
             ${textInput("url", "URL", "url")}
-            ${textInput("title", "Title")}
-            <label class="check"><input name="allowPrivateHosts" type="checkbox"><span>Allow private hosts</span></label>
-            ${this._commonFields()}
+            ${this._advancedIngestFields({ privateHosts: true })}
             <button type="submit"><ha-icon icon="mdi:link-plus"></ha-icon><span>Ingest URL</span></button>
           </form>
         </article>
         <article class="panel">
           <h2>Note</h2>
           <form data-form="note">
-            ${textInput("title", "Title")}
-            ${textInput("category", "Category")}
             <label><span>Body</span><textarea name="body" rows="7"></textarea></label>
-            ${this._commonFields()}
+            ${this._advancedIngestFields()}
             <button type="submit"><ha-icon icon="mdi:note-plus-outline"></ha-icon><span>Ingest Note</span></button>
           </form>
         </article>
         <article class="panel">
-          <h2>File Upload</h2>
-          <form data-form="upload">
-            <label><span>File</span><input name="file" type="file"></label>
-            ${textInput("title", "Title")}
-            <label class="check"><input name="allowPrivateHosts" type="checkbox"><span>Allow private hosts</span></label>
-            ${this._commonFields()}
-            <button type="submit"><ha-icon icon="mdi:file-upload-outline"></ha-icon><span>Upload</span></button>
-          </form>
-        </article>
-        <article class="panel">
-          <h2>Artifact Reference</h2>
+          <h2>Reference</h2>
           <form data-form="artifact">
             ${textInput("artifactId", "Artifact ID")}
             ${textInput("path", "Daemon Path")}
             ${textInput("uri", "URI")}
-            ${textInput("title", "Title")}
-            <label class="check"><input name="allowPrivateHosts" type="checkbox"><span>Allow private hosts</span></label>
-            ${this._commonFields()}
+            ${this._advancedIngestFields({ privateHosts: true })}
             <button type="submit"><ha-icon icon="mdi:database-import-outline"></ha-icon><span>Ingest Reference</span></button>
           </form>
         </article>
@@ -728,11 +709,18 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  _commonFields() {
+  _advancedIngestFields(options = {}) {
     return `
-      ${textInput("tags", "Tags")}
-      ${this._targetFields()}
-      ${metadataField()}
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <div class="advanced-fields">
+          ${textInput("title", "Title")}
+          ${textInput("tags", "Tags")}
+          ${options.privateHosts ? `<label class="check"><input name="allowPrivateHosts" type="checkbox"><span>Allow private hosts</span></label>` : ""}
+          ${this._targetFields()}
+          ${metadataField()}
+        </div>
+      </details>
     `;
   }
 
@@ -962,6 +950,20 @@ class GoodVibesHomePanel extends HTMLElement {
       }
       textarea {
         resize: vertical;
+      }
+      .advanced {
+        border-top: 1px solid var(--divider-color);
+        padding-top: 8px;
+      }
+      .advanced summary {
+        color: var(--secondary-text-color);
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .advanced-fields {
+        display: grid;
+        gap: 12px;
+        padding-top: 12px;
       }
       .check {
         align-items: center;

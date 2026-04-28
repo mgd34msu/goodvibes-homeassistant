@@ -83,7 +83,7 @@ The panel talks to Home Assistant, not directly to the daemon:
 
 The browser never receives the daemon token.
 
-Panel actions include Home Graph status, sync, source/node/edge/issue browsing, URL ingest, note ingest, artifact reference ingest, multipart file upload, source-backed questions, link/unlink, review/forget, device passports, room pages, and packets.
+Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases.
 
 ## Assist
 
@@ -146,15 +146,16 @@ Artifact ingest supports:
 - `multipart/form-data` uploads with a `file` field.
 - Raw binary uploads when the bridge controls the request.
 
-Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards multipart metadata fields such as `installationId`, `knowledgeSpaceId`, `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` to the daemon. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.3` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
+Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.3` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
 
 ## Home Graph Workflow
 
 1. Sync Home Assistant context into the daemon.
 2. Ingest URLs, notes, documents, photos, manuals, receipts, and troubleshooting details.
-3. Link sources or graph nodes to Home Assistant objects.
-4. Ask source-backed Home Graph questions.
-5. Surface daemon-reported status, issues, and review items through sensors, repairs, and services.
+3. Let the daemon classify, extract facts, link sources to Home Assistant objects, and produce review items when confidence is low.
+4. Review or correct daemon-proposed facts and links when needed.
+5. Ask source-backed Home Graph questions.
+6. Surface daemon-reported status, issues, and review items through sensors, repairs, and services.
 
 The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, and selected current state attributes.
 
@@ -165,16 +166,12 @@ action: goodvibes.sync_home_graph
 data: {}
 ```
 
-Example manual URL ingest linked to a device:
+Example manual URL ingest:
 
 ```yaml
 action: goodvibes.ingest_url
 data:
   url: https://example.com/front-door-lock-manual.pdf
-  title: Front door lock manual
-  target_kind: ha_device
-  target_id: front-door-lock
-  relation: has_manual
 ```
 
 Example troubleshooting note:
@@ -182,11 +179,7 @@ Example troubleshooting note:
 ```yaml
 action: goodvibes.ingest_note
 data:
-  title: Front door lock offline fix
   note: Last time the front door lock went offline, replacing the CR123A batteries fixed it.
-  target_kind: ha_device
-  target_id: front-door-lock
-  relation: has_issue
 ```
 
 Example document or photo ingest by daemon-local path:
@@ -195,13 +188,9 @@ Example document or photo ingest by daemon-local path:
 action: goodvibes.ingest_artifact
 data:
   path: /data/manuals/front-door-lock.pdf
-  title: Front door lock manual
-  target_kind: ha_device
-  target_id: front-door-lock
-  relation: has_manual
 ```
 
-`ingest_artifact` accepts one of `artifact_id`, `path`, `uri`, or compatibility `url`. The daemon owns artifact storage, processing, extraction, indexing, and linking. Use the `GoodVibes Home` sidebar panel for normal browser file uploads.
+`ingest_artifact` accepts one of `artifact_id`, `path`, `uri`, or compatibility `url`. The daemon owns artifact storage, processing, extraction, indexing, classification, linking, and review. Use the `GoodVibes Home` sidebar panel for normal browser file uploads.
 
 Example graph question:
 
@@ -229,7 +218,7 @@ data:
 
 ## Home Graph Linking
 
-Use `target_kind`, `target_id`, and optional `relation` when ingesting or linking knowledge.
+Use `target_kind`, `target_id`, and optional `relation` only when overriding ingest behavior or manually linking/correcting knowledge. Normal ingest should omit these fields and let the daemon classify and link the source automatically.
 
 Common target kinds:
 
