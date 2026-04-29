@@ -1,6 +1,7 @@
 const DEFAULT_WS_TYPE = "goodvibes/home_graph/call";
 const DEFAULT_UPLOAD_URL = "/api/goodvibes/home-graph/upload";
 const AUTO_TRIAGE_BATCH_LIMIT = 25;
+const OPEN_ISSUES_PAYLOAD = { status: "open" };
 
 const TARGET_KIND_OPTIONS = [
   "",
@@ -110,7 +111,7 @@ class GoodVibesHomePanel extends HTMLElement {
     await Promise.all([
       this._call("sources", {}, { quiet: true }),
       this._call("browse", {}, { quiet: true }),
-      this._call("issues", {}, { quiet: true }),
+      this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true }),
     ]);
     if (options.background) {
       this._renderAfterBackgroundUpdate();
@@ -748,7 +749,7 @@ class GoodVibesHomePanel extends HTMLElement {
         insight: triageInsight(result),
       };
       if ((Number(result?.reviewed) || 0) > 0) {
-        await this._call("issues", {}, { quiet: true });
+        await this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true });
         await this._call("browse", {}, { quiet: true });
         this._selectedReviewIds.clear();
         this._lastTriageSignature = itemsFromPayload(this._issues, ["issues"])
@@ -879,7 +880,7 @@ class GoodVibesHomePanel extends HTMLElement {
         <article class="panel">
           <h2>Review</h2>
           ${
-            selected
+            selected.length
               ? this._reviewForm(selected)
               : `<p class="empty">No issue selected</p>`
           }
@@ -1110,7 +1111,9 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _visibleIssues() {
-    return this._filtered(itemsFromPayload(this._issues, ["issues"]));
+    return this._filtered(
+      itemsFromPayload(this._issues, ["issues"]).filter((issue) => isOpenIssue(issue))
+    );
   }
 
   _selectedIssues(issues) {
@@ -1726,6 +1729,10 @@ function issueMessage(issue) {
     issue?.sourceId ? `Source ${issue.sourceId}` : undefined,
   ].filter(Boolean);
   return parts.length ? parts.join(" - ") : issue?.id || "";
+}
+
+function isOpenIssue(issue) {
+  return String(issue?.status || "open").toLowerCase() === "open";
 }
 
 function itemsFromPayload(payload, keys) {

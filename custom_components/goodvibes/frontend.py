@@ -58,7 +58,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.18"
+FRONTEND_ASSET_VERSION = "0.5.19"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -267,22 +267,22 @@ async def _handle_home_graph_action(
         async_dispatcher_send(hass, runtime.signal)
         return response
     if action == "issues":
-        response = await runtime.client.home_graph_issues(
-            _query_payload(
-                runtime,
-                data,
-                {
-                    CONF_STATUS,
-                    "status",
-                    CONF_SEVERITY,
-                    "severity",
-                    CONF_CODE,
-                    "code",
-                    CONF_LIMIT,
-                    "limit",
-                },
-            )
+        payload = _query_payload(
+            runtime,
+            data,
+            {
+                CONF_STATUS,
+                "status",
+                CONF_SEVERITY,
+                "severity",
+                CONF_CODE,
+                "code",
+                CONF_LIMIT,
+                "limit",
+            },
         )
+        payload.setdefault(CONF_STATUS, "open")
+        response = await runtime.client.home_graph_issues(payload)
         runtime.home_graph_issues = response
         async_dispatcher_send(hass, runtime.signal)
         return response

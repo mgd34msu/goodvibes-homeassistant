@@ -478,7 +478,9 @@ class GoodVibesRuntimeData:
         try:
             base_payload = self.home_graph_base_payload()
             self.home_graph_status = await self.client.home_graph_status(base_payload)
-            self.home_graph_issues = await self.client.home_graph_issues(base_payload)
+            self.home_graph_issues = await self.client.home_graph_issues(
+                {**base_payload, CONF_STATUS: "open"}
+            )
             self.home_graph_last_error = None
             _async_clear_home_graph_issue(self.hass, "home_graph_unavailable")
             issue_count = _home_graph_issue_count(self.home_graph_issues)
