@@ -148,7 +148,7 @@ Artifact ingest supports:
 - `multipart/form-data` uploads with a `file` field.
 - Raw binary uploads when the bridge controls the request.
 
-Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.8` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
+Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.8` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads. URL, note, artifact, and import ingest calls allow up to one hour for daemon extraction/indexing; generated pages/packets/exports allow up to ten minutes.
 
 ## Home Graph Workflow
 

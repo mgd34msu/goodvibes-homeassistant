@@ -42,6 +42,12 @@ from .const import (
     WEBHOOK_PATH,
 )
 
+DEFAULT_REQUEST_TIMEOUT = 20
+HOME_GRAPH_SYNC_TIMEOUT = 120
+HOME_GRAPH_INGEST_TIMEOUT = 3600
+HOME_GRAPH_GENERATE_TIMEOUT = 600
+HOME_GRAPH_ASK_TIMEOUT = 180
+
 
 class GoodVibesClientError(Exception):
     """Raised when the GoodVibes daemon returns an error."""
@@ -199,7 +205,12 @@ class GoodVibesClient:
     async def home_graph_sync(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Submit a Home Graph snapshot sync."""
 
-        return await self._request("POST", ENDPOINT_HOME_GRAPH_SYNC, json=dict(payload))
+        return await self._request(
+            "POST",
+            ENDPOINT_HOME_GRAPH_SYNC,
+            json=dict(payload),
+            timeout=HOME_GRAPH_SYNC_TIMEOUT,
+        )
 
     async def home_graph_ingest_url(
         self, payload: Mapping[str, Any]
@@ -207,7 +218,10 @@ class GoodVibesClient:
         """Ingest a URL into Home Graph."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_INGEST_URL, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_INGEST_URL,
+            json=dict(payload),
+            timeout=HOME_GRAPH_INGEST_TIMEOUT,
         )
 
     async def home_graph_ingest_note(
@@ -216,7 +230,10 @@ class GoodVibesClient:
         """Ingest a note into Home Graph."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_INGEST_NOTE, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_INGEST_NOTE,
+            json=dict(payload),
+            timeout=HOME_GRAPH_INGEST_TIMEOUT,
         )
 
     async def home_graph_ingest_artifact(
@@ -225,7 +242,10 @@ class GoodVibesClient:
         """Ingest an artifact, document, or photo into Home Graph."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT,
+            json=dict(payload),
+            timeout=HOME_GRAPH_INGEST_TIMEOUT,
         )
 
     async def home_graph_upload_artifact(
@@ -281,7 +301,12 @@ class GoodVibesClient:
     async def home_graph_ask(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Ask a source-backed Home Graph question."""
 
-        return await self._request("POST", ENDPOINT_HOME_GRAPH_ASK, json=dict(payload))
+        return await self._request(
+            "POST",
+            ENDPOINT_HOME_GRAPH_ASK,
+            json=dict(payload),
+            timeout=HOME_GRAPH_ASK_TIMEOUT,
+        )
 
     async def home_graph_device_passport(
         self, payload: Mapping[str, Any]
@@ -289,7 +314,10 @@ class GoodVibesClient:
         """Refresh or retrieve a Home Graph device passport."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT,
+            json=dict(payload),
+            timeout=HOME_GRAPH_GENERATE_TIMEOUT,
         )
 
     async def home_graph_room_page(
@@ -298,14 +326,20 @@ class GoodVibesClient:
         """Generate or refresh a Home Graph room page."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_ROOM_PAGE, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_ROOM_PAGE,
+            json=dict(payload),
+            timeout=HOME_GRAPH_GENERATE_TIMEOUT,
         )
 
     async def home_graph_packet(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Generate a scoped Home Graph packet."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_PACKET, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_PACKET,
+            json=dict(payload),
+            timeout=HOME_GRAPH_GENERATE_TIMEOUT,
         )
 
     async def home_graph_issues(
@@ -346,14 +380,20 @@ class GoodVibesClient:
         """Request a daemon-owned Home Graph export."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_EXPORT, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_EXPORT,
+            json=dict(payload),
+            timeout=HOME_GRAPH_GENERATE_TIMEOUT,
         )
 
     async def home_graph_import(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Request a daemon-owned Home Graph import."""
 
         return await self._request(
-            "POST", ENDPOINT_HOME_GRAPH_IMPORT, json=dict(payload)
+            "POST",
+            ENDPOINT_HOME_GRAPH_IMPORT,
+            json=dict(payload),
+            timeout=HOME_GRAPH_INGEST_TIMEOUT,
         )
 
     async def _webhook(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -380,7 +420,7 @@ class GoodVibesClient:
         data: Any = None,
         headers: Mapping[str, str] | None = None,
         include_daemon_auth: bool = True,
-        timeout: int = 20,
+        timeout: int = DEFAULT_REQUEST_TIMEOUT,
     ) -> dict[str, Any]:
         """Request JSON from the daemon."""
 
