@@ -362,6 +362,29 @@ class GoodVibesHomePanel extends HTMLElement {
       }
       return;
     }
+    if (name === "review_bulk_upload_source") {
+      const result = await this._upload(form, { skipRefresh: true });
+      if (!this._error) {
+        await this._resolveBulkReviewIssuesWithSource(fields, result);
+      }
+      return;
+    }
+    if (name === "review_bulk_url_source") {
+      const result = await this._call(
+        "ingest_url",
+        this._reviewSourcePayload(fields, { url: fields.url })
+      );
+      if (!this._error) {
+        await this._resolveBulkReviewIssuesWithSource(fields, result);
+      }
+      return;
+    }
+    if (name === "review_bulk_existing_source") {
+      await this._resolveBulkReviewIssuesWithSource(fields, {
+        sourceId: fields.sourceId,
+      });
+      return;
+    }
     if (name === "link" || name === "unlink") {
       await this._call(name, {
         sourceId: fields.sourceId,
@@ -425,23 +448,14 @@ class GoodVibesHomePanel extends HTMLElement {
       await this._refreshAll();
       return;
     }
-    const source = sourceResult?.source || sourceResult?.result?.source || {};
-    const sourceId = source.id || fields.sourceId || sourceResult?.sourceId || "";
+    const sourceId = sourceIdFromResult(fields, sourceResult);
     const relation = fields.relation || "has_manual";
-    const value = {
-      category: "source_linked",
-      relation,
-      reason: "Linked a manual/source to this Home Graph object.",
-    };
-    if (sourceId) {
-      value.sourceId = sourceId;
-    }
     const review = await this._call(
       "review",
       this._compact({
         issueId,
         action: "resolve",
-        value,
+        value: sourceLinkedReviewValue(sourceId, relation),
         reviewer: "homeassistant",
       }),
       { quiet: true }
@@ -452,6 +466,81 @@ class GoodVibesHomePanel extends HTMLElement {
       linkedSource: sourceResult,
       review,
     };
+    if (!error) {
+      this._selectedReviewIds.clear();
+      await this._refreshAll();
+    } else {
+      this._render();
+    }
+  }
+
+  async _resolveBulkReviewIssuesWithSource(fields, sourceResult) {
+    const issues = this._selectedIssues(this._visibleIssues()).filter((issue) =>
+      isSourceResolvableIssue(issue)
+    );
+    if (!issues.length) {
+      this._showError(new Error("Select one or more missing manual/source issues first."));
+      return;
+    }
+    const sourceId = sourceIdFromResult(fields, sourceResult);
+    if (!sourceId) {
+      this._showError(new Error("The daemon did not return a source id to link."));
+      return;
+    }
+
+    const relation = fields.relation || "has_manual";
+    this._busy = "review";
+    this._error = "";
+    this._render();
+
+    const results = [];
+    for (const issue of issues) {
+      const link = await this._call(
+        "link",
+        {
+          sourceId,
+          target: {
+            kind: "node",
+            id: issue.nodeId,
+            relation,
+          },
+        },
+        { quiet: true }
+      );
+      if (this._error) {
+        break;
+      }
+      const review = await this._call(
+        "review",
+        this._compact({
+          issueId: issue.id || issue.issueId,
+          nodeId: issue.nodeId,
+          action: "resolve",
+          value: sourceLinkedReviewValue(sourceId, relation),
+          reviewer: "homeassistant",
+        }),
+        { quiet: true }
+      );
+      results.push({
+        issueId: issue.id || issue.issueId,
+        nodeId: issue.nodeId,
+        link,
+        review,
+      });
+      if (this._error) {
+        break;
+      }
+    }
+
+    const error = this._error;
+    this._lastResult = {
+      ok: !error,
+      sourceId,
+      linked: results.length,
+      results,
+      source: sourceResult,
+    };
+    this._busy = "";
     if (!error) {
       this._selectedReviewIds.clear();
       await this._refreshAll();
@@ -1219,18 +1308,19 @@ class GoodVibesHomePanel extends HTMLElement {
   _reviewForm(issues) {
     const first = issues[0];
     const count = issues.length;
+    const canResolveSource = issues.every((issue) => isSourceResolvableIssue(issue));
     return `
       <div class="selected-issue">
         <strong>${escapeHtml(count === 1 ? issueTitle(first) : `${count} issues selected`)}</strong>
         <span>${escapeHtml(count === 1 ? issueMessage(first) : "The selected action and note will be applied to every selected issue.")}</span>
       </div>
-      ${count === 1 && isMissingSourceIssue(first) ? this._sourceResolutionForms(first) : ""}
+      ${canResolveSource ? this._sourceResolutionForms(issues) : ""}
       <form data-form="review">
-        <h3>${escapeHtml(count === 1 && isMissingSourceIssue(first) ? "Review without adding a source" : "Review issue")}</h3>
+        <h3>${escapeHtml(canResolveSource ? "Review without adding a source" : "Review issue")}</h3>
         <label>
           <span>Action</span>
           <select name="action">
-            ${reviewActionOptions(first, this._reviewAction, count)}
+            ${reviewActionOptions(first, this._reviewAction, count, canResolveSource)}
           </select>
         </label>
         <label><span>Note</span><textarea name="note" rows="4" placeholder="Optional context, correction, or reason">${escapeHtml(this._reviewNote)}</textarea></label>
@@ -1239,30 +1329,35 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  _sourceResolutionForms(issue) {
-    if (!issue?.nodeId) {
+  _sourceResolutionForms(issues) {
+    const selected = Array.isArray(issues) ? issues : [issues];
+    if (!selected.length || selected.some((issue) => !issue?.nodeId)) {
       return "";
     }
-    const hidden = reviewSourceHiddenFields(issue);
+    const bulk = selected.length > 1;
+    const hidden = bulk ? reviewBulkSourceHiddenFields() : reviewSourceHiddenFields(selected[0]);
     const sourceField = this._sourcePicker();
+    const heading = bulk
+      ? `Add the same manual or source to ${selected.length} selected issues`
+      : "Add the missing manual or source";
     return `
       <section class="source-resolution">
-        <h3>Add the missing manual or source</h3>
-        <form data-form="review_upload_source">
+        <h3>${escapeHtml(heading)}</h3>
+        <form data-form="${bulk ? "review_bulk_upload_source" : "review_upload_source"}">
           ${hidden}
           <label><span>File</span><input name="file" type="file"></label>
-          <button type="submit"><ha-icon icon="mdi:file-upload-outline"></ha-icon><span>Upload and link</span></button>
+          <button type="submit"><ha-icon icon="mdi:file-upload-outline"></ha-icon><span>${bulk ? "Upload and link to selected" : "Upload and link"}</span></button>
         </form>
-        <form data-form="review_url_source">
+        <form data-form="${bulk ? "review_bulk_url_source" : "review_url_source"}">
           ${hidden}
           <label><span>URL</span><input name="url" type="url" autocomplete="off"></label>
           <label class="check"><input name="allowPrivateHosts" type="checkbox"><span>Allow private hosts</span></label>
-          <button type="submit"><ha-icon icon="mdi:link-plus"></ha-icon><span>Add URL and link</span></button>
+          <button type="submit"><ha-icon icon="mdi:link-plus"></ha-icon><span>${bulk ? "Add URL and link to selected" : "Add URL and link"}</span></button>
         </form>
-        <form data-form="review_existing_source">
+        <form data-form="${bulk ? "review_bulk_existing_source" : "review_existing_source"}">
           ${hidden}
           ${sourceField}
-          <button type="submit"><ha-icon icon="mdi:link-variant-plus"></ha-icon><span>Link source</span></button>
+          <button type="submit"><ha-icon icon="mdi:link-variant-plus"></ha-icon><span>${bulk ? "Link source to selected" : "Link source"}</span></button>
         </form>
       </section>
     `;
@@ -1771,11 +1866,19 @@ function reviewActionOption(value, label, selected) {
   return `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
-function reviewActionOptions(issue, selected, count) {
-  if (count === 1 && isMissingSourceIssue(issue)) {
+function reviewActionOptions(issue, selected, count, canResolveSource = false) {
+  if (canResolveSource) {
     return [
-      reviewActionOption("reject", "No manual/source needed", selected),
-      reviewActionOption("resolve", "Mark resolved without adding source", selected),
+      reviewActionOption(
+        "reject",
+        count > 1 ? "No manual/source needed for selected" : "No manual/source needed",
+        selected
+      ),
+      reviewActionOption(
+        "resolve",
+        count > 1 ? "Mark selected resolved without adding source" : "Mark resolved without adding source",
+        selected
+      ),
       reviewActionOption("edit", "Save note or correction", selected),
       reviewActionOption("forget", "Remove linked graph item", selected),
     ].join("");
@@ -1805,6 +1908,40 @@ function reviewSourceHiddenFields(issue) {
     <input type="hidden" name="targetId" value="${escapeAttr(issue?.nodeId || "")}">
     <input type="hidden" name="relation" value="has_manual">
   `;
+}
+
+function reviewBulkSourceHiddenFields() {
+  return '<input type="hidden" name="relation" value="has_manual">';
+}
+
+function sourceIdFromResult(fields, sourceResult) {
+  const source =
+    sourceResult?.source ||
+    sourceResult?.result?.source ||
+    sourceResult?.sources?.[0] ||
+    sourceResult?.result?.sources?.[0] ||
+    {};
+  return String(
+    fields?.sourceId ||
+      source?.id ||
+      source?.sourceId ||
+      sourceResult?.sourceId ||
+      sourceResult?.result?.sourceId ||
+      sourceResult?.id ||
+      ""
+  );
+}
+
+function sourceLinkedReviewValue(sourceId, relation) {
+  const value = {
+    category: "source_linked",
+    relation,
+    reason: "Linked a manual/source to this Home Graph object.",
+  };
+  if (sourceId) {
+    value.sourceId = sourceId;
+  }
+  return value;
 }
 
 function triageInsight(result) {
@@ -1934,6 +2071,10 @@ function isMissingSourceIssue(issue) {
     text.includes("no linked manual") ||
     text.includes("no linked source")
   );
+}
+
+function isSourceResolvableIssue(issue) {
+  return Boolean(issue?.nodeId) && isMissingSourceIssue(issue);
 }
 
 function isBatteryIssue(issue) {
