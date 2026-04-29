@@ -804,6 +804,7 @@ class GoodVibesHomePanel extends HTMLElement {
         {
           limit: AUTO_TRIAGE_BATCH_LIMIT,
           skipIssueIds: Array.from(this._triageSeenIssueIds),
+          force: options.force ? true : undefined,
         },
         { quiet: true, recordResult: true, suppressError: true }
       );
@@ -1099,10 +1100,16 @@ class GoodVibesHomePanel extends HTMLElement {
     }
     const reviewed = Number(this._triageSummary.reviewed) || 0;
     const remaining = Number(this._triageSummary.remaining) || 0;
+    const skipped = Number(this._triageSummary.skipped) || 0;
     if (this._triageSummary.ok === false) {
       return this._triageProgressNotice(
         `GoodVibes could not finish automatic review triage: ${this._triageSummary.error || "request failed"}`
       );
+    }
+    if (this._triageSummary.reason === "no-untriaged-open-issues" && skipped) {
+      return `<div class="notice">${escapeHtml(
+        `GoodVibes already classified the current review queue; ${remaining} issue(s) still need manual review.`
+      )}</div>`;
     }
     if (!reviewed && !remaining) {
       return "";
@@ -1803,6 +1810,7 @@ function reviewSourceHiddenFields(issue) {
 function triageInsight(result) {
   const processed = Number(result?.processed) || 0;
   const reviewed = Number(result?.reviewed) || 0;
+  const skipped = Number(result?.skipped) || 0;
   const decisions = Array.isArray(result?.decisions) ? result.decisions : [];
   const kept = Math.max(0, processed - reviewed);
   const categories = new Map();
@@ -1819,7 +1827,7 @@ function triageInsight(result) {
     .map(([category, count]) => `${category} (${count})`)
     .join(", ");
   return [
-    `Last batch: ${processed} checked, ${reviewed} auto-reviewed, ${kept} kept for review.`,
+    `Last batch: ${processed} checked, ${reviewed} auto-reviewed, ${kept} kept for review, ${skipped} already classified.`,
     topCategories ? `Top categories: ${topCategories}.` : "",
   ]
     .filter(Boolean)

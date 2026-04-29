@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .client import GoodVibesClientError
@@ -58,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.20"
+FRONTEND_ASSET_VERSION = "0.5.21"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -71,6 +72,9 @@ WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
 TRIAGE_CHUNK_SIZE = 25
 TRIAGE_CONFIDENCE_THRESHOLD = 0.85
 TRIAGE_DEFAULT_LIMIT = 25
+TRIAGE_CACHE_VERSION = 1
+TRIAGE_CACHE_KEY = f"{DOMAIN}_home_graph_triage"
+TRIAGE_CACHE_MAX_ISSUES = 5000
 
 SUPPORTED_ACTIONS = {
     "ask",
@@ -662,6 +666,133 @@ def _extract_json_payload(text: str) -> dict[str, Any] | list[Any]:
     return parsed
 
 
+async def _async_load_triage_cache(hass: HomeAssistant) -> dict[str, Any]:
+    """Load persisted Home Graph triage fingerprints."""
+
+    store = Store(hass, TRIAGE_CACHE_VERSION, TRIAGE_CACHE_KEY)
+    data = await store.async_load()
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(data.get("entries"), dict):
+        data["entries"] = {}
+    return data
+
+
+async def _async_save_triage_cache(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+) -> None:
+    """Persist Home Graph triage fingerprints."""
+
+    _trim_triage_cache(data)
+    store = Store(hass, TRIAGE_CACHE_VERSION, TRIAGE_CACHE_KEY)
+    await store.async_save(data)
+
+
+def _triage_entry_cache(data: dict[str, Any], entry_id: str) -> dict[str, Any]:
+    """Return mutable triage cache data for a config entry."""
+
+    entries = data.setdefault("entries", {})
+    entry = entries.setdefault(str(entry_id), {})
+    if not isinstance(entry.get("issues"), dict):
+        entry["issues"] = {}
+    return entry
+
+
+def _triage_cache_matches(entry_cache: dict[str, Any], issue: dict[str, Any]) -> bool:
+    """Return true if this exact open issue has already been triaged."""
+
+    issues = entry_cache.get("issues")
+    if not isinstance(issues, dict):
+        return False
+    record = issues.get(_triage_issue_key(issue))
+    return (
+        isinstance(record, dict)
+        and record.get("fingerprint") == _triage_issue_fingerprint(issue)
+    )
+
+
+def _remember_triage_decisions(
+    entry_cache: dict[str, Any],
+    issues: list[dict[str, Any]],
+    decisions: dict[str, dict[str, Any]],
+) -> None:
+    """Remember triage decisions so unchanged manual-review items are not re-run."""
+
+    issue_records = entry_cache.setdefault("issues", {})
+    now = dt_util.utcnow().isoformat()
+    for issue in issues:
+        key = _triage_issue_key(issue)
+        decision = decisions.get(key)
+        if not decision:
+            continue
+        issue_records[key] = {
+            "fingerprint": _triage_issue_fingerprint(issue),
+            "updatedAt": now,
+            "decision": _compact_triage_cache_decision(decision),
+        }
+
+
+def _trim_triage_cache(data: dict[str, Any]) -> None:
+    """Keep the persisted triage cache bounded."""
+
+    entries = data.get("entries")
+    if not isinstance(entries, dict):
+        return
+    for entry in entries.values():
+        if not isinstance(entry, dict) or not isinstance(entry.get("issues"), dict):
+            continue
+        issues = entry["issues"]
+        if len(issues) <= TRIAGE_CACHE_MAX_ISSUES:
+            continue
+        keep = {
+            key
+            for key, _record in sorted(
+                issues.items(),
+                key=lambda item: str(item[1].get("updatedAt", ""))
+                if isinstance(item[1], dict)
+                else "",
+                reverse=True,
+            )[:TRIAGE_CACHE_MAX_ISSUES]
+        }
+        for key in list(issues):
+            if key not in keep:
+                issues.pop(key, None)
+
+
+def _triage_issue_fingerprint(issue: dict[str, Any]) -> str:
+    """Return a stable fingerprint for the issue state being triaged."""
+
+    value = {
+        "key": _triage_issue_key(issue),
+        "id": issue.get("id"),
+        "issueId": issue.get("issueId"),
+        "nodeId": issue.get("nodeId"),
+        "sourceId": issue.get("sourceId"),
+        "code": issue.get("code"),
+        "severity": issue.get("severity"),
+        "status": issue.get("status"),
+        "title": issue.get("title"),
+        "message": issue.get("message"),
+    }
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _compact_triage_cache_decision(decision: dict[str, Any]) -> dict[str, Any]:
+    """Return only useful scalar triage decision fields for storage."""
+
+    return {
+        key: value
+        for key, value in {
+            "action": decision.get("action"),
+            "category": decision.get("category"),
+            "confidence": decision.get("confidence"),
+            "reason": decision.get("reason"),
+        }.items()
+        if value not in (None, "")
+    }
+
+
 async def _async_triage_home_graph_issues(
     runtime: Any,
     data: dict[str, Any],
@@ -670,12 +801,15 @@ async def _async_triage_home_graph_issues(
 
     base_payload = _base_payload(runtime, data)
     limit = _int_value(_first_value(data, CONF_LIMIT, "limit"), TRIAGE_DEFAULT_LIMIT)
+    force = _truthy(_first_value(data, "force", "manual", default=False))
     skip_issue_ids = _string_set(
         _parse_jsonish_or_text(
             _first_value(data, "skipIssueIds", "excludeIssueIds", default=[])
         )
     )
-    issue_limit = min(1000, max(limit, limit + len(skip_issue_ids)))
+    triage_cache = await _async_load_triage_cache(runtime.hass)
+    entry_cache = _triage_entry_cache(triage_cache, runtime.entry.entry_id)
+    issue_limit = 1000
     issue_payload = await runtime.client.home_graph_issues(
         {**base_payload, "status": "open", "limit": issue_limit}
     )
@@ -683,10 +817,16 @@ async def _async_triage_home_graph_issues(
         {**base_payload, "limit": max(250, limit * 3)}
     )
     all_issues = _items_from_payload(issue_payload, ("issues",))
+    cached_issue_ids = {
+        _triage_issue_key(issue)
+        for issue in all_issues
+        if not force and _triage_cache_matches(entry_cache, issue)
+    }
     issues = [
         issue
         for issue in all_issues
         if _triage_issue_key(issue) not in skip_issue_ids
+        and _triage_issue_key(issue) not in cached_issue_ids
     ][:limit]
     nodes = _items_from_payload(browse_payload, ("nodes",))
     node_by_id = {
@@ -700,7 +840,20 @@ async def _async_triage_home_graph_issues(
         if isinstance(issue, dict)
     ]
     if not records:
-        return {"ok": True, "reviewed": 0, "decisions": [], "reason": "no-open-issues"}
+        remaining = _count_from_payload(issue_payload, ("issues",))
+        return {
+            "ok": True,
+            "reviewed": 0,
+            "decisions": [],
+            "processed": 0,
+            "skipped": len(cached_issue_ids),
+            "remaining": remaining,
+            "reason": (
+                "no-untriaged-open-issues"
+                if cached_issue_ids
+                else "no-open-issues"
+            ),
+        }
 
     decisions: list[dict[str, Any]] = []
     for index in range(0, len(records), TRIAGE_CHUNK_SIZE):
@@ -727,6 +880,11 @@ async def _async_triage_home_graph_issues(
 
     issue_by_id = {
         _triage_issue_key(issue): issue for issue in issues if isinstance(issue, dict)
+    }
+    decision_by_id = {
+        str(decision.get("issueId") or ""): decision
+        for decision in decisions
+        if isinstance(decision, dict) and decision.get("issueId")
     }
     applied: list[dict[str, Any]] = []
     for decision in decisions:
@@ -762,12 +920,16 @@ async def _async_triage_home_graph_issues(
             }
         )
 
+    _remember_triage_decisions(entry_cache, issues, decision_by_id)
+    await _async_save_triage_cache(runtime.hass, triage_cache)
+
     await runtime.async_refresh_home_graph()
     remaining = _count_from_payload(runtime.home_graph_issues, ("issues",))
     return {
         "ok": True,
         "processed": len(issues),
         "processedIssueIds": [_triage_issue_key(issue) for issue in issues],
+        "skipped": len(cached_issue_ids),
         "reviewed": len(applied),
         "applied": applied,
         "decisions": decisions,
