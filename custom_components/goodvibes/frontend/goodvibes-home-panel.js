@@ -1156,7 +1156,7 @@ class GoodVibesHomePanel extends HTMLElement {
       sourceId: issue.sourceId,
       nodeId: issue.nodeId,
       action,
-      value: fields.note ? { note: fields.note } : undefined,
+      value: semanticReviewValue(issue, fields),
       reviewer: "homeassistant",
     });
   }
@@ -1640,6 +1640,35 @@ function triageInsight(result) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function semanticReviewValue(issue, fields) {
+  const action = fields.action || "";
+  const note = fields.note || "";
+  const code = String(issue?.code || "");
+  const value = {};
+  if (note) {
+    value.note = note;
+    value.reason = note;
+  }
+  if (action === "reject") {
+    value.category = "not_applicable";
+    if (code.endsWith("unknown_battery")) {
+      value.fact = {
+        ...(value.fact || {}),
+        batteryPowered: false,
+        batteryType: "none",
+      };
+      value.reason = value.reason || "This Home Graph object does not use batteries.";
+    } else if (code.endsWith("missing_manual")) {
+      value.fact = {
+        ...(value.fact || {}),
+        manualRequired: false,
+      };
+      value.reason = value.reason || "This Home Graph object does not need a manual.";
+    }
+  }
+  return Object.keys(value).length ? value : undefined;
 }
 
 function statusValue(status) {

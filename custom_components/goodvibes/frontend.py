@@ -58,7 +58,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.17"
+FRONTEND_ASSET_VERSION = "0.5.18"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -568,7 +568,8 @@ def _triage_prompt(records: list[dict[str, Any]]) -> str:
         "Classify issues so people only review uncertain cases.\n"
         "Return only strict JSON with this shape: "
         '{"decisions":[{"issueId":"...","action":"reject|review",'
-        '"category":"...","confidence":0.0,"reason":"..."}]}.\n'
+        '"category":"...","confidence":0.0,"reason":"...",'
+        '"fact":{}}]}.\n'
         "Use action reject only when the issue is clearly not applicable or "
         "incorrect and can be safely dismissed. Use action review for anything "
         "uncertain, anything that may require household knowledge, or any "
@@ -577,6 +578,10 @@ def _triage_prompt(records: list[dict[str, Any]]) -> str:
         "automations, scripts, scenes, areas, helpers, the sun, weather, Home "
         "Assistant host/core/supervisor objects, servers, adapters, hubs, "
         "coordinators, bridges, and mains-powered media devices or appliances. "
+        'Include fact {"batteryPowered":false,"batteryType":"none"} for those '
+        "not-applicable rejects. "
+        "For missing manual issues that are not applicable to software, helpers, "
+        'or generated Home Assistant objects, include fact {"manualRequired":false}. '
         "Review sensors, locks, remotes, buttons, keypads, contact sensors, "
         "motion sensors, leak sensors, smoke detectors, thermostats, shades, "
         "blinds, and ambiguous physical devices.\n"
@@ -630,6 +635,9 @@ def _parse_triage_decisions(text: str) -> list[dict[str, Any]]:
                 "category": str(decision.get("category") or "").strip(),
                 "confidence": _float_value(decision.get("confidence"), 0.0),
                 "reason": str(decision.get("reason") or "").strip(),
+                "fact": decision.get("fact")
+                if isinstance(decision.get("fact"), dict)
+                else None,
             }
         )
     return normalized
@@ -734,12 +742,7 @@ async def _async_triage_home_graph_issues(
             **base_payload,
             "action": "reject",
             "reviewer": "homeassistant:auto-triage",
-            "value": {
-                "category": decision.get("category") or "not_applicable",
-                "confidence": confidence,
-                "reason": decision.get("reason") or "LLM classified as not applicable.",
-                "source": "goodvibes_home_graph_triage",
-            },
+            "value": _semantic_review_value(issue, decision, confidence),
         }
         if issue.get("id") or issue.get("issueId"):
             payload["issueId"] = str(issue.get("id") or issue.get("issueId"))
@@ -770,6 +773,39 @@ async def _async_triage_home_graph_issues(
         "decisions": decisions,
         "remaining": remaining,
     }
+
+
+def _semantic_review_value(
+    issue: dict[str, Any],
+    decision: dict[str, Any],
+    confidence: float,
+) -> dict[str, Any]:
+    """Build a semantic review value understood by SDK 0.26.8+."""
+
+    category = str(decision.get("category") or "not_applicable").strip()
+    reason = str(
+        decision.get("reason") or "LLM classified this issue as not applicable."
+    ).strip()
+    fact = decision.get("fact") if isinstance(decision.get("fact"), dict) else {}
+    fact = dict(fact)
+    code = str(issue.get("code") or "")
+
+    if category in {"not_applicable", "false_positive", "not_applicable_or_incorrect"}:
+        if code.endswith("unknown_battery"):
+            fact.setdefault("batteryPowered", False)
+            fact.setdefault("batteryType", "none")
+        elif code.endswith("missing_manual"):
+            fact.setdefault("manualRequired", False)
+
+    value: dict[str, Any] = {
+        "category": category,
+        "confidence": confidence,
+        "reason": reason,
+        "source": "goodvibes_home_graph_triage",
+    }
+    if fact:
+        value["fact"] = fact
+    return value
 
 
 async def _async_sync_home_graph_context(

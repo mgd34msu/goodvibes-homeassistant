@@ -16,6 +16,11 @@ from homeassistant.helpers import (
 from homeassistant.util import dt as dt_util
 
 try:
+    from homeassistant.loader import async_get_integration
+except ImportError:
+    async_get_integration = None
+
+try:
     from homeassistant.const import __version__ as HA_VERSION
 except ImportError:
     HA_VERSION = "unknown"
@@ -103,7 +108,7 @@ async def async_build_home_graph_snapshot(
         "scripts": _domain_snapshots(entities, "script"),
         "scenes": _domain_snapshots(entities, "scene"),
         "labels": _label_snapshots(hass),
-        "integrations": _integration_snapshots(hass),
+        "integrations": await _integration_snapshots(hass),
         "metadata": {
             "source": "homeassistant",
             "integration": "goodvibes",
@@ -240,7 +245,7 @@ def _label_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
     ]
 
 
-def _integration_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
+async def _integration_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
     entries_by_domain: dict[str, list[dict[str, Any]]] = {}
     for config_entry in hass.config_entries.async_entries():
         domain = str(config_entry.domain)
@@ -260,6 +265,7 @@ def _integration_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
         )
     snapshots = []
     for domain, entries in sorted(entries_by_domain.items()):
+        integration_metadata = await _async_integration_metadata(hass, domain)
         snapshots.append(
             _clean_dict(
                 {
@@ -267,15 +273,157 @@ def _integration_snapshots(hass: HomeAssistant) -> list[dict[str, Any]]:
                     "integrationId": domain,
                     "domain": domain,
                     "title": entries[0].get("title") if len(entries) == 1 else domain,
+                    "documentationUrl": integration_metadata.get("documentationUrl"),
+                    "documentationUrls": integration_metadata.get(
+                        "documentationUrls"
+                    ),
+                    "sourceUrls": integration_metadata.get("sourceUrls"),
+                    "issueTrackerUrl": integration_metadata.get("issueTrackerUrl"),
+                    "suggestedSources": integration_metadata.get("suggestedSources"),
                     "metadata": {
                         "source": "config_entries",
                         "entryCount": len(entries),
                         "entries": entries,
+                        **integration_metadata,
                     },
                 }
             )
         )
     return snapshots
+
+
+async def _async_integration_metadata(
+    hass: HomeAssistant,
+    domain: str,
+) -> dict[str, Any]:
+    """Return documentation/source metadata for a Home Assistant integration."""
+
+    documentation_urls = [f"https://www.home-assistant.io/integrations/{domain}/"]
+    source_urls: list[str] = []
+    issue_tracker_url: str | None = None
+    raw: dict[str, Any] = {}
+    integration = None
+
+    if async_get_integration is not None:
+        try:
+            integration = await async_get_integration(hass, domain)
+        except Exception:
+            integration = None
+
+    if integration is not None:
+        manifest = getattr(integration, "manifest", None)
+        if isinstance(manifest, dict):
+            raw.update(manifest)
+        for key in (
+            "name",
+            "documentation",
+            "issue_tracker",
+            "iot_class",
+            "integration_type",
+            "quality_scale",
+            "requirements",
+            "dependencies",
+            "after_dependencies",
+            "codeowners",
+            "config_flow",
+        ):
+            value = getattr(integration, key, None)
+            if value not in (None, ""):
+                raw.setdefault(key, value)
+
+        if documentation := _first_text(
+            raw.get("documentation"),
+            getattr(integration, "documentation", None),
+        ):
+            documentation_urls.append(documentation)
+        if issue_tracker_url := _first_text(
+            raw.get("issue_tracker"),
+            getattr(integration, "issue_tracker", None),
+        ):
+            pass
+        if source_url := _first_text(
+            raw.get("source_url"),
+            raw.get("source"),
+            getattr(integration, "source_url", None),
+        ):
+            source_urls.append(source_url)
+
+        file_path = str(getattr(integration, "file_path", "") or "")
+        if file_path and "custom_components" not in file_path:
+            source_urls.append(
+                f"https://github.com/home-assistant/core/tree/dev/homeassistant/components/{domain}"
+            )
+
+    documentation_urls = _unique_texts(documentation_urls)
+    source_urls = _unique_texts(source_urls)
+    suggested_sources = [
+        _source_candidate(
+            url,
+            f"{domain} Home Assistant documentation",
+            "documentation",
+        )
+        for url in documentation_urls
+    ]
+    suggested_sources.extend(
+        _source_candidate(url, f"{domain} source", "source")
+        for url in source_urls
+    )
+    if issue_tracker_url:
+        suggested_sources.append(
+            _source_candidate(
+                issue_tracker_url,
+                f"{domain} issue tracker",
+                "issue_tracker",
+            )
+        )
+
+    return _clean_dict(
+        {
+            "name": raw.get("name"),
+            "documentationUrl": documentation_urls[0] if documentation_urls else None,
+            "documentationUrls": documentation_urls,
+            "sourceUrls": source_urls,
+            "issueTrackerUrl": issue_tracker_url,
+            "suggestedSources": suggested_sources,
+            "manifest": _jsonable(raw) if raw else None,
+        }
+    )
+
+
+def _source_candidate(url: str, title: str, kind: str) -> dict[str, Any]:
+    """Return a daemon-friendly source suggestion for an integration."""
+
+    return {
+        "url": url,
+        "title": title,
+        "kind": kind,
+        "relation": "source_for",
+    }
+
+
+def _first_text(*values: Any) -> str | None:
+    """Return the first non-empty string-like value."""
+
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _unique_texts(values: Iterable[Any]) -> list[str]:
+    """Return unique non-empty strings in input order."""
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        text = value.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _domain_snapshots(entities: list[dict[str, Any]], domain: str) -> list[dict[str, Any]]:
