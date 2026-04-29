@@ -491,10 +491,42 @@ class GoodVibesHomePanel extends HTMLElement {
     );
   }
 
+  _captureScrollState() {
+    const state = new Map();
+    this.shadowRoot?.querySelectorAll("[data-scroll-region]").forEach((element) => {
+      state.set(element.dataset.scrollRegion, {
+        left: element.scrollLeft,
+        top: element.scrollTop,
+      });
+    });
+    return state;
+  }
+
+  _restoreScrollState(state) {
+    if (!state?.size) {
+      return;
+    }
+    const restore = () => {
+      this.shadowRoot?.querySelectorAll("[data-scroll-region]").forEach((element) => {
+        const position = state.get(element.dataset.scrollRegion);
+        if (!position) {
+          return;
+        }
+        element.scrollLeft = position.left;
+        element.scrollTop = position.top;
+      });
+    };
+    restore();
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(restore);
+    }
+  }
+
   _render() {
     if (!this.shadowRoot) {
       return;
     }
+    const scrollState = this._captureScrollState();
     this._pendingBackgroundRender = false;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
@@ -541,6 +573,7 @@ class GoodVibesHomePanel extends HTMLElement {
       </section>
     `;
     this._wireEvents();
+    this._restoreScrollState(scrollState);
   }
 
   _tabButton(tab, icon, label) {
@@ -942,7 +975,7 @@ class GoodVibesHomePanel extends HTMLElement {
         <h2>${escapeHtml(title)}</h2>
         ${
           items.length
-            ? `<div class="list">${items.map((item) => this._listItem(item)).join("")}</div>`
+            ? `<div class="list" data-scroll-region="${escapeAttr(`list:${title}`)}">${items.map((item) => this._listItem(item)).join("")}</div>`
             : `<p class="empty">No items</p>`
         }
       </article>
@@ -962,7 +995,7 @@ class GoodVibesHomePanel extends HTMLElement {
         </div>
         ${
           issues.length
-            ? `<div class="issue-list">${issues.map((issue) => this._issueButton(issue, selected)).join("")}</div>`
+            ? `<div class="issue-list" data-scroll-region="review-issues">${issues.map((issue) => this._issueButton(issue, selected)).join("")}</div>`
             : `<p class="empty">No open issues</p>`
         }
       </article>
