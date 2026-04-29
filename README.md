@@ -161,7 +161,7 @@ Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar up
 
 The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, selected current state attributes, and source registry metadata for richer daemon-side Home Graph search. SDK `0.26.7` searches extracted artifact text and sections for Home Graph answers, accepts Home Assistant-style snake_case fields, and derives stable object IDs when a registry object is missing one.
 
-The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup. When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in chunks. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review.
+The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup. When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in small background batches. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review. The panel shows batch progress, auto-reviewed count, remaining open count, and the last batch's decision categories.
 
 Example sync:
 

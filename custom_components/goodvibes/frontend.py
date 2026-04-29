@@ -58,7 +58,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.15"
+FRONTEND_ASSET_VERSION = "0.5.16"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -70,7 +70,7 @@ UPLOAD_URL = "/api/goodvibes/home-graph/upload"
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
 TRIAGE_CHUNK_SIZE = 25
 TRIAGE_CONFIDENCE_THRESHOLD = 0.85
-TRIAGE_DEFAULT_LIMIT = 300
+TRIAGE_DEFAULT_LIMIT = 25
 
 SUPPORTED_ACTIONS = {
     "ask",
@@ -446,6 +446,26 @@ def _items_from_payload(payload: Any, keys: tuple[str, ...]) -> list[dict[str, A
     return []
 
 
+def _count_from_payload(payload: Any, keys: tuple[str, ...]) -> int:
+    """Extract a count from common daemon response envelopes."""
+
+    if isinstance(payload, dict):
+        for key in ("count", "total", "issueCount"):
+            value = payload.get(key)
+            if value not in (None, ""):
+                return _int_value(value, 0)
+        status = payload.get("status")
+        if isinstance(status, dict):
+            for key in ("count", "total", "issueCount"):
+                value = status.get(key)
+                if value not in (None, ""):
+                    return _int_value(value, 0)
+        result = payload.get("result")
+        if isinstance(result, (dict, list)):
+            return _count_from_payload(result, keys)
+    return len(_items_from_payload(payload, keys))
+
+
 def _int_value(value: Any, default: int) -> int:
     """Coerce a positive integer with a safe default."""
 
@@ -642,13 +662,24 @@ async def _async_triage_home_graph_issues(
 
     base_payload = _base_payload(runtime, data)
     limit = _int_value(_first_value(data, CONF_LIMIT, "limit"), TRIAGE_DEFAULT_LIMIT)
+    skip_issue_ids = _string_set(
+        _parse_jsonish_or_text(
+            _first_value(data, "skipIssueIds", "excludeIssueIds", default=[])
+        )
+    )
+    issue_limit = min(1000, max(limit, limit + len(skip_issue_ids)))
     issue_payload = await runtime.client.home_graph_issues(
-        {**base_payload, "status": "open", "limit": limit}
+        {**base_payload, "status": "open", "limit": issue_limit}
     )
     browse_payload = await runtime.client.home_graph_browse(
         {**base_payload, "limit": max(250, limit * 3)}
     )
-    issues = _items_from_payload(issue_payload, ("issues",))[:limit]
+    all_issues = _items_from_payload(issue_payload, ("issues",))
+    issues = [
+        issue
+        for issue in all_issues
+        if _triage_issue_key(issue) not in skip_issue_ids
+    ][:limit]
     nodes = _items_from_payload(browse_payload, ("nodes",))
     node_by_id = {
         str(node.get("id")): node
@@ -729,12 +760,15 @@ async def _async_triage_home_graph_issues(
         )
 
     await runtime.async_refresh_home_graph()
+    remaining = _count_from_payload(runtime.home_graph_issues, ("issues",))
     return {
         "ok": True,
+        "processed": len(issues),
+        "processedIssueIds": [_triage_issue_key(issue) for issue in issues],
         "reviewed": len(applied),
         "applied": applied,
         "decisions": decisions,
-        "remaining": max(0, len(issues) - len(applied)),
+        "remaining": remaining,
     }
 
 
@@ -1052,6 +1086,18 @@ def _parse_jsonish_or_text(value: Any) -> Any:
         return _parse_jsonish(value)
     except ValueError:
         return value
+
+
+def _string_set(value: Any) -> set[str]:
+    """Parse list-like values into a set of non-empty strings."""
+
+    if value in (None, ""):
+        return set()
+    if isinstance(value, str):
+        value = [item.strip() for item in value.split(",")]
+    if isinstance(value, (list, tuple, set)):
+        return {str(item) for item in value if item not in (None, "") and str(item)}
+    return {str(value)}
 
 
 def _parse_tags(value: Any) -> list[str] | None:

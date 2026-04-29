@@ -1,5 +1,6 @@
 const DEFAULT_WS_TYPE = "goodvibes/home_graph/call";
 const DEFAULT_UPLOAD_URL = "/api/goodvibes/home-graph/upload";
+const AUTO_TRIAGE_BATCH_LIMIT = 25;
 
 const TARGET_KIND_OPTIONS = [
   "",
@@ -59,7 +60,10 @@ class GoodVibesHomePanel extends HTMLElement {
     this._reviewNote = "";
     this._lastTriageSignature = "";
     this._triageInFlight = false;
+    this._triageQueued = false;
     this._triageSummary = null;
+    this._triageProgress = null;
+    this._triageSeenIssueIds = new Set();
     this.shadowRoot.addEventListener("focusout", () => {
       queueMicrotask(() => this._flushPendingBackgroundRender());
     });
@@ -108,14 +112,14 @@ class GoodVibesHomePanel extends HTMLElement {
       this._call("browse", {}, { quiet: true }),
       this._call("issues", {}, { quiet: true }),
     ]);
-    if (!this._error && options.triage !== false) {
-      await this._autoTriageReviewQueue(options);
-    }
     if (options.background) {
       this._renderAfterBackgroundUpdate();
-      return;
+    } else {
+      this._render();
     }
-    this._render();
+    if (!this._error && options.triage !== false) {
+      this._queueAutoTriage(options);
+    }
   }
 
   async _call(action, payload = {}, options = {}) {
@@ -150,8 +154,14 @@ class GoodVibesHomePanel extends HTMLElement {
       }
       return result || {};
     } catch (err) {
-      this._error = err?.message || String(err);
-      return {};
+      const message = err?.message || String(err);
+      if (!options.suppressError) {
+        this._error = message;
+      }
+      if (options.recordResult) {
+        this._lastResult = { ok: false, action, error: message };
+      }
+      return { ok: false, action, error: message };
     } finally {
       if (!options.quiet) {
         this._busy = "";
@@ -259,7 +269,7 @@ class GoodVibesHomePanel extends HTMLElement {
     }
     if (action === "review_run_triage") {
       this._lastTriageSignature = "";
-      await this._autoTriageReviewQueue({ force: true });
+      await this._autoTriageReviewQueue({ force: true, manual: true });
       this._render();
       return;
     }
@@ -520,6 +530,11 @@ class GoodVibesHomePanel extends HTMLElement {
         </nav>
         ${this._error ? `<div class="notice error">${escapeHtml(this._error)}</div>` : ""}
         ${this._busy ? `<div class="notice">Working: ${escapeHtml(this._busy)}</div>` : ""}
+        ${
+          this._tab !== "review" && (this._triageInFlight || this._triageQueued)
+            ? this._triageProgressNotice("GoodVibes is classifying review issues.")
+            : ""
+        }
         <main>
           ${this._renderTab()}
         </main>
@@ -602,8 +617,8 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  async _autoTriageReviewQueue(options = {}) {
-    if (this._triageInFlight || !this._hass) {
+  _queueAutoTriage(options = {}) {
+    if (this._triageInFlight || this._triageQueued || !this._hass) {
       return;
     }
     const issues = itemsFromPayload(this._issues, ["issues"]);
@@ -617,17 +632,88 @@ class GoodVibesHomePanel extends HTMLElement {
       return;
     }
     this._lastTriageSignature = signature;
+    if (!options.continuation) {
+      const total = this._issueTotal() || issues.length;
+      this._triageSeenIssueIds = new Set();
+      this._triageProgress = {
+        total,
+        processed: 0,
+        reviewed: 0,
+        remaining: total,
+        batches: 0,
+        insight: "",
+      };
+    }
+    this._triageQueued = true;
+    window.setTimeout(() => {
+      this._triageQueued = false;
+      this._autoTriageReviewQueue({ ...options, background: true }).catch((err) => {
+        this._triageSummary = { ok: false, error: err?.message || String(err) };
+        this._renderAfterBackgroundUpdate();
+      });
+    }, 0);
+  }
+
+  async _autoTriageReviewQueue(options = {}) {
+    if (this._triageInFlight || !this._hass) {
+      return;
+    }
+    const issues = itemsFromPayload(this._issues, ["issues"]);
+    if (!issues.length) {
+      this._triageSummary = null;
+      this._lastTriageSignature = "";
+      return;
+    }
     this._triageInFlight = true;
+    let shouldContinue = false;
+    const progress = this._triageProgress || {
+      total: this._issueTotal() || issues.length,
+      processed: 0,
+      reviewed: 0,
+      remaining: this._issueTotal() || issues.length,
+      batches: 0,
+      insight: "",
+    };
+    progress.currentBatch = Math.min(AUTO_TRIAGE_BATCH_LIMIT, issues.length);
+    this._triageProgress = progress;
     if (!options.background) {
       this._render();
+    } else {
+      this._renderAfterBackgroundUpdate();
     }
     try {
       const result = await this._call(
         "triage_issues",
-        { limit: Math.min(300, Math.max(issues.length, 25)) },
-        { quiet: true, recordResult: true }
+        {
+          limit: AUTO_TRIAGE_BATCH_LIMIT,
+          skipIssueIds: Array.from(this._triageSeenIssueIds),
+        },
+        { quiet: true, recordResult: true, suppressError: true }
       );
       this._triageSummary = result || null;
+      if (result?.ok === false) {
+        this._triageProgress = {
+          ...progress,
+          insight: result.error || "Automatic review triage failed.",
+        };
+        return;
+      }
+      const processed = Number(result?.processed) || 0;
+      const reviewed = Number(result?.reviewed) || 0;
+      const remaining = Number(result?.remaining);
+      const processedIssueIds = Array.isArray(result?.processedIssueIds)
+        ? result.processedIssueIds
+        : [];
+      processedIssueIds.forEach((id) => this._triageSeenIssueIds.add(String(id)));
+      this._triageProgress = {
+        ...progress,
+        processed: Math.min(progress.total || processed, progress.processed + processed),
+        reviewed: progress.reviewed + reviewed,
+        remaining: Number.isFinite(remaining) ? remaining : progress.remaining,
+        batches: progress.batches + 1,
+        currentBatch: 0,
+        insight: triageInsight(result),
+      };
       if ((Number(result?.reviewed) || 0) > 0) {
         await this._call("issues", {}, { quiet: true });
         await this._call("browse", {}, { quiet: true });
@@ -637,8 +723,17 @@ class GoodVibesHomePanel extends HTMLElement {
           .sort()
           .join("|");
       }
+      shouldContinue =
+        processed > 0 &&
+        (this._triageProgress.remaining || itemsFromPayload(this._issues, ["issues"]).length) > 0 &&
+        this._triageSeenIssueIds.size < (this._triageProgress.total || 0);
     } finally {
       this._triageInFlight = false;
+      if (shouldContinue) {
+        this._lastTriageSignature = "";
+        this._queueAutoTriage({ force: true, background: true, continuation: true });
+      }
+      this._renderAfterBackgroundUpdate();
     }
   }
 
@@ -875,21 +970,82 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _triageNotice() {
+    const progress = this._triageProgress;
     if (this._triageInFlight) {
-      return `<div class="notice">GoodVibes is classifying review issues.</div>`;
+      return this._triageProgressNotice("GoodVibes is classifying review issues.");
+    }
+    if (this._triageQueued) {
+      return this._triageProgressNotice("GoodVibes is continuing review triage.");
     }
     if (!this._triageSummary) {
       return "";
     }
     const reviewed = Number(this._triageSummary.reviewed) || 0;
     const remaining = Number(this._triageSummary.remaining) || 0;
+    if (this._triageSummary.ok === false) {
+      return this._triageProgressNotice(
+        `GoodVibes could not finish automatic review triage: ${this._triageSummary.error || "request failed"}`
+      );
+    }
     if (!reviewed && !remaining) {
       return "";
+    }
+    if (progress) {
+      return this._triageProgressNotice(
+        reviewed
+          ? `GoodVibes auto-reviewed ${reviewed} issue(s) in the last batch.`
+          : "GoodVibes checked the last batch; those issues still need review."
+      );
     }
     const message = reviewed
       ? `GoodVibes auto-reviewed ${reviewed} issue(s); ${remaining} still need review.`
       : `GoodVibes checked the review queue; ${remaining} issue(s) still need review.`;
     return `<div class="notice">${escapeHtml(message)}</div>`;
+  }
+
+  _triageProgressNotice(message) {
+    const progress = this._triageProgress;
+    if (!progress) {
+      return `<div class="notice">${escapeHtml(message)}</div>`;
+    }
+    const total = Math.max(Number(progress.total) || 0, 1);
+    const processed = Math.min(Number(progress.processed) || 0, total);
+    const percent = Math.max(0, Math.min(100, Math.round((processed / total) * 100)));
+    const detail = [
+      `${processed}/${total} checked`,
+      `${Number(progress.reviewed) || 0} auto-reviewed`,
+      `${Number(progress.remaining) || 0} still open`,
+    ].join(" - ");
+    return `
+      <div class="notice">
+        <div>${escapeHtml(message)}</div>
+        <div class="progress" aria-label="Review triage progress">
+          <span style="width: ${percent}%"></span>
+        </div>
+        <small>${escapeHtml(detail)}</small>
+        ${progress.insight ? `<small>${escapeHtml(progress.insight)}</small>` : ""}
+      </div>
+    `;
+  }
+
+  _issueTotal() {
+    const candidates = [
+      this._status?.issueCount,
+      this._status?.status?.issueCount,
+      this._issues?.issueCount,
+      this._issues?.count,
+      this._issues?.total,
+      this._issues?.result?.issueCount,
+      this._issues?.result?.count,
+      this._issues?.result?.total,
+    ];
+    for (const candidate of candidates) {
+      const value = Number(candidate);
+      if (Number.isFinite(value) && value >= 0) {
+        return value;
+      }
+    }
+    return itemsFromPayload(this._issues, ["issues"]).length;
   }
 
   _issueButton(issue, selected) {
@@ -1371,6 +1527,26 @@ class GoodVibesHomePanel extends HTMLElement {
       .notice.error {
         color: var(--error-color);
       }
+      .notice small {
+        color: var(--secondary-text-color);
+        display: block;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .progress {
+        background: var(--primary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 999px;
+        height: 8px;
+        margin-top: 8px;
+        overflow: hidden;
+      }
+      .progress span {
+        background: var(--primary-color);
+        display: block;
+        height: 100%;
+        transition: width 180ms ease;
+      }
       .result {
         border: 1px solid var(--divider-color);
         border-radius: 8px;
@@ -1405,6 +1581,32 @@ function metadataField() {
 
 function reviewActionOption(value, label, selected) {
   return `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+}
+
+function triageInsight(result) {
+  const processed = Number(result?.processed) || 0;
+  const reviewed = Number(result?.reviewed) || 0;
+  const decisions = Array.isArray(result?.decisions) ? result.decisions : [];
+  const kept = Math.max(0, processed - reviewed);
+  const categories = new Map();
+  decisions.forEach((decision) => {
+    const category = String(decision?.category || "").trim();
+    if (!category) {
+      return;
+    }
+    categories.set(category, (categories.get(category) || 0) + 1);
+  });
+  const topCategories = Array.from(categories.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([category, count]) => `${category} (${count})`)
+    .join(", ");
+  return [
+    `Last batch: ${processed} checked, ${reviewed} auto-reviewed, ${kept} kept for review.`,
+    topCategories ? `Top categories: ${topCategories}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function statusValue(status) {
