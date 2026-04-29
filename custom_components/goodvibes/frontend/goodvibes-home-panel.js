@@ -54,6 +54,7 @@ class GoodVibesHomePanel extends HTMLElement {
     this._filter = "";
     this._loaded = false;
     this._pendingBackgroundRender = false;
+    this._selectedReviewId = "";
     this.shadowRoot.addEventListener("focusout", () => {
       queueMicrotask(() => this._flushPendingBackgroundRender());
     });
@@ -219,6 +220,12 @@ class GoodVibesHomePanel extends HTMLElement {
         this._handleAction(button.dataset.action).catch((err) => this._showError(err));
       });
     });
+    root.querySelectorAll("[data-select-issue]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._selectedReviewId = button.dataset.selectIssue || "";
+        this._render();
+      });
+    });
     root.querySelectorAll("form[data-form]").forEach((form) => {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -299,14 +306,15 @@ class GoodVibesHomePanel extends HTMLElement {
       return;
     }
     if (name === "review") {
-      await this._call("review", {
-        issueId: fields.issueId,
+      const removeTarget = fields.action === "forget" && (fields.nodeId || fields.sourceId);
+      await this._call("review", this._compact({
+        issueId: removeTarget ? undefined : fields.issueId,
         sourceId: fields.sourceId,
         nodeId: fields.nodeId,
         action: fields.action,
-        value: this._jsonOrText(fields.value),
+        value: fields.note ? { note: fields.note } : undefined,
         reviewer: "homeassistant",
-      });
+      }));
       await this._refreshAll();
       return;
     }
@@ -680,28 +688,17 @@ class GoodVibesHomePanel extends HTMLElement {
 
   _renderReview() {
     const issues = this._filtered(itemsFromPayload(this._issues, ["issues"]));
+    const selected = this._selectedIssue(issues);
     return `
       <section class="grid two">
-        ${this._listPanel("Open Issues", issues)}
+        ${this._reviewIssueList(issues, selected)}
         <article class="panel">
-          <h2>Review Or Remove</h2>
-          <form data-form="review">
-            ${textInput("issueId", "Issue ID")}
-            ${textInput("sourceId", "Source ID")}
-            ${textInput("nodeId", "Node ID")}
-            <label>
-              <span>Action</span>
-              <select name="action">
-                <option value="accept">accept</option>
-                <option value="reject">reject</option>
-                <option value="resolve">resolve</option>
-                <option value="edit">edit</option>
-                <option value="forget">forget</option>
-              </select>
-            </label>
-            <label><span>Value JSON</span><textarea name="value" rows="4"></textarea></label>
-            <button type="submit"><ha-icon icon="mdi:check-decagram-outline"></ha-icon><span>Apply</span></button>
-          </form>
+          <h2>Review</h2>
+          ${
+            selected
+              ? this._reviewForm(selected)
+              : `<p class="empty">No issue selected</p>`
+          }
         </article>
       </section>
       ${this._resultPanel()}
@@ -798,6 +795,72 @@ class GoodVibesHomePanel extends HTMLElement {
             : `<p class="empty">No items</p>`
         }
       </article>
+    `;
+  }
+
+  _reviewIssueList(issues, selected) {
+    return `
+      <article class="panel">
+        <h2>Open Issues</h2>
+        ${
+          issues.length
+            ? `<div class="issue-list">${issues.map((issue) => this._issueButton(issue, selected)).join("")}</div>`
+            : `<p class="empty">No open issues</p>`
+        }
+      </article>
+    `;
+  }
+
+  _issueButton(issue, selected) {
+    const key = issueKey(issue);
+    const active = selected && issueKey(selected) === key;
+    const status = [issue.severity, issue.code, issue.status]
+      .filter(Boolean)
+      .join(" - ");
+    return `
+      <button type="button" class="issue-card ${active ? "selected" : ""}" data-select-issue="${escapeAttr(key)}">
+        <strong>${escapeHtml(issueTitle(issue))}</strong>
+        <span>${escapeHtml(issueMessage(issue))}</span>
+        ${status ? `<small>${escapeHtml(status)}</small>` : ""}
+      </button>
+    `;
+  }
+
+  _selectedIssue(issues) {
+    if (!issues.length) {
+      return undefined;
+    }
+    const selected = issues.find((issue) => issueKey(issue) === this._selectedReviewId);
+    if (selected) {
+      return selected;
+    }
+    this._selectedReviewId = issueKey(issues[0]);
+    return issues[0];
+  }
+
+  _reviewForm(issue) {
+    return `
+      <form data-form="review">
+        <input type="hidden" name="issueId" value="${escapeAttr(issue.id || issue.issueId || "")}">
+        <input type="hidden" name="sourceId" value="${escapeAttr(issue.sourceId || "")}">
+        <input type="hidden" name="nodeId" value="${escapeAttr(issue.nodeId || "")}">
+        <div class="selected-issue">
+          <strong>${escapeHtml(issueTitle(issue))}</strong>
+          <span>${escapeHtml(issueMessage(issue))}</span>
+        </div>
+        <label>
+          <span>Action</span>
+          <select name="action">
+            <option value="accept">Accept and mark correct</option>
+            <option value="reject">Reject</option>
+            <option value="resolve">Mark resolved</option>
+            <option value="edit">Save note or correction</option>
+            <option value="forget">Remove linked object</option>
+          </select>
+        </label>
+        <label><span>Note</span><textarea name="note" rows="4" placeholder="Optional context, correction, or reason"></textarea></label>
+        <button type="submit"><ha-icon icon="mdi:check-decagram-outline"></ha-icon><span>Apply Review</span></button>
+      </form>
     `;
   }
 
@@ -1042,6 +1105,55 @@ class GoodVibesHomePanel extends HTMLElement {
         max-height: 560px;
         overflow: auto;
       }
+      .issue-list {
+        display: grid;
+        gap: 10px;
+        max-height: 560px;
+        overflow: auto;
+      }
+      .issue-card {
+        align-items: stretch;
+        background: var(--secondary-background-color);
+        border-color: var(--divider-color);
+        color: var(--primary-text-color);
+        display: grid;
+        gap: 4px;
+        justify-items: start;
+        padding: 12px;
+        text-align: left;
+        width: 100%;
+      }
+      .issue-card:hover,
+      .issue-card.selected {
+        background: var(--primary-background-color);
+        border-color: var(--primary-color);
+      }
+      .issue-card strong,
+      .issue-card span,
+      .issue-card small {
+        overflow-wrap: anywhere;
+      }
+      .issue-card span,
+      .issue-card small {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+      }
+      .selected-issue {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        display: grid;
+        gap: 4px;
+        padding: 12px;
+      }
+      .selected-issue strong,
+      .selected-issue span {
+        overflow-wrap: anywhere;
+      }
+      .selected-issue span {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+      }
       .row {
         border: 1px solid var(--divider-color);
         border-radius: 8px;
@@ -1140,6 +1252,37 @@ function statusCount(payload, key) {
 function statusCapabilities(payload) {
   const value = payload?.capabilities ?? payload?.status?.capabilities;
   return Array.isArray(value) ? value.join(", ") : "";
+}
+
+function issueKey(issue) {
+  return String(
+    issue?.id ||
+      issue?.issueId ||
+      issue?.nodeId ||
+      issue?.sourceId ||
+      issue?.message ||
+      JSON.stringify(issue || {})
+  );
+}
+
+function issueTitle(issue) {
+  return String(
+    issue?.title ||
+      issue?.message ||
+      issue?.code ||
+      issue?.id ||
+      issue?.issueId ||
+      "Home Graph issue"
+  );
+}
+
+function issueMessage(issue) {
+  const parts = [
+    issue?.message && issue?.title ? issue.message : undefined,
+    issue?.nodeId ? `Node ${issue.nodeId}` : undefined,
+    issue?.sourceId ? `Source ${issue.sourceId}` : undefined,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" - ") : issue?.id || "";
 }
 
 function itemsFromPayload(payload, keys) {
