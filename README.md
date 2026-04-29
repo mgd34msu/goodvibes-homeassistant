@@ -83,7 +83,7 @@ The panel talks to Home Assistant, not directly to the daemon:
 
 The browser never receives the daemon token.
 
-Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, LLM triage of open review issues, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
+Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, LLM triage of open review issues, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases. When a missing-manual/source issue is selected in Review, the panel can upload a file, add a URL, or attach an existing source directly to the affected graph object and then resolve the issue through the daemon review API. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
 
 ## Assist
 
@@ -161,7 +161,7 @@ Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar up
 
 The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, selected current state attributes, integration documentation/source candidates, and source registry metadata for richer daemon-side Home Graph search. SDK `0.26.8` searches extracted artifact text and sections for Home Graph answers, accepts Home Assistant-style snake_case fields, derives stable object IDs when a registry object is missing one, and preserves durable Home Graph review decisions across sync/refresh.
 
-The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup. When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in small background batches. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review. Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision. The Review queue and unresolved-issues repair only request `status: open` issues, while resolved review records remain daemon-owned history. The panel shows batch progress, auto-reviewed count, remaining open count, and the last batch's decision categories.
+The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup. When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in small background batches. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review. Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision. Missing-manual/source review items expose source-resolution controls in the panel, so a manual PDF, product URL, integration documentation page, or existing daemon source can be linked without manually copying graph IDs. The Review queue and unresolved-issues repair only request `status: open` issues, while resolved review records remain daemon-owned history. The panel shows batch progress, auto-reviewed count, remaining open count, and the last batch's decision categories.
 
 Example sync:
 
@@ -271,6 +271,8 @@ data:
   issue_id: issue_123
   action: resolve
 ```
+
+For missing-manual/source issues, use the Review tab in the sidebar when possible. Selecting one issue exposes upload, URL, and existing-source linking controls that target the selected graph object automatically and then call the daemon review endpoint to resolve the issue.
 
 Example issue/source inspection:
 

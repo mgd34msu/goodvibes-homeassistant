@@ -171,7 +171,7 @@ class GoodVibesHomePanel extends HTMLElement {
     }
   }
 
-  async _upload(form) {
+  async _upload(form, options = {}) {
     const fields = this._formValues(form);
     const input = form.querySelector('input[name="file"]');
     const file = input?.files?.[0];
@@ -197,9 +197,13 @@ class GoodVibesHomePanel extends HTMLElement {
     try {
       const result = await this._postUpload(data);
       this._lastResult = result || {};
-      await this._refreshAll();
+      if (!options.skipRefresh) {
+        await this._refreshAll();
+      }
+      return result || {};
     } catch (err) {
       this._showError(err);
+      return {};
     } finally {
       this._busy = "";
       this._render();
@@ -330,6 +334,34 @@ class GoodVibesHomePanel extends HTMLElement {
       await this._upload(form);
       return;
     }
+    if (name === "review_upload_source") {
+      const result = await this._upload(form, { skipRefresh: true });
+      if (!this._error) {
+        await this._resolveReviewIssueWithSource(fields, result);
+      }
+      return;
+    }
+    if (name === "review_url_source") {
+      const result = await this._call(
+        "ingest_url",
+        this._reviewSourcePayload(fields, { url: fields.url })
+      );
+      if (!this._error) {
+        await this._resolveReviewIssueWithSource(fields, result);
+      }
+      return;
+    }
+    if (name === "review_existing_source") {
+      const result = await this._call("link", {
+        sourceId: fields.sourceId,
+        target: this._targetFromFields(fields),
+        metadata: this._jsonFromText(fields.metadata),
+      });
+      if (!this._error) {
+        await this._resolveReviewIssueWithSource(fields, result);
+      }
+      return;
+    }
     if (name === "link" || name === "unlink") {
       await this._call(name, {
         sourceId: fields.sourceId,
@@ -375,6 +407,57 @@ class GoodVibesHomePanel extends HTMLElement {
       metadata: this._jsonFromText(fields.metadata),
       allowPrivateHosts: fields.allowPrivateHosts ? true : undefined,
     });
+  }
+
+  _reviewSourcePayload(fields, extra) {
+    return this._ingestPayload(
+      {
+        ...fields,
+        relation: fields.relation || "has_manual",
+      },
+      extra
+    );
+  }
+
+  async _resolveReviewIssueWithSource(fields, sourceResult) {
+    const issueId = fields.issueId || "";
+    if (!issueId) {
+      await this._refreshAll();
+      return;
+    }
+    const source = sourceResult?.source || sourceResult?.result?.source || {};
+    const sourceId = source.id || fields.sourceId || sourceResult?.sourceId || "";
+    const relation = fields.relation || "has_manual";
+    const value = {
+      category: "source_linked",
+      relation,
+      reason: "Linked a manual/source to this Home Graph object.",
+    };
+    if (sourceId) {
+      value.sourceId = sourceId;
+    }
+    const review = await this._call(
+      "review",
+      this._compact({
+        issueId,
+        action: "resolve",
+        value,
+        reviewer: "homeassistant",
+      }),
+      { quiet: true }
+    );
+    const error = this._error;
+    this._lastResult = {
+      ok: !error,
+      linkedSource: sourceResult,
+      review,
+    };
+    if (!error) {
+      this._selectedReviewIds.clear();
+      await this._refreshAll();
+    } else {
+      this._render();
+    }
   }
 
   _formValues(form) {
@@ -1130,24 +1213,68 @@ class GoodVibesHomePanel extends HTMLElement {
     const first = issues[0];
     const count = issues.length;
     return `
+      <div class="selected-issue">
+        <strong>${escapeHtml(count === 1 ? issueTitle(first) : `${count} issues selected`)}</strong>
+        <span>${escapeHtml(count === 1 ? issueMessage(first) : "The selected action and note will be applied to every selected issue.")}</span>
+      </div>
+      ${count === 1 && isMissingSourceIssue(first) ? this._sourceResolutionForms(first) : ""}
       <form data-form="review">
-        <div class="selected-issue">
-          <strong>${escapeHtml(count === 1 ? issueTitle(first) : `${count} issues selected`)}</strong>
-          <span>${escapeHtml(count === 1 ? issueMessage(first) : "The selected action and note will be applied to every selected issue.")}</span>
-        </div>
+        <h3>${escapeHtml(count === 1 && isMissingSourceIssue(first) ? "Review without adding a source" : "Review issue")}</h3>
         <label>
           <span>Action</span>
           <select name="action">
-            ${reviewActionOption("accept", "This issue is real", this._reviewAction)}
-            ${reviewActionOption("reject", "Not applicable or incorrect", this._reviewAction)}
-            ${reviewActionOption("resolve", "Fixed already", this._reviewAction)}
-            ${reviewActionOption("edit", "Add note or correction", this._reviewAction)}
-            ${reviewActionOption("forget", "Remove linked graph item", this._reviewAction)}
+            ${reviewActionOptions(first, this._reviewAction, count)}
           </select>
         </label>
         <label><span>Note</span><textarea name="note" rows="4" placeholder="Optional context, correction, or reason">${escapeHtml(this._reviewNote)}</textarea></label>
         <button type="submit"><ha-icon icon="mdi:check-decagram-outline"></ha-icon><span>Apply Review</span></button>
       </form>
+    `;
+  }
+
+  _sourceResolutionForms(issue) {
+    if (!issue?.nodeId) {
+      return "";
+    }
+    const hidden = reviewSourceHiddenFields(issue);
+    const sourceField = this._sourcePicker();
+    return `
+      <section class="source-resolution">
+        <h3>Add the missing manual or source</h3>
+        <form data-form="review_upload_source">
+          ${hidden}
+          <label><span>File</span><input name="file" type="file"></label>
+          <button type="submit"><ha-icon icon="mdi:file-upload-outline"></ha-icon><span>Upload and link</span></button>
+        </form>
+        <form data-form="review_url_source">
+          ${hidden}
+          <label><span>URL</span><input name="url" type="url" autocomplete="off"></label>
+          <label class="check"><input name="allowPrivateHosts" type="checkbox"><span>Allow private hosts</span></label>
+          <button type="submit"><ha-icon icon="mdi:link-plus"></ha-icon><span>Add URL and link</span></button>
+        </form>
+        <form data-form="review_existing_source">
+          ${hidden}
+          ${sourceField}
+          <button type="submit"><ha-icon icon="mdi:link-variant-plus"></ha-icon><span>Link source</span></button>
+        </form>
+      </section>
+    `;
+  }
+
+  _sourcePicker() {
+    const sources = itemsFromPayload(this._sources, ["sources"]).filter((source) =>
+      source?.id || source?.sourceId
+    );
+    if (!sources.length) {
+      return textInput("sourceId", "Existing Source ID");
+    }
+    return `
+      <label>
+        <span>Existing Source</span>
+        <select name="sourceId">
+          ${sources.map((source) => sourceOption(source)).join("")}
+        </select>
+      </label>
     `;
   }
 
@@ -1315,6 +1442,11 @@ class GoodVibesHomePanel extends HTMLElement {
         font-weight: 500;
         margin-bottom: 12px;
       }
+      h3 {
+        font-size: 14px;
+        font-weight: 500;
+        margin: 0;
+      }
       .identity p {
         color: var(--secondary-text-color);
         font-size: 13px;
@@ -1384,6 +1516,19 @@ class GoodVibesHomePanel extends HTMLElement {
       form {
         display: grid;
         gap: 12px;
+      }
+      .source-resolution {
+        border-bottom: 1px solid var(--divider-color);
+        display: grid;
+        gap: 14px;
+        margin-bottom: 14px;
+        padding-bottom: 14px;
+      }
+      .source-resolution form {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 12px;
       }
       .inline-form {
         align-items: end;
@@ -1619,6 +1764,42 @@ function reviewActionOption(value, label, selected) {
   return `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
+function reviewActionOptions(issue, selected, count) {
+  if (count === 1 && isMissingSourceIssue(issue)) {
+    return [
+      reviewActionOption("reject", "No manual/source needed", selected),
+      reviewActionOption("resolve", "Mark resolved without adding source", selected),
+      reviewActionOption("edit", "Save note or correction", selected),
+      reviewActionOption("forget", "Remove linked graph item", selected),
+    ].join("");
+  }
+  if (count === 1 && isBatteryIssue(issue)) {
+    return [
+      reviewActionOption("reject", "Does not use batteries", selected),
+      reviewActionOption("accept", "Needs a battery type", selected),
+      reviewActionOption("resolve", "Mark resolved", selected),
+      reviewActionOption("edit", "Save note or correction", selected),
+      reviewActionOption("forget", "Remove linked graph item", selected),
+    ].join("");
+  }
+  return [
+    reviewActionOption("accept", "This issue is real", selected),
+    reviewActionOption("reject", "Not applicable or incorrect", selected),
+    reviewActionOption("resolve", "Fixed already", selected),
+    reviewActionOption("edit", "Add note or correction", selected),
+    reviewActionOption("forget", "Remove linked graph item", selected),
+  ].join("");
+}
+
+function reviewSourceHiddenFields(issue) {
+  return `
+    <input type="hidden" name="issueId" value="${escapeAttr(issue?.id || issue?.issueId || "")}">
+    <input type="hidden" name="targetKind" value="node">
+    <input type="hidden" name="targetId" value="${escapeAttr(issue?.nodeId || "")}">
+    <input type="hidden" name="relation" value="has_manual">
+  `;
+}
+
 function triageInsight(result) {
   const processed = Number(result?.processed) || 0;
   const reviewed = Number(result?.reviewed) || 0;
@@ -1733,6 +1914,33 @@ function issueMessage(issue) {
 
 function isOpenIssue(issue) {
   return String(issue?.status || "open").toLowerCase() === "open";
+}
+
+function isMissingSourceIssue(issue) {
+  const text = [issue?.code, issue?.title, issue?.message]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return (
+    text.includes("missing_manual") ||
+    text.includes("no linked manual") ||
+    text.includes("no linked source")
+  );
+}
+
+function isBatteryIssue(issue) {
+  const text = [issue?.code, issue?.title, issue?.message]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return text.includes("unknown_battery") || text.includes("battery type");
+}
+
+function sourceOption(source) {
+  const id = source?.id || source?.sourceId || "";
+  const title = source?.title || source?.name || source?.url || source?.uri || id || "Source";
+  const label = id && title !== id ? `${title} (${id})` : title;
+  return `<option value="${escapeAttr(id)}">${escapeHtml(String(label))}</option>`;
 }
 
 function itemsFromPayload(payload, keys) {
