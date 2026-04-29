@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.25"
+FRONTEND_ASSET_VERSION = "0.5.26"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -87,6 +87,7 @@ SUPPORTED_ACTIONS = {
     "import",
     "issues",
     "link",
+    "map",
     "packet",
     "reindex",
     "review",
@@ -294,6 +295,16 @@ async def _handle_home_graph_action(
     if action == "browse":
         payload = _query_payload(runtime, data, {"limit"})
         return await runtime.client.home_graph_browse(payload)
+    if action == "map":
+        payload = _query_payload(runtime, data, {CONF_LIMIT, "limit"})
+        include_sources = _first_value(
+            data,
+            CONF_INCLUDE_SOURCES,
+            "includeSources",
+            default=True,
+        )
+        payload["includeSources"] = _truthy(include_sources)
+        return await runtime.client.home_graph_map(payload)
     if action == "export":
         return await runtime.client.home_graph_export(_base_payload(runtime, data))
     if action == "import":

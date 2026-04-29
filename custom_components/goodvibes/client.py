@@ -28,6 +28,7 @@ from .const import (
     ENDPOINT_HOME_GRAPH_INGEST_URL,
     ENDPOINT_HOME_GRAPH_ISSUES,
     ENDPOINT_HOME_GRAPH_LINK,
+    ENDPOINT_HOME_GRAPH_MAP,
     ENDPOINT_HOME_GRAPH_PACKET,
     ENDPOINT_HOME_GRAPH_REINDEX,
     ENDPOINT_HOME_GRAPH_ROOM_PAGE,
@@ -44,7 +45,7 @@ from .const import (
 )
 
 DEFAULT_REQUEST_TIMEOUT = 20
-HOME_GRAPH_SYNC_TIMEOUT = 120
+HOME_GRAPH_SYNC_TIMEOUT = 600
 HOME_GRAPH_INGEST_TIMEOUT = 3600
 HOME_GRAPH_GENERATE_TIMEOUT = 600
 HOME_GRAPH_ASK_TIMEOUT = 180
@@ -375,6 +376,13 @@ class GoodVibesClient:
 
         return await self._request(
             "GET", _query_path(ENDPOINT_HOME_GRAPH_BROWSE, payload)
+        )
+
+    async def home_graph_map(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Return the daemon-rendered Home Graph visual map."""
+
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_MAP, payload)
         )
 
     async def home_graph_export(self, payload: Mapping[str, Any]) -> dict[str, Any]:

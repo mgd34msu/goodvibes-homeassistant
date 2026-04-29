@@ -43,6 +43,12 @@ HELPER_DOMAINS = {
     "timer",
 }
 
+DEFAULT_PAGE_AUTOMATION = {
+    "enabled": True,
+    "devicePassports": True,
+    "roomPages": True,
+}
+
 
 def derive_installation_id(hass: HomeAssistant, entry: ConfigEntry | None = None) -> str:
     """Return a stable Home Assistant installation id for Home Graph."""
@@ -95,6 +101,7 @@ async def async_build_home_graph_snapshot(
     snapshot: dict[str, Any] = {
         **build_home_graph_base_payload(installation_id, knowledge_space_id),
         "title": getattr(hass.config, "location_name", None) or "Home Assistant",
+        "pageAutomation": dict(DEFAULT_PAGE_AUTOMATION),
         "entities": entities,
         "devices": [
             _device_snapshot(device)

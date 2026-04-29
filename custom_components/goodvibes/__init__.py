@@ -106,6 +106,7 @@ SERVICE_HOME_GRAPH_ISSUES = "home_graph_issues"
 SERVICE_REVIEW_FACT = "review_fact"
 SERVICE_HOME_GRAPH_SOURCES = "home_graph_sources"
 SERVICE_HOME_GRAPH_BROWSE = "home_graph_browse"
+SERVICE_HOME_GRAPH_MAP = "home_graph_map"
 SERVICE_HOME_GRAPH_EXPORT = "home_graph_export"
 SERVICE_HOME_GRAPH_IMPORT = "home_graph_import"
 SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
@@ -313,6 +314,14 @@ HOME_GRAPH_LIST_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
         vol.Optional(CONF_LIMIT): vol.Coerce(int),
+    }
+)
+
+HOME_GRAPH_MAP_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_LIMIT): vol.Coerce(int),
+        vol.Optional(CONF_INCLUDE_SOURCES, default=True): bool,
     }
 )
 
@@ -781,6 +790,16 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime.async_apply_home_graph_response(response, sync=True)
         return response
 
+    async def async_regenerate_home_graph_pages(
+        runtime: GoodVibesRuntimeData,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        try:
+            await async_sync_home_graph_context(runtime, data)
+        except HomeAssistantError as err:
+            runtime.home_graph_last_error = str(err)
+            async_dispatcher_send(hass, runtime.signal)
+
     async def async_ingest_url(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         await async_sync_home_graph_context(runtime, call.data)
@@ -792,6 +811,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         _copy_tags_and_private_hosts(call.data, payload)
         response = await _call_client(runtime.client.home_graph_ingest_url(payload))
         runtime.async_apply_home_graph_response(response)
+        await async_regenerate_home_graph_pages(runtime, call.data)
         return response
 
     async def async_ingest_note(call: ServiceCall) -> dict[str, Any]:
@@ -806,6 +826,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         _copy_tags_and_private_hosts(call.data, payload, private_hosts=False)
         response = await _call_client(runtime.client.home_graph_ingest_note(payload))
         runtime.async_apply_home_graph_response(response)
+        await async_regenerate_home_graph_pages(runtime, call.data)
         return response
 
     async def async_ingest_artifact(call: ServiceCall) -> dict[str, Any]:
@@ -830,6 +851,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             runtime.client.home_graph_ingest_artifact(payload)
         )
         runtime.async_apply_home_graph_response(response)
+        await async_regenerate_home_graph_pages(runtime, call.data)
         return response
 
     async def async_link_knowledge(call: ServiceCall) -> dict[str, Any]:
@@ -837,6 +859,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         payload = _knowledge_link_payload(runtime, call.data)
         response = await _call_client(runtime.client.home_graph_link(payload))
         runtime.async_apply_home_graph_response(response)
+        await async_regenerate_home_graph_pages(runtime, call.data)
         return response
 
     async def async_unlink_knowledge(call: ServiceCall) -> dict[str, Any]:
@@ -844,6 +867,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         payload = _knowledge_link_payload(runtime, call.data)
         response = await _call_client(runtime.client.home_graph_unlink(payload))
         runtime.async_apply_home_graph_response(response)
+        await async_regenerate_home_graph_pages(runtime, call.data)
         return response
 
     async def async_ask_home_graph(call: ServiceCall) -> dict[str, Any]:
@@ -946,6 +970,14 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         payload = runtime.home_graph_base_payload(call.data)
         _copy_optional(call.data, payload, CONF_LIMIT, "limit")
         return await _call_client(runtime.client.home_graph_browse(payload))
+
+    async def async_home_graph_map(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        _copy_optional(call.data, payload, CONF_LIMIT, "limit")
+        if CONF_INCLUDE_SOURCES in call.data:
+            payload["includeSources"] = call.data[CONF_INCLUDE_SOURCES]
+        return await _call_client(runtime.client.home_graph_map(payload))
 
     async def async_home_graph_export(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
@@ -1113,6 +1145,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_HOME_GRAPH_MAP,
+        async_home_graph_map,
+        schema=HOME_GRAPH_MAP_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_HOME_GRAPH_EXPORT,
         async_home_graph_export,
         schema=HOME_GRAPH_COMMON_SCHEMA,
@@ -1178,7 +1217,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if runtime.home_graph_enabled:
+        hass.async_create_task(_async_auto_sync_home_graph(runtime))
     return True
+
+
+async def _async_auto_sync_home_graph(runtime: GoodVibesRuntimeData) -> None:
+    """Refresh the daemon Home Graph in the background after setup."""
+
+    try:
+        base_payload = runtime.home_graph_base_payload()
+        snapshot = await async_build_home_graph_snapshot(
+            runtime.hass,
+            runtime.entry,
+            base_payload["installationId"],
+            base_payload.get("knowledgeSpaceId"),
+        )
+        response = await runtime.client.home_graph_sync(snapshot)
+        runtime.async_apply_home_graph_response(response, sync=True)
+        await runtime.async_refresh_home_graph()
+    except GoodVibesClientError as err:
+        runtime.home_graph_last_error = str(err)
+        async_dispatcher_send(runtime.hass, runtime.signal)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

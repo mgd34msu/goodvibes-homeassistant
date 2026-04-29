@@ -627,6 +627,23 @@ home_graph_browse:
           min: 1
           mode: box
 
+home_graph_map:
+  description: Return the daemon-rendered GoodVibes Home Graph visual map.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    limit:
+      selector:
+        number:
+          min: 1
+          mode: box
+    include_sources:
+      default: true
+      selector:
+        boolean:
+
 home_graph_export:
   description: Export the daemon-owned Home Graph knowledge space.
   fields:

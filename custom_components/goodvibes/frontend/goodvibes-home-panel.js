@@ -50,10 +50,13 @@ class GoodVibesHomePanel extends HTMLElement {
     this._status = {};
     this._sources = {};
     this._browse = {};
+    this._map = {};
     this._issues = {};
     this._answer = {};
     this._lastResult = {};
     this._filter = "";
+    this._mapLimit = 500;
+    this._mapIncludeSources = true;
     this._loaded = false;
     this._pendingBackgroundRender = false;
     this._selectedReviewIds = new Set();
@@ -113,6 +116,13 @@ class GoodVibesHomePanel extends HTMLElement {
       this._call("browse", {}, { quiet: true }),
       this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true }),
     ]);
+    if (this._tab === "map") {
+      await this._call(
+        "map",
+        { limit: this._mapLimit, includeSources: this._mapIncludeSources },
+        { quiet: true }
+      );
+    }
     if (options.background) {
       this._renderAfterBackgroundUpdate();
     } else {
@@ -148,6 +158,8 @@ class GoodVibesHomePanel extends HTMLElement {
         this._sources = result || {};
       } else if (action === "browse") {
         this._browse = result || {};
+      } else if (action === "map") {
+        this._map = result || {};
       } else if (action === "issues") {
         this._issues = result || {};
       } else if (action === "ask") {
@@ -198,7 +210,7 @@ class GoodVibesHomePanel extends HTMLElement {
       const result = await this._postUpload(data);
       this._lastResult = result || {};
       if (!options.skipRefresh) {
-        await this._refreshAll();
+        await this._syncAndRefresh();
       }
       return result || {};
     } catch (err) {
@@ -236,6 +248,12 @@ class GoodVibesHomePanel extends HTMLElement {
       button.addEventListener("click", () => {
         this._tab = button.dataset.tab;
         this._render();
+        if (this._tab === "map" && !itemsFromPayload(this._map, ["nodes"]).length) {
+          this._call("map", {
+            limit: this._mapLimit,
+            includeSources: this._mapIncludeSources,
+          }).catch((err) => this._showError(err));
+        }
       });
     });
     root.querySelectorAll("[data-action]").forEach((button) => {
@@ -289,6 +307,16 @@ class GoodVibesHomePanel extends HTMLElement {
     }
   }
 
+  async _syncAndRefresh() {
+    const result = await this._call("sync", {}, { quiet: true, recordResult: true });
+    if (this._error || result?.ok === false) {
+      this._error = this._error || result?.error || "Home Graph sync failed";
+      this._render();
+      return;
+    }
+    await this._refreshAll();
+  }
+
   async _handleForm(form) {
     const name = form.dataset.form;
     const fields = this._formValues(form);
@@ -308,9 +336,20 @@ class GoodVibesHomePanel extends HTMLElement {
       await this._call("browse", { limit: fields.limit || 250 });
       return;
     }
+    if (name === "map") {
+      this._mapLimit = Number(fields.limit) || 500;
+      this._mapIncludeSources = Boolean(fields.includeSources);
+      await this._call("map", {
+        limit: this._mapLimit,
+        includeSources: this._mapIncludeSources,
+      });
+      return;
+    }
     if (name === "url") {
       await this._call("ingest_url", this._ingestPayload(fields, { url: fields.url }));
-      await this._refreshAll();
+      if (!this._error) {
+        await this._syncAndRefresh();
+      }
       return;
     }
     if (name === "note") {
@@ -320,7 +359,9 @@ class GoodVibesHomePanel extends HTMLElement {
           body: fields.body,
         })
       );
-      await this._refreshAll();
+      if (!this._error) {
+        await this._syncAndRefresh();
+      }
       return;
     }
     if (name === "artifact") {
@@ -332,7 +373,9 @@ class GoodVibesHomePanel extends HTMLElement {
           uri: fields.uri,
         })
       );
-      await this._refreshAll();
+      if (!this._error) {
+        await this._syncAndRefresh();
+      }
       return;
     }
     if (name === "upload") {
@@ -397,7 +440,9 @@ class GoodVibesHomePanel extends HTMLElement {
         target: this._targetFromFields(fields),
         metadata: this._jsonFromText(fields.metadata),
       });
-      await this._refreshAll();
+      if (!this._error) {
+        await this._syncAndRefresh();
+      }
       return;
     }
     if (name === "review") {
@@ -473,7 +518,7 @@ class GoodVibesHomePanel extends HTMLElement {
     };
     if (!error) {
       this._selectedReviewIds.clear();
-      await this._refreshAll();
+      await this._syncAndRefresh();
     } else {
       this._render();
     }
@@ -548,7 +593,7 @@ class GoodVibesHomePanel extends HTMLElement {
     this._busy = "";
     if (!error) {
       this._selectedReviewIds.clear();
-      await this._refreshAll();
+      await this._syncAndRefresh();
     } else {
       this._render();
     }
@@ -736,6 +781,7 @@ class GoodVibesHomePanel extends HTMLElement {
         </header>
         <nav class="tabs">
           ${this._tabButton("browse", "mdi:graph-outline", "Browse")}
+          ${this._tabButton("map", "mdi:vector-polyline", "Map")}
           ${this._tabButton("ingest", "mdi:tray-arrow-up", "Ingest")}
           ${this._tabButton("ask", "mdi:message-question-outline", "Ask")}
           ${this._tabButton("link", "mdi:link-variant", "Link")}
@@ -770,6 +816,9 @@ class GoodVibesHomePanel extends HTMLElement {
   _renderTab() {
     if (this._tab === "ingest") {
       return this._renderIngest();
+    }
+    if (this._tab === "map") {
+      return this._renderMap();
     }
     if (this._tab === "ask") {
       return this._renderAsk();
@@ -830,6 +879,51 @@ class GoodVibesHomePanel extends HTMLElement {
       </section>
       ${this._resultPanel()}
     `;
+  }
+
+  _renderMap() {
+    const map = this._map?.result || this._map || {};
+    const nodes = itemsFromPayload(map, ["nodes"]);
+    const edges = itemsFromPayload(map, ["edges"]);
+    return `
+      <section class="grid">
+        <article class="panel map-panel">
+          <div class="panel-heading">
+            <h2>${escapeHtml(map.title || "Knowledge Map")}</h2>
+            <form data-form="map" class="map-form">
+              <label>
+                <span>Limit</span>
+                <input name="limit" type="number" min="1" max="2000" value="${escapeAttr(String(this._mapLimit))}">
+              </label>
+              <label class="check">
+                <input name="includeSources" type="checkbox" ${this._mapIncludeSources ? "checked" : ""}>
+                <span>Sources</span>
+              </label>
+              <button type="submit"><ha-icon icon="mdi:vector-polyline"></ha-icon><span>Update</span></button>
+            </form>
+          </div>
+          <div class="map-canvas">
+            ${this._mapVisual(map, nodes)}
+          </div>
+          <div class="map-stats">
+            <span>${escapeHtml(String(map.nodeCount ?? nodes.length))} nodes</span>
+            <span>${escapeHtml(String(map.edgeCount ?? edges.length))} edges</span>
+            ${map.spaceId ? `<span>${escapeHtml(map.spaceId)}</span>` : ""}
+          </div>
+        </article>
+      </section>
+      ${this._resultPanel()}
+    `;
+  }
+
+  _mapVisual(map, nodes) {
+    if (typeof map?.svg === "string" && map.svg) {
+      return `<img class="map-image" alt="Home Graph knowledge map" src="${escapeAttr(svgDataUrl(map.svg))}">`;
+    }
+    if (!nodes.length) {
+      return `<p class="empty">No map loaded</p>`;
+    }
+    return `<p class="empty">The daemon did not return a rendered map.</p>`;
   }
 
   _queueAutoTriage(options = {}) {
@@ -1645,6 +1739,33 @@ class GoodVibesHomePanel extends HTMLElement {
         align-items: end;
         grid-template-columns: minmax(180px, 1fr) minmax(120px, 220px) auto;
       }
+      .map-form {
+        align-items: end;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: minmax(110px, 170px) auto auto;
+      }
+      .map-canvas {
+        background: var(--primary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        min-height: 520px;
+        overflow: auto;
+      }
+      .map-image {
+        display: block;
+        height: auto;
+        min-width: 900px;
+        width: 100%;
+      }
+      .map-stats {
+        color: var(--secondary-text-color);
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 12px;
+        gap: 10px;
+        margin-top: 10px;
+      }
       label {
         display: grid;
         gap: 5px;
@@ -1848,6 +1969,7 @@ class GoodVibesHomePanel extends HTMLElement {
         .topbar,
         .grid.two,
         .inline-form,
+        .map-form,
         .target-grid {
           grid-template-columns: 1fr;
         }
@@ -1865,6 +1987,10 @@ class GoodVibesHomePanel extends HTMLElement {
 
 function textInput(name, label, type = "text") {
   return `<label><span>${label}</span><input name="${name}" type="${type}" autocomplete="off"></label>`;
+}
+
+function svgDataUrl(svg) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svg))}`;
 }
 
 function metadataField() {
