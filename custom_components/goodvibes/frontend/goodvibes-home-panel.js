@@ -54,7 +54,7 @@ class GoodVibesHomePanel extends HTMLElement {
     this._filter = "";
     this._loaded = false;
     this._pendingBackgroundRender = false;
-    this._selectedReviewId = "";
+    this._selectedReviewIds = new Set();
     this.shadowRoot.addEventListener("focusout", () => {
       queueMicrotask(() => this._flushPendingBackgroundRender());
     });
@@ -222,7 +222,7 @@ class GoodVibesHomePanel extends HTMLElement {
     });
     root.querySelectorAll("[data-select-issue]").forEach((button) => {
       button.addEventListener("click", () => {
-        this._selectedReviewId = button.dataset.selectIssue || "";
+        this._toggleReviewSelection(button.dataset.selectIssue || "");
         this._render();
       });
     });
@@ -242,6 +242,16 @@ class GoodVibesHomePanel extends HTMLElement {
     if (action === "sync") {
       await this._call("sync");
       await this._refreshAll();
+      return;
+    }
+    if (action === "review_select_all") {
+      this._visibleIssues().forEach((issue) => this._selectedReviewIds.add(issueKey(issue)));
+      this._render();
+      return;
+    }
+    if (action === "review_clear") {
+      this._selectedReviewIds.clear();
+      this._render();
     }
   }
 
@@ -306,16 +316,7 @@ class GoodVibesHomePanel extends HTMLElement {
       return;
     }
     if (name === "review") {
-      const removeTarget = fields.action === "forget" && (fields.nodeId || fields.sourceId);
-      await this._call("review", this._compact({
-        issueId: removeTarget ? undefined : fields.issueId,
-        sourceId: fields.sourceId,
-        nodeId: fields.nodeId,
-        action: fields.action,
-        value: fields.note ? { note: fields.note } : undefined,
-        reviewer: "homeassistant",
-      }));
-      await this._refreshAll();
+      await this._applyReview(fields);
       return;
     }
     if (name === "page") {
@@ -687,8 +688,8 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _renderReview() {
-    const issues = this._filtered(itemsFromPayload(this._issues, ["issues"]));
-    const selected = this._selectedIssue(issues);
+    const issues = this._visibleIssues();
+    const selected = this._selectedIssues(issues);
     return `
       <section class="grid two">
         ${this._reviewIssueList(issues, selected)}
@@ -801,7 +802,13 @@ class GoodVibesHomePanel extends HTMLElement {
   _reviewIssueList(issues, selected) {
     return `
       <article class="panel">
-        <h2>Open Issues</h2>
+        <div class="panel-heading">
+          <h2>Open Issues</h2>
+          <div class="mini-actions">
+            <button type="button" data-action="review_select_all">Select all visible</button>
+            <button type="button" data-action="review_clear">Clear</button>
+          </div>
+        </div>
         ${
           issues.length
             ? `<div class="issue-list">${issues.map((issue) => this._issueButton(issue, selected)).join("")}</div>`
@@ -813,12 +820,14 @@ class GoodVibesHomePanel extends HTMLElement {
 
   _issueButton(issue, selected) {
     const key = issueKey(issue);
-    const active = selected && issueKey(selected) === key;
+    const selectedKeys = new Set(selected.map((entry) => issueKey(entry)));
+    const active = selectedKeys.has(key);
     const status = [issue.severity, issue.code, issue.status]
       .filter(Boolean)
       .join(" - ");
     return `
       <button type="button" class="issue-card ${active ? "selected" : ""}" data-select-issue="${escapeAttr(key)}">
+        <ha-icon icon="${active ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline"}"></ha-icon>
         <strong>${escapeHtml(issueTitle(issue))}</strong>
         <span>${escapeHtml(issueMessage(issue))}</span>
         ${status ? `<small>${escapeHtml(status)}</small>` : ""}
@@ -826,27 +835,39 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  _selectedIssue(issues) {
-    if (!issues.length) {
-      return undefined;
+  _toggleReviewSelection(key) {
+    if (!key) {
+      return;
     }
-    const selected = issues.find((issue) => issueKey(issue) === this._selectedReviewId);
-    if (selected) {
-      return selected;
+    if (this._selectedReviewIds.has(key)) {
+      this._selectedReviewIds.delete(key);
+      return;
     }
-    this._selectedReviewId = issueKey(issues[0]);
-    return issues[0];
+    this._selectedReviewIds.add(key);
   }
 
-  _reviewForm(issue) {
+  _visibleIssues() {
+    return this._filtered(itemsFromPayload(this._issues, ["issues"]));
+  }
+
+  _selectedIssues(issues) {
+    const visibleKeys = new Set(issues.map((issue) => issueKey(issue)));
+    for (const key of Array.from(this._selectedReviewIds)) {
+      if (!visibleKeys.has(key)) {
+        this._selectedReviewIds.delete(key);
+      }
+    }
+    return issues.filter((issue) => this._selectedReviewIds.has(issueKey(issue)));
+  }
+
+  _reviewForm(issues) {
+    const first = issues[0];
+    const count = issues.length;
     return `
       <form data-form="review">
-        <input type="hidden" name="issueId" value="${escapeAttr(issue.id || issue.issueId || "")}">
-        <input type="hidden" name="sourceId" value="${escapeAttr(issue.sourceId || "")}">
-        <input type="hidden" name="nodeId" value="${escapeAttr(issue.nodeId || "")}">
         <div class="selected-issue">
-          <strong>${escapeHtml(issueTitle(issue))}</strong>
-          <span>${escapeHtml(issueMessage(issue))}</span>
+          <strong>${escapeHtml(count === 1 ? issueTitle(first) : `${count} issues selected`)}</strong>
+          <span>${escapeHtml(count === 1 ? issueMessage(first) : "The selected action and note will be applied to every selected issue.")}</span>
         </div>
         <label>
           <span>Action</span>
@@ -862,6 +883,53 @@ class GoodVibesHomePanel extends HTMLElement {
         <button type="submit"><ha-icon icon="mdi:check-decagram-outline"></ha-icon><span>Apply Review</span></button>
       </form>
     `;
+  }
+
+  _reviewPayload(issue, fields) {
+    const action = fields.action;
+    const removeTarget = action === "forget" && (issue.nodeId || issue.sourceId);
+    return this._compact({
+      issueId: removeTarget ? undefined : issue.id || issue.issueId,
+      sourceId: issue.sourceId,
+      nodeId: issue.nodeId,
+      action,
+      value: fields.note ? { note: fields.note } : undefined,
+      reviewer: "homeassistant",
+    });
+  }
+
+  async _applyReview(fields) {
+    const issues = this._selectedIssues(this._visibleIssues());
+    if (!issues.length) {
+      this._showError(new Error("Select one or more issues first."));
+      return;
+    }
+    this._busy = "review";
+    this._error = "";
+    this._render();
+    const results = [];
+    for (const issue of issues) {
+      const result = await this._call("review", this._reviewPayload(issue, fields), {
+        quiet: true,
+      });
+      results.push({ issueId: issue.id || issue.issueId, result });
+      if (this._error) {
+        break;
+      }
+    }
+    const error = this._error;
+    this._lastResult = {
+      ok: !error,
+      reviewed: results.length,
+      results,
+    };
+    if (!error) {
+      this._selectedReviewIds.clear();
+      await this._refreshAll();
+    }
+    this._busy = "";
+    this._error = error;
+    this._render();
   }
 
   _listItem(item) {
@@ -1025,6 +1093,25 @@ class GoodVibesHomePanel extends HTMLElement {
         border-radius: 8px;
         padding: 16px;
       }
+      .panel-heading {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .panel-heading h2 {
+        margin-bottom: 0;
+      }
+      .mini-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .mini-actions button {
+        min-height: 32px;
+        padding: 6px 10px;
+      }
       form {
         display: grid;
         gap: 12px;
@@ -1112,12 +1199,13 @@ class GoodVibesHomePanel extends HTMLElement {
         overflow: auto;
       }
       .issue-card {
-        align-items: stretch;
+        align-items: start;
         background: var(--secondary-background-color);
         border-color: var(--divider-color);
         color: var(--primary-text-color);
         display: grid;
         gap: 4px;
+        grid-template-columns: 22px minmax(0, 1fr);
         justify-items: start;
         padding: 12px;
         text-align: left;
@@ -1132,6 +1220,16 @@ class GoodVibesHomePanel extends HTMLElement {
       .issue-card span,
       .issue-card small {
         overflow-wrap: anywhere;
+      }
+      .issue-card strong,
+      .issue-card span,
+      .issue-card small {
+        grid-column: 2;
+      }
+      .issue-card ha-icon {
+        grid-column: 1;
+        grid-row: 1 / span 3;
+        margin-top: -1px;
       }
       .issue-card span,
       .issue-card small {
