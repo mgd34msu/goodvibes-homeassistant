@@ -29,6 +29,7 @@ from .const import (
     ENDPOINT_HOME_GRAPH_ISSUES,
     ENDPOINT_HOME_GRAPH_LINK,
     ENDPOINT_HOME_GRAPH_PACKET,
+    ENDPOINT_HOME_GRAPH_REINDEX,
     ENDPOINT_HOME_GRAPH_ROOM_PAGE,
     ENDPOINT_HOME_GRAPH_SOURCES,
     ENDPOINT_HOME_GRAPH_STATUS,
@@ -392,6 +393,16 @@ class GoodVibesClient:
         return await self._request(
             "POST",
             ENDPOINT_HOME_GRAPH_IMPORT,
+            json=dict(payload),
+            timeout=HOME_GRAPH_INGEST_TIMEOUT,
+        )
+
+    async def home_graph_reindex(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Repair missing or weak Home Graph source extraction."""
+
+        return await self._request(
+            "POST",
+            ENDPOINT_HOME_GRAPH_REINDEX,
             json=dict(payload),
             timeout=HOME_GRAPH_INGEST_TIMEOUT,
         )

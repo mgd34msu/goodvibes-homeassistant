@@ -102,6 +102,7 @@ ENDPOINT_HOME_GRAPH_SOURCES = "/api/homeassistant/home-graph/sources"
 ENDPOINT_HOME_GRAPH_BROWSE = "/api/homeassistant/home-graph/browse"
 ENDPOINT_HOME_GRAPH_EXPORT = "/api/homeassistant/home-graph/export"
 ENDPOINT_HOME_GRAPH_IMPORT = "/api/homeassistant/home-graph/import"
+ENDPOINT_HOME_GRAPH_REINDEX = "/api/homeassistant/home-graph/reindex"
 
 TOOL_NAME_TO_ID = {
     "homeassistant_manifest": "homeassistant:manifest",

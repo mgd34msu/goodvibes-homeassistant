@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.23"
+FRONTEND_ASSET_VERSION = "0.5.25"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -88,6 +88,7 @@ SUPPORTED_ACTIONS = {
     "issues",
     "link",
     "packet",
+    "reindex",
     "review",
     "room_page",
     "sources",
@@ -301,6 +302,11 @@ async def _handle_home_graph_action(
             "data": _required_object(data, "data"),
         }
         response = await runtime.client.home_graph_import(payload)
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+        return response
+    if action == "reindex":
+        response = await runtime.client.home_graph_reindex(_base_payload(runtime, data))
         runtime.async_apply_home_graph_response(response)
         await runtime.async_refresh_home_graph()
         return response

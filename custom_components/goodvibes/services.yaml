@@ -646,3 +646,17 @@ home_graph_import:
       required: true
       selector:
         object:
+
+home_graph_reindex:
+  description: Reindex Home Graph sources with missing, placeholder, or old weak extraction.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    installation_id:
+      selector:
+        text:
+    knowledge_space_id:
+      selector:
+        text:

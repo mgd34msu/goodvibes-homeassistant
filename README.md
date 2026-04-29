@@ -1,12 +1,12 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.9`.
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from `@pellux/goodvibes-sdk` `0.26.10`.
 
 This integration is the Home Assistant side of the GoodVibes daemon contract. It provides setup, Assist integration, services, sensors, repairs, event handling, a GoodVibes Home sidebar panel, upload proxying, and Home Graph snapshot collection. The daemon owns GoodVibes routing, model/provider selection, tool catalogs, remote-chat sessions, knowledge storage, graph search, projections, packets, artifacts, and wiki rendering.
 
 ## Requirements
 
-- GoodVibes daemon using `@pellux/goodvibes-sdk@0.26.9` or newer.
+- GoodVibes daemon using `@pellux/goodvibes-sdk@0.26.10` or newer.
 - Home Assistant custom integration installed under `custom_components/goodvibes`.
 - A daemon operator bearer token for authenticated daemon APIs.
 - A Home Assistant webhook secret configured in the daemon and entered in this integration.
@@ -83,7 +83,7 @@ The panel talks to Home Assistant, not directly to the daemon:
 
 The browser never receives the daemon token.
 
-Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, LLM triage of open review issues, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections, unusual cases, or linking a known manual/source to a specific Home Assistant graph object. When a missing-manual/source issue is selected in Review, the panel can upload a file, add a URL, or attach an existing source directly to the affected graph object and then resolve the issue through the daemon review API. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
+Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, reindex, LLM triage of open review issues, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections, unusual cases, or linking a known manual/source to a specific Home Assistant graph object. When a missing-manual/source issue is selected in Review, the panel can upload a file, add a URL, or attach an existing source directly to the affected graph object and then resolve the issue through the daemon review API. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
 
 ## Assist
 
@@ -116,7 +116,7 @@ Default knowledge space:
 homeassistant:<installationId>
 ```
 
-The integration supports the SDK `0.26.9` Home Graph daemon routes:
+The integration supports the SDK `0.26.10` Home Graph daemon routes:
 
 - `POST /api/artifacts`
 - `POST /api/knowledge/ingest/artifact`
@@ -137,6 +137,7 @@ The integration supports the SDK `0.26.9` Home Graph daemon routes:
 - `GET /api/homeassistant/home-graph/browse`
 - `POST /api/homeassistant/home-graph/export`
 - `POST /api/homeassistant/home-graph/import`
+- `POST /api/homeassistant/home-graph/reindex`
 
 All Home Graph routes use normal daemon auth. Mutating routes require a daemon token with admin privileges.
 
@@ -148,7 +149,7 @@ Artifact ingest supports:
 - `multipart/form-data` uploads with a `file` field.
 - Raw binary uploads when the bridge controls the request.
 
-Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.9` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads. URL, note, artifact, and import ingest calls allow up to one hour for daemon extraction/indexing; generated pages/packets/exports allow up to ten minutes.
+Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar upload bridge accepts multipart from the browser, writes a temporary file inside Home Assistant, and forwards it to the daemon for storage, extraction, classification, linking, and review. Optional metadata fields such as `title`, `tags`, `target`, `allowPrivateHosts`, and `metadata` are only sent when explicitly supplied. Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.26.10` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads. URL, note, artifact, import, and reindex calls allow up to one hour for daemon extraction/indexing; generated pages/packets/exports allow up to ten minutes.
 
 ## Home Graph Workflow
 
@@ -159,7 +160,7 @@ Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar up
 5. Ask source-backed Home Graph questions.
 6. Surface daemon-reported status, issues, and review items through sensors, repairs, and services.
 
-The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, selected current state attributes, integration documentation/source candidates, and source registry metadata for richer daemon-side Home Graph search. SDK `0.26.9` searches extracted artifact text and sections for Home Graph answers, anchors object-specific questions to matching Home Assistant graph nodes, prefers indexed sources linked to those objects, avoids using pending documentation candidates as answer material until indexed, filters generic question words more carefully, accepts Home Assistant-style snake_case fields, derives stable object IDs when a registry object is missing one, and preserves durable Home Graph review decisions across sync/refresh.
+The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, selected current state attributes, integration documentation/source candidates, and source registry metadata for richer daemon-side Home Graph search. SDK `0.26.10` searches extracted artifact text and sections for Home Graph answers, anchors object-specific questions to matching Home Assistant graph nodes, lazily repairs relevant linked manuals before ranking, prefers indexed sources linked to those objects, avoids using pending documentation candidates as answer material until indexed, filters generic question words more carefully, accepts Home Assistant-style snake_case fields, derives stable object IDs when a registry object is missing one, and preserves durable Home Graph review decisions across sync/refresh.
 
 The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup. When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in small background batches. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review. Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision. Missing-manual/source review items expose source-resolution controls in the panel, so a manual PDF, product URL, integration documentation page, or existing daemon source can be linked without manually copying graph IDs. If multiple missing-manual/source issues are selected, the same uploaded file, URL, or existing source can be linked to every selected graph object in one action. The integration persists fingerprints for open issues the LLM has already classified as still requiring manual review, so unchanged issues are not reclassified after a page refresh or Home Assistant restart; use `Re-run triage` to force a fresh classification. The Review queue and unresolved-issues repair only request `status: open` issues, while resolved review records remain daemon-owned history. The panel shows batch progress, auto-reviewed count, remaining open count, and the last batch's decision categories.
 
@@ -197,7 +198,16 @@ data:
   path: /data/manuals/front-door-lock.pdf
 ```
 
-`ingest_artifact` accepts one of `artifact_id`, `path`, `uri`, or compatibility `url`. The daemon owns artifact storage, processing, extraction, indexing, classification, linking, and review. Use the `GoodVibes Home` sidebar panel for normal browser file uploads. For best Home Graph ask results, link object-specific manuals, product pages, photos, notes, and documents to the correct graph object with a relation such as `has_manual`; the Review tab auto-populates the graph target when resolving missing-manual/source issues. If older manuals were ingested before source extraction/search or were not linked to the right object, re-link them from Review/Link or reingest them.
+`ingest_artifact` accepts one of `artifact_id`, `path`, `uri`, or compatibility `url`. The daemon owns artifact storage, processing, extraction, indexing, classification, linking, and review. Use the `GoodVibes Home` sidebar panel for normal browser file uploads. For best Home Graph ask results, link object-specific manuals, product pages, photos, notes, and documents to the correct graph object with a relation such as `has_manual`; the Review tab auto-populates the graph target when resolving missing-manual/source issues. If older manuals were uploaded before searchable extraction or old PDF parsing was available, run `goodvibes.home_graph_reindex` once after updating the daemon to SDK `0.26.10`, then retry Ask The House. No reupload is required. If older manuals were not linked to the right object, re-link them from Review/Link or reingest them.
+
+Example reindex after a daemon SDK update:
+
+```yaml
+action: goodvibes.home_graph_reindex
+data: {}
+```
+
+The reindex response includes `ok`, `spaceId`, `scanned`, `reparsed`, `skipped`, `failed`, `sources`, and `failures`.
 
 Example graph question:
 
@@ -318,6 +328,7 @@ Home Graph services:
 - `goodvibes.home_graph_browse`
 - `goodvibes.home_graph_export`
 - `goodvibes.home_graph_import`
+- `goodvibes.home_graph_reindex`
 
 Example async prompt:
 

@@ -108,6 +108,7 @@ SERVICE_HOME_GRAPH_SOURCES = "home_graph_sources"
 SERVICE_HOME_GRAPH_BROWSE = "home_graph_browse"
 SERVICE_HOME_GRAPH_EXPORT = "home_graph_export"
 SERVICE_HOME_GRAPH_IMPORT = "home_graph_import"
+SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
 
 
 def _optional_context_schema() -> dict[Any, Any]:
@@ -321,6 +322,8 @@ HOME_GRAPH_IMPORT_SCHEMA = vol.Schema(
         vol.Required("data"): dict,
     }
 )
+
+HOME_GRAPH_REINDEX_SCHEMA = vol.Schema(_home_graph_common_schema())
 
 
 def _result_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -960,6 +963,14 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         await runtime.async_refresh_home_graph()
         return response
 
+    async def async_home_graph_reindex(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        response = await _call_client(runtime.client.home_graph_reindex(payload))
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+        return response
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_PROMPT,
@@ -1112,6 +1123,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         SERVICE_HOME_GRAPH_IMPORT,
         async_home_graph_import,
         schema=HOME_GRAPH_IMPORT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_REINDEX,
+        async_home_graph_reindex,
+        schema=HOME_GRAPH_REINDEX_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.data[DOMAIN]["services_registered"] = True

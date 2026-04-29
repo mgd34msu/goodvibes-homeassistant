@@ -267,6 +267,11 @@ class GoodVibesHomePanel extends HTMLElement {
       await this._refreshAll();
       return;
     }
+    if (action === "reindex") {
+      await this._call("reindex");
+      await this._refreshAll();
+      return;
+    }
     if (action === "review_select_all") {
       this._visibleIssues().forEach((issue) => this._selectedReviewIds.add(issueKey(issue)));
       this._render();
@@ -722,6 +727,10 @@ class GoodVibesHomePanel extends HTMLElement {
             <button type="button" data-action="sync" title="Sync Home Graph">
               <ha-icon icon="mdi:sync"></ha-icon>
               <span>Sync</span>
+            </button>
+            <button type="button" data-action="reindex" title="Repair Home Graph extraction">
+              <ha-icon icon="mdi:file-refresh-outline"></ha-icon>
+              <span>Reindex</span>
             </button>
           </div>
         </header>
