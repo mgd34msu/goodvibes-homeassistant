@@ -851,11 +851,11 @@ class GoodVibesHomePanel extends HTMLElement {
         <label>
           <span>Action</span>
           <select name="action">
-            <option value="accept">Accept and mark correct</option>
-            <option value="reject">Reject</option>
-            <option value="resolve">Mark resolved</option>
-            <option value="edit">Save note or correction</option>
-            <option value="forget">Remove linked object</option>
+            <option value="accept">This issue is real</option>
+            <option value="reject">Not applicable or incorrect</option>
+            <option value="resolve">Fixed already</option>
+            <option value="edit">Add note or correction</option>
+            <option value="forget">Remove linked graph item</option>
           </select>
         </label>
         <label><span>Note</span><textarea name="note" rows="4" placeholder="Optional context, correction, or reason"></textarea></label>
