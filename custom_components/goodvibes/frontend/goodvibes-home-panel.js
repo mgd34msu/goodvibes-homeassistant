@@ -55,6 +55,11 @@ class GoodVibesHomePanel extends HTMLElement {
     this._loaded = false;
     this._pendingBackgroundRender = false;
     this._selectedReviewIds = new Set();
+    this._reviewAction = "reject";
+    this._reviewNote = "";
+    this._lastTriageSignature = "";
+    this._triageInFlight = false;
+    this._triageSummary = null;
     this.shadowRoot.addEventListener("focusout", () => {
       queueMicrotask(() => this._flushPendingBackgroundRender());
     });
@@ -103,6 +108,9 @@ class GoodVibesHomePanel extends HTMLElement {
       this._call("browse", {}, { quiet: true }),
       this._call("issues", {}, { quiet: true }),
     ]);
+    if (!this._error && options.triage !== false) {
+      await this._autoTriageReviewQueue(options);
+    }
     if (options.background) {
       this._renderAfterBackgroundUpdate();
       return;
@@ -246,6 +254,12 @@ class GoodVibesHomePanel extends HTMLElement {
     }
     if (action === "review_select_all") {
       this._visibleIssues().forEach((issue) => this._selectedReviewIds.add(issueKey(issue)));
+      this._render();
+      return;
+    }
+    if (action === "review_run_triage") {
+      this._lastTriageSignature = "";
+      await this._autoTriageReviewQueue({ force: true });
       this._render();
       return;
     }
@@ -588,6 +602,46 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
+  async _autoTriageReviewQueue(options = {}) {
+    if (this._triageInFlight || !this._hass) {
+      return;
+    }
+    const issues = itemsFromPayload(this._issues, ["issues"]);
+    if (!issues.length) {
+      this._triageSummary = null;
+      this._lastTriageSignature = "";
+      return;
+    }
+    const signature = issues.map((issue) => issueKey(issue)).sort().join("|");
+    if (!options.force && signature && signature === this._lastTriageSignature) {
+      return;
+    }
+    this._lastTriageSignature = signature;
+    this._triageInFlight = true;
+    if (!options.background) {
+      this._render();
+    }
+    try {
+      const result = await this._call(
+        "triage_issues",
+        { limit: Math.min(300, Math.max(issues.length, 25)) },
+        { quiet: true, recordResult: true }
+      );
+      this._triageSummary = result || null;
+      if ((Number(result?.reviewed) || 0) > 0) {
+        await this._call("issues", {}, { quiet: true });
+        await this._call("browse", {}, { quiet: true });
+        this._selectedReviewIds.clear();
+        this._lastTriageSignature = itemsFromPayload(this._issues, ["issues"])
+          .map((issue) => issueKey(issue))
+          .sort()
+          .join("|");
+      }
+    } finally {
+      this._triageInFlight = false;
+    }
+  }
+
   _renderIngest() {
     return `
       <section class="grid two">
@@ -691,6 +745,7 @@ class GoodVibesHomePanel extends HTMLElement {
     const issues = this._visibleIssues();
     const selected = this._selectedIssues(issues);
     return `
+      ${this._triageNotice()}
       <section class="grid two">
         ${this._reviewIssueList(issues, selected)}
         <article class="panel">
@@ -805,6 +860,7 @@ class GoodVibesHomePanel extends HTMLElement {
         <div class="panel-heading">
           <h2>Open Issues</h2>
           <div class="mini-actions">
+            <button type="button" data-action="review_run_triage">Re-run triage</button>
             <button type="button" data-action="review_select_all">Select all visible</button>
             <button type="button" data-action="review_clear">Clear</button>
           </div>
@@ -816,6 +872,24 @@ class GoodVibesHomePanel extends HTMLElement {
         }
       </article>
     `;
+  }
+
+  _triageNotice() {
+    if (this._triageInFlight) {
+      return `<div class="notice">GoodVibes is classifying review issues.</div>`;
+    }
+    if (!this._triageSummary) {
+      return "";
+    }
+    const reviewed = Number(this._triageSummary.reviewed) || 0;
+    const remaining = Number(this._triageSummary.remaining) || 0;
+    if (!reviewed && !remaining) {
+      return "";
+    }
+    const message = reviewed
+      ? `GoodVibes auto-reviewed ${reviewed} issue(s); ${remaining} still need review.`
+      : `GoodVibes checked the review queue; ${remaining} issue(s) still need review.`;
+    return `<div class="notice">${escapeHtml(message)}</div>`;
   }
 
   _issueButton(issue, selected) {
@@ -872,14 +946,14 @@ class GoodVibesHomePanel extends HTMLElement {
         <label>
           <span>Action</span>
           <select name="action">
-            <option value="accept">This issue is real</option>
-            <option value="reject">Not applicable or incorrect</option>
-            <option value="resolve">Fixed already</option>
-            <option value="edit">Add note or correction</option>
-            <option value="forget">Remove linked graph item</option>
+            ${reviewActionOption("accept", "This issue is real", this._reviewAction)}
+            ${reviewActionOption("reject", "Not applicable or incorrect", this._reviewAction)}
+            ${reviewActionOption("resolve", "Fixed already", this._reviewAction)}
+            ${reviewActionOption("edit", "Add note or correction", this._reviewAction)}
+            ${reviewActionOption("forget", "Remove linked graph item", this._reviewAction)}
           </select>
         </label>
-        <label><span>Note</span><textarea name="note" rows="4" placeholder="Optional context, correction, or reason"></textarea></label>
+        <label><span>Note</span><textarea name="note" rows="4" placeholder="Optional context, correction, or reason">${escapeHtml(this._reviewNote)}</textarea></label>
         <button type="submit"><ha-icon icon="mdi:check-decagram-outline"></ha-icon><span>Apply Review</span></button>
       </form>
     `;
@@ -899,6 +973,8 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   async _applyReview(fields) {
+    this._reviewAction = fields.action || this._reviewAction;
+    this._reviewNote = fields.note || "";
     const issues = this._selectedIssues(this._visibleIssues());
     if (!issues.length) {
       this._showError(new Error("Select one or more issues first."));
@@ -925,6 +1001,7 @@ class GoodVibesHomePanel extends HTMLElement {
     };
     if (!error) {
       this._selectedReviewIds.clear();
+      this._reviewNote = "";
       await this._refreshAll();
     }
     this._busy = "";
@@ -1324,6 +1401,10 @@ function textInput(name, label, type = "text") {
 
 function metadataField() {
   return `<label><span>Metadata JSON</span><textarea name="metadata" rows="3"></textarea></label>`;
+}
+
+function reviewActionOption(value, label, selected) {
+  return `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
 function statusValue(status) {

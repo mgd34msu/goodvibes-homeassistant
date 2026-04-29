@@ -7,6 +7,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from aiohttp import web
 import voluptuous as vol
@@ -49,6 +50,7 @@ from .const import (
     CONF_URI,
     CONF_URL,
     CONF_CODE,
+    DEFAULT_CONVERSATION_TIMEOUT_MS,
     DOMAIN,
 )
 from .home_graph import async_build_home_graph_snapshot
@@ -56,7 +58,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.14"
+FRONTEND_ASSET_VERSION = "0.5.15"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -66,6 +68,9 @@ ICON_MODULE_URL = f"{STATIC_URL}/goodvibes-icons.js?v={FRONTEND_ASSET_VERSION}"
 PANEL_ICON = "goodvibes:home"
 UPLOAD_URL = "/api/goodvibes/home-graph/upload"
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
+TRIAGE_CHUNK_SIZE = 25
+TRIAGE_CONFIDENCE_THRESHOLD = 0.85
+TRIAGE_DEFAULT_LIMIT = 300
 
 SUPPORTED_ACTIONS = {
     "ask",
@@ -84,6 +89,7 @@ SUPPORTED_ACTIONS = {
     "sources",
     "status",
     "sync",
+    "triage_issues",
     "unlink",
 }
 
@@ -369,6 +375,8 @@ async def _handle_home_graph_action(
         runtime.async_apply_home_graph_response(response)
         await runtime.async_refresh_home_graph()
         return response
+    if action == "triage_issues":
+        return await _async_triage_home_graph_issues(runtime, data)
     if action == "device_passport":
         payload = _base_payload(runtime, data)
         _copy_optional_any(data, payload, (CONF_DEVICE_ID, "deviceId"), "deviceId")
@@ -416,6 +424,317 @@ def _status_payload(runtime: Any) -> dict[str, Any]:
         "knowledgeSpaceId": runtime.effective_knowledge_space_id,
         "lastSyncAt": runtime.home_graph_last_sync_at,
         "lastError": runtime.home_graph_last_error,
+    }
+
+
+def _items_from_payload(payload: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Extract a list of dict items from common daemon response envelopes."""
+
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    result = payload.get("result")
+    if isinstance(result, list):
+        return [item for item in result if isinstance(item, dict)]
+    if isinstance(result, dict):
+        return _items_from_payload(result, keys)
+    return []
+
+
+def _int_value(value: Any, default: int) -> int:
+    """Coerce a positive integer with a safe default."""
+
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_value(value: Any, default: float) -> float:
+    """Coerce a float with a safe default."""
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _triage_issue_record(
+    issue: dict[str, Any],
+    node: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build a compact issue record for daemon-side LLM review triage."""
+
+    metadata = node.get("metadata") if isinstance(node, dict) else {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    ha_metadata = metadata.get("homeAssistant")
+    if not isinstance(ha_metadata, dict):
+        ha_metadata = {}
+    record: dict[str, Any] = {
+        "issueId": _triage_issue_key(issue),
+        "code": issue.get("code"),
+        "severity": issue.get("severity"),
+        "status": issue.get("status"),
+        "message": issue.get("message") or issue.get("title"),
+        "nodeId": issue.get("nodeId"),
+        "sourceId": issue.get("sourceId"),
+    }
+    if isinstance(node, dict):
+        record["node"] = {
+            "id": node.get("id"),
+            "kind": node.get("kind"),
+            "title": node.get("title") or node.get("name"),
+            "summary": node.get("summary"),
+            "aliases": (node.get("aliases") or [])[:8],
+            "confidence": node.get("confidence"),
+            "manufacturer": metadata.get("manufacturer"),
+            "model": metadata.get("model"),
+            "homeAssistant": {
+                "objectKind": ha_metadata.get("objectKind"),
+                "objectId": ha_metadata.get("objectId"),
+                "entityId": ha_metadata.get("entityId"),
+                "deviceId": ha_metadata.get("deviceId"),
+                "areaId": ha_metadata.get("areaId"),
+                "integrationId": ha_metadata.get("integrationId"),
+            },
+        }
+    return _clean_jsonish(record)
+
+
+def _triage_issue_key(issue: dict[str, Any]) -> str:
+    """Return a stable key the model can echo for a review item."""
+
+    value = (
+        issue.get("id")
+        or issue.get("issueId")
+        or issue.get("nodeId")
+        or issue.get("sourceId")
+        or issue.get("message")
+        or json.dumps(issue, sort_keys=True)
+    )
+    return str(value)
+
+
+def _clean_jsonish(value: Any) -> Any:
+    """Remove empty values from compact JSON sent to the triage prompt."""
+
+    if isinstance(value, dict):
+        return {
+            key: cleaned
+            for key, item in value.items()
+            if (cleaned := _clean_jsonish(item)) not in (None, "", [], {})
+        }
+    if isinstance(value, list):
+        return [
+            cleaned
+            for item in value
+            if (cleaned := _clean_jsonish(item)) not in (None, "", [], {})
+        ]
+    return value
+
+
+def _triage_prompt(records: list[dict[str, Any]]) -> str:
+    """Build the LLM instruction for automated Home Graph issue triage."""
+
+    payload = json.dumps({"issues": records}, separators=(",", ":"))
+    return (
+        "You are GoodVibes Home Graph review triage for Home Assistant.\n"
+        "Classify issues so people only review uncertain cases.\n"
+        "Return only strict JSON with this shape: "
+        '{"decisions":[{"issueId":"...","action":"reject|review",'
+        '"category":"...","confidence":0.0,"reason":"..."}]}.\n'
+        "Use action reject only when the issue is clearly not applicable or "
+        "incorrect and can be safely dismissed. Use action review for anything "
+        "uncertain, anything that may require household knowledge, or any "
+        "physical device that could plausibly be battery powered.\n"
+        "For unknown battery type issues: reject software objects, integrations, "
+        "automations, scripts, scenes, areas, helpers, the sun, weather, Home "
+        "Assistant host/core/supervisor objects, servers, adapters, hubs, "
+        "coordinators, bridges, and mains-powered media devices or appliances. "
+        "Review sensors, locks, remotes, buttons, keypads, contact sensors, "
+        "motion sensors, leak sensors, smoke detectors, thermostats, shades, "
+        "blinds, and ambiguous physical devices.\n"
+        "Do not invent battery types. Do not choose accept, resolve, edit, or "
+        "forget.\n"
+        f"Issues JSON:\n{payload}"
+    )
+
+
+def _assistant_text(response: Any) -> str:
+    """Extract assistant text from common daemon conversation responses."""
+
+    if not isinstance(response, dict):
+        return str(response or "")
+    assistant = response.get("assistant")
+    if isinstance(assistant, dict):
+        return str(
+            assistant.get("speechText")
+            or assistant.get("text")
+            or assistant.get("message")
+            or ""
+        )
+    result = response.get("result")
+    if isinstance(result, dict):
+        return _assistant_text(result)
+    return str(response.get("text") or response.get("message") or result or "")
+
+
+def _parse_triage_decisions(text: str) -> list[dict[str, Any]]:
+    """Parse daemon LLM triage JSON into normalized decision records."""
+
+    payload = _extract_json_payload(text)
+    decisions = payload.get("decisions") if isinstance(payload, dict) else payload
+    if not isinstance(decisions, list):
+        raise HomeAssistantError("Home Graph triage response did not include decisions")
+
+    normalized: list[dict[str, Any]] = []
+    for decision in decisions:
+        if not isinstance(decision, dict):
+            continue
+        issue_id = str(decision.get("issueId") or decision.get("id") or "").strip()
+        if not issue_id:
+            continue
+        action = str(decision.get("action") or "review").strip().lower()
+        if action not in {"reject", "review"}:
+            action = "review"
+        normalized.append(
+            {
+                "issueId": issue_id,
+                "action": action,
+                "category": str(decision.get("category") or "").strip(),
+                "confidence": _float_value(decision.get("confidence"), 0.0),
+                "reason": str(decision.get("reason") or "").strip(),
+            }
+        )
+    return normalized
+
+
+def _extract_json_payload(text: str) -> dict[str, Any] | list[Any]:
+    """Parse JSON, accepting fenced or lightly wrapped model output."""
+
+    stripped = text.strip()
+    if not stripped:
+        raise HomeAssistantError("Home Graph triage returned an empty response")
+    try:
+        parsed = json.loads(stripped)
+    except ValueError:
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise HomeAssistantError("Home Graph triage returned non-JSON output")
+        parsed = json.loads(stripped[start : end + 1])
+    if not isinstance(parsed, (dict, list)):
+        raise HomeAssistantError("Home Graph triage returned a non-object response")
+    return parsed
+
+
+async def _async_triage_home_graph_issues(
+    runtime: Any,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    """Use the daemon LLM to automatically classify obvious review issues."""
+
+    base_payload = _base_payload(runtime, data)
+    limit = _int_value(_first_value(data, CONF_LIMIT, "limit"), TRIAGE_DEFAULT_LIMIT)
+    issue_payload = await runtime.client.home_graph_issues(
+        {**base_payload, "status": "open", "limit": limit}
+    )
+    browse_payload = await runtime.client.home_graph_browse(
+        {**base_payload, "limit": max(250, limit * 3)}
+    )
+    issues = _items_from_payload(issue_payload, ("issues",))[:limit]
+    nodes = _items_from_payload(browse_payload, ("nodes",))
+    node_by_id = {
+        str(node.get("id")): node
+        for node in nodes
+        if isinstance(node, dict) and node.get("id")
+    }
+    records = [
+        _triage_issue_record(issue, node_by_id.get(str(issue.get("nodeId"))))
+        for issue in issues
+        if isinstance(issue, dict)
+    ]
+    if not records:
+        return {"ok": True, "reviewed": 0, "decisions": [], "reason": "no-open-issues"}
+
+    decisions: list[dict[str, Any]] = []
+    for index in range(0, len(records), TRIAGE_CHUNK_SIZE):
+        chunk = records[index : index + TRIAGE_CHUNK_SIZE]
+        chunk_id = uuid4()
+        result = await runtime.client.conversation(
+            {
+                "message": _triage_prompt(chunk),
+                "conversationId": (
+                    f"home-graph-triage-{runtime.entry.entry_id}-{chunk_id}"
+                ),
+                "messageId": f"ha-home-graph-triage-{chunk_id}",
+                "displayName": "GoodVibes Home Graph Triage",
+                "context": {
+                    "source": "home_graph_review_triage",
+                    "installationId": base_payload.get("installationId"),
+                    "knowledgeSpaceId": base_payload.get("knowledgeSpaceId"),
+                },
+                "timeoutMs": DEFAULT_CONVERSATION_TIMEOUT_MS,
+            },
+            timeout_ms=DEFAULT_CONVERSATION_TIMEOUT_MS,
+        )
+        decisions.extend(_parse_triage_decisions(_assistant_text(result)))
+
+    issue_by_id = {
+        _triage_issue_key(issue): issue for issue in issues if isinstance(issue, dict)
+    }
+    applied: list[dict[str, Any]] = []
+    for decision in decisions:
+        issue_id = str(decision.get("issueId") or "")
+        action = str(decision.get("action") or "").strip().lower()
+        confidence = _float_value(decision.get("confidence"), 0.0)
+        if action != "reject" or confidence < TRIAGE_CONFIDENCE_THRESHOLD:
+            continue
+        issue = issue_by_id.get(issue_id)
+        if not issue:
+            continue
+        payload = {
+            **base_payload,
+            "action": "reject",
+            "reviewer": "homeassistant:auto-triage",
+            "value": {
+                "category": decision.get("category") or "not_applicable",
+                "confidence": confidence,
+                "reason": decision.get("reason") or "LLM classified as not applicable.",
+                "source": "goodvibes_home_graph_triage",
+            },
+        }
+        if issue.get("id") or issue.get("issueId"):
+            payload["issueId"] = str(issue.get("id") or issue.get("issueId"))
+        elif issue.get("nodeId"):
+            payload["nodeId"] = str(issue["nodeId"])
+        elif issue.get("sourceId"):
+            payload["sourceId"] = str(issue["sourceId"])
+        else:
+            continue
+        await runtime.client.home_graph_review_fact(payload)
+        applied.append(
+            {
+                "issueId": issue_id,
+                "action": "reject",
+                "confidence": confidence,
+                "reason": payload["value"]["reason"],
+            }
+        )
+
+    await runtime.async_refresh_home_graph()
+    return {
+        "ok": True,
+        "reviewed": len(applied),
+        "applied": applied,
+        "decisions": decisions,
+        "remaining": max(0, len(issues) - len(applied)),
     }
 
 

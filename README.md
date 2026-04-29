@@ -83,7 +83,7 @@ The panel talks to Home Assistant, not directly to the daemon:
 
 The browser never receives the daemon token.
 
-Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
+Panel actions include Home Graph status, sync, source/node/edge/issue browsing, automatic URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, LLM triage of open review issues, device passports, room pages, and packets. The normal ingest UI only asks for the source; title, tags, target, relation, and metadata are advanced overrides for corrections or unusual cases. The Home Assistant bridge automatically syncs current HA entity/device context before ingest so the daemon can classify and link sources against the actual home.
 
 ## Assist
 
@@ -155,13 +155,13 @@ Do not base64 large PDFs, manuals, receipts, or photos into JSON. The sidebar up
 1. Sync Home Assistant context into the daemon.
 2. Ingest URLs, notes, documents, photos, manuals, receipts, and troubleshooting details.
 3. Let the daemon classify, extract facts, link sources to Home Assistant objects, and produce review items when confidence is low.
-4. Review or correct daemon-proposed facts and links when needed.
+4. Let GoodVibes auto-review high-confidence false positives, then review or correct only the facts and links that still need human judgment.
 5. Ask source-backed Home Graph questions.
 6. Surface daemon-reported status, issues, and review items through sensors, repairs, and services.
 
 The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, selected current state attributes, and source registry metadata for richer daemon-side Home Graph search. SDK `0.26.7` searches extracted artifact text and sections for Home Graph answers, accepts Home Assistant-style snake_case fields, and derives stable object IDs when a registry object is missing one.
 
-The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup.
+The sidebar panel and ingest services call this sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup. When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in chunks. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review.
 
 Example sync:
 
