@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.34
+
+- Target `@pellux/goodvibes-sdk@0.27.7`.
+- Document SDK `0.27.7` Home Graph behavior: `linkedObjects` should contain real Home Assistant graph objects only, semantic fact/wiki/gap nodes stay in `facts`/`gaps`, weak manual fragments are filtered from feature/spec answers and generated pages, and Ask no longer waits synchronously for enrichment before provider-backed answer synthesis.
+- Confirm the GoodVibes Home panel ask/pages/map rendering remains compatible with the SDK `0.27.7` contract; no panel UI change was required.
+
 ## 0.5.33
 
 - Target `@pellux/goodvibes-sdk@0.27.6`.
