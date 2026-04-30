@@ -841,7 +841,7 @@ class GoodVibesHomePanel extends HTMLElement {
             </button>
             <button type="button" data-action="reindex" title="Repair Home Graph extraction">
               <ha-icon icon="mdi:file-refresh-outline"></ha-icon>
-              <span>Reindex</span>
+              <span>Reindex uploads</span>
             </button>
           </div>
         </header>
@@ -1232,7 +1232,12 @@ class GoodVibesHomePanel extends HTMLElement {
     return `
       <section class="grid two">
         <article class="panel">
-          <h2>Ask The House</h2>
+          <div class="panel-heading">
+            <h2>Ask The House</h2>
+            <div class="mini-actions">
+              <button type="button" data-action="reindex"><ha-icon icon="mdi:file-refresh-outline"></ha-icon><span>Reindex uploads</span></button>
+            </div>
+          </div>
           <form data-form="ask">
             <label><span>Question</span><textarea name="query" rows="6"></textarea></label>
             <details class="advanced">
@@ -1773,9 +1778,52 @@ class GoodVibesHomePanel extends HTMLElement {
     const answerPayload = this._answer.result || this._answer;
     const answer = answerPayload.answer || {};
     const text = answer.text || answerPayload.text || "";
-    return text
-      ? `<div class="answer">${escapeHtml(String(text))}</div>`
-      : `<p class="empty">No answer</p>`;
+    if (!text) {
+      return `<p class="empty">No answer</p>`;
+    }
+    const meta = [
+      answer.synthesized === true ? "Synthesized" : "",
+      answer.mode ? `Mode: ${answer.mode}` : "",
+      answer.confidence !== undefined ? `Confidence: ${answer.confidence}` : "",
+    ].filter(Boolean);
+    return `
+      <div class="answer answer-card">
+        ${meta.length ? `<div class="answer-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+        <div class="answer-text">${escapeHtml(String(text))}</div>
+        ${this._answerRecords("Facts", answer.facts, "mdi:check-decagram-outline")}
+        ${this._answerRecords("Gaps", answer.gaps, "mdi:alert-circle-outline")}
+        ${this._answerRecords("Sources", answer.sources, "mdi:file-document-outline")}
+        ${this._answerRecords("Linked Objects", answer.linkedObjects, "mdi:vector-link")}
+      </div>
+    `;
+  }
+
+  _answerRecords(title, records, icon) {
+    if (!Array.isArray(records) || !records.length) {
+      return "";
+    }
+    return `
+      <section class="answer-section">
+        <h3><ha-icon icon="${icon}"></ha-icon><span>${escapeHtml(title)}</span></h3>
+        <div class="answer-list">
+          ${records.slice(0, 12).map((record) => this._answerRecord(record)).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  _answerRecord(record) {
+    const title = recordTitle(record);
+    const subtitle = recordSubtitle(record);
+    return `
+      <details class="answer-record">
+        <summary>
+          <strong>${escapeHtml(title)}</strong>
+          ${subtitle ? `<span>${escapeHtml(subtitle)}</span>` : ""}
+        </summary>
+        <pre>${escapeHtml(JSON.stringify(record, null, 2))}</pre>
+      </details>
+    `;
   }
 
   _markdownPreview() {
@@ -2246,6 +2294,60 @@ class GoodVibesHomePanel extends HTMLElement {
         line-height: 1.5;
         white-space: pre-wrap;
       }
+      .answer-card {
+        display: grid;
+        gap: 14px;
+      }
+      .answer-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .answer-meta span {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 999px;
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        padding: 3px 8px;
+      }
+      .answer-text {
+        white-space: pre-wrap;
+      }
+      .answer-section {
+        display: grid;
+        gap: 8px;
+      }
+      .answer-section h3 {
+        align-items: center;
+        display: flex;
+        font-size: 13px;
+        gap: 6px;
+        margin: 0;
+      }
+      .answer-list {
+        display: grid;
+        gap: 8px;
+      }
+      .answer-record {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .answer-record summary {
+        cursor: pointer;
+      }
+      .answer-record strong,
+      .answer-record span {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .answer-record span {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        margin-top: 2px;
+      }
       .empty {
         color: var(--secondary-text-color);
       }
@@ -2635,6 +2737,30 @@ function itemsFromPayload(payload, keys) {
     return itemsFromPayload(payload.result, keys);
   }
   return [];
+}
+
+function recordTitle(record) {
+  return String(
+    record?.title ||
+      record?.name ||
+      record?.sourceUri ||
+      record?.canonicalUri ||
+      record?.id ||
+      "Record"
+  );
+}
+
+function recordSubtitle(record) {
+  const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
+  return [
+    record?.kind || record?.sourceType || metadata.semanticKind,
+    record?.summary,
+    record?.sourceUri || record?.canonicalUri,
+    record?.id,
+  ]
+    .filter(Boolean)
+    .map((item) => String(item))
+    .join(" - ");
 }
 
 function isFormControl(element) {

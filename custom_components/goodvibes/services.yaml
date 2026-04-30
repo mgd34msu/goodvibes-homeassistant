@@ -784,7 +784,7 @@ home_graph_import:
         object:
 
 home_graph_reindex:
-  description: Reindex Home Graph sources with missing, placeholder, or old weak extraction.
+  description: Reindex and semantically enrich existing Home Graph uploads without reuploading files.
   fields:
     config_entry_id:
       selector:
