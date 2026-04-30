@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.33
+
+- Target `@pellux/goodvibes-sdk@0.27.6`.
+- Document SDK `0.27.6` Home Graph behavior: object-scoped Ask should stop including unrelated broad sources, generated semantic pages/facts no longer become Home Assistant object anchors, stale deterministic facts are hidden, deterministic enrichment can be upgraded by provider-backed LLM during ask/reindex, and feature/spec answers filter low-value manual boilerplate.
+- Confirm the existing GoodVibes Home panel sync/reindex/pages/ask/map calls remain compatible with the SDK `0.27.6` contract; no panel UI change was required.
+
 ## 0.5.32
 
 - Target `@pellux/goodvibes-sdk@0.27.5`.
