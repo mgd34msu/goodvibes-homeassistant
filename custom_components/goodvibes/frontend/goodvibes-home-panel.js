@@ -40,6 +40,18 @@ const RELATION_OPTIONS = [
   "mentioned_by",
 ];
 
+const MAP_HA_FILTERS = [
+  ["objectKinds", "Objects"],
+  ["areaIds", "Areas"],
+  ["integrationDomains", "Integrations"],
+  ["domains", "Domains"],
+  ["deviceClasses", "Classes"],
+  ["labels", "Labels"],
+  ["entityIds", "Entities"],
+  ["deviceIds", "Devices"],
+  ["integrationIds", "Integration IDs"],
+];
+
 class GoodVibesHomePanel extends HTMLElement {
   constructor() {
     super();
@@ -56,7 +68,11 @@ class GoodVibesHomePanel extends HTMLElement {
     this._lastResult = {};
     this._filter = "";
     this._mapLimit = 500;
+    this._mapQuery = "";
     this._mapIncludeSources = true;
+    this._mapIncludeIssues = false;
+    this._mapIncludeGenerated = true;
+    this._mapFilters = {};
     this._loaded = false;
     this._pendingBackgroundRender = false;
     this._selectedReviewIds = new Set();
@@ -117,11 +133,7 @@ class GoodVibesHomePanel extends HTMLElement {
       this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true }),
     ]);
     if (this._tab === "map") {
-      await this._call(
-        "map",
-        { limit: this._mapLimit, includeSources: this._mapIncludeSources },
-        { quiet: true }
-      );
+      await this._call("map", this._mapPayload(), { quiet: true });
     }
     if (this._tab === "pages") {
       await this._call("sources", { limit: 1000 }, { quiet: true });
@@ -252,10 +264,7 @@ class GoodVibesHomePanel extends HTMLElement {
         this._tab = button.dataset.tab;
         this._render();
         if (this._tab === "map" && !itemsFromPayload(this._map, ["nodes"]).length) {
-          this._call("map", {
-            limit: this._mapLimit,
-            includeSources: this._mapIncludeSources,
-          }).catch((err) => this._showError(err));
+          this._call("map", this._mapPayload()).catch((err) => this._showError(err));
         }
         if (this._tab === "pages") {
           this._call("sources", { limit: 1000 }).catch((err) => this._showError(err));
@@ -265,6 +274,14 @@ class GoodVibesHomePanel extends HTMLElement {
     root.querySelectorAll("[data-action]").forEach((button) => {
       button.addEventListener("click", () => {
         this._handleAction(button.dataset.action).catch((err) => this._showError(err));
+      });
+    });
+    root.querySelectorAll("[data-map-filter-key]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._toggleMapFilter(
+          button.dataset.mapFilterKey || "",
+          button.dataset.mapFilterValue || ""
+        ).catch((err) => this._showError(err));
       });
     });
     root.querySelectorAll("[data-select-issue]").forEach((button) => {
@@ -294,6 +311,11 @@ class GoodVibesHomePanel extends HTMLElement {
     if (action === "reindex") {
       await this._call("reindex");
       await this._refreshAll();
+      return;
+    }
+    if (action === "map_clear_filters") {
+      this._mapFilters = {};
+      await this._call("map", this._mapPayload());
       return;
     }
     if (action === "review_select_all") {
@@ -344,11 +366,11 @@ class GoodVibesHomePanel extends HTMLElement {
     }
     if (name === "map") {
       this._mapLimit = Number(fields.limit) || 500;
+      this._mapQuery = fields.query || "";
       this._mapIncludeSources = Boolean(fields.includeSources);
-      await this._call("map", {
-        limit: this._mapLimit,
-        includeSources: this._mapIncludeSources,
-      });
+      this._mapIncludeIssues = Boolean(fields.includeIssues);
+      this._mapIncludeGenerated = Boolean(fields.includeGenerated);
+      await this._call("map", this._mapPayload());
       return;
     }
     if (name === "url") {
@@ -685,6 +707,39 @@ class GoodVibesHomePanel extends HTMLElement {
     );
   }
 
+  _mapPayload() {
+    const ha = Object.fromEntries(
+      Object.entries(this._mapFilters || {})
+        .map(([key, values]) => [key, Array.from(values || []).filter(Boolean)])
+        .filter(([, values]) => values.length)
+    );
+    return this._compact({
+      limit: this._mapLimit,
+      query: this._mapQuery,
+      includeSources: this._mapIncludeSources,
+      includeIssues: this._mapIncludeIssues,
+      includeGenerated: this._mapIncludeGenerated,
+      ha: Object.keys(ha).length ? ha : undefined,
+    });
+  }
+
+  async _toggleMapFilter(key, value) {
+    if (!key || !value) {
+      return;
+    }
+    const values = new Set(this._mapFilters?.[key] || []);
+    if (values.has(value)) {
+      values.delete(value);
+    } else {
+      values.add(value);
+    }
+    this._mapFilters = { ...this._mapFilters, [key]: Array.from(values) };
+    if (!values.size) {
+      delete this._mapFilters[key];
+    }
+    await this._call("map", this._mapPayload());
+  }
+
   _showError(err) {
     this._busy = "";
     this._error = err?.message || String(err);
@@ -891,12 +946,21 @@ class GoodVibesHomePanel extends HTMLElement {
     const map = this._map?.result || this._map || {};
     const nodes = itemsFromPayload(map, ["nodes"]);
     const edges = itemsFromPayload(map, ["edges"]);
+    const facets = map?.facets?.homeAssistant || {};
+    const selectedFilters = Object.values(this._mapFilters || {}).reduce(
+      (total, values) => total + (Array.isArray(values) ? values.length : 0),
+      0
+    );
     return `
       <section class="grid">
         <article class="panel map-panel">
           <div class="panel-heading">
             <h2>${escapeHtml(map.title || "Knowledge Map")}</h2>
             <form data-form="map" class="map-form">
+              <label>
+                <span>Search</span>
+                <input name="query" type="search" autocomplete="off" value="${escapeAttr(this._mapQuery)}">
+              </label>
               <label>
                 <span>Limit</span>
                 <input name="limit" type="number" min="1" max="2000" value="${escapeAttr(String(this._mapLimit))}">
@@ -905,8 +969,23 @@ class GoodVibesHomePanel extends HTMLElement {
                 <input name="includeSources" type="checkbox" ${this._mapIncludeSources ? "checked" : ""}>
                 <span>Sources</span>
               </label>
+              <label class="check">
+                <input name="includeIssues" type="checkbox" ${this._mapIncludeIssues ? "checked" : ""}>
+                <span>Issues</span>
+              </label>
+              <label class="check">
+                <input name="includeGenerated" type="checkbox" ${this._mapIncludeGenerated ? "checked" : ""}>
+                <span>Pages</span>
+              </label>
               <button type="submit"><ha-icon icon="mdi:vector-polyline"></ha-icon><span>Update</span></button>
             </form>
+          </div>
+          <div class="map-filters">
+            <div class="map-filter-heading">
+              <span>${escapeHtml(String(selectedFilters))} selected</span>
+              <button type="button" data-action="map_clear_filters">Clear filters</button>
+            </div>
+            ${this._mapFacetGroups(facets)}
           </div>
           <div class="map-canvas">
             ${this._mapVisual(map, nodes)}
@@ -914,11 +993,60 @@ class GoodVibesHomePanel extends HTMLElement {
           <div class="map-stats">
             <span>${escapeHtml(String(map.nodeCount ?? nodes.length))} nodes</span>
             <span>${escapeHtml(String(map.edgeCount ?? edges.length))} edges</span>
+            ${
+              map.totalNodeCount !== undefined
+                ? `<span>${escapeHtml(String(map.totalNodeCount))} matching records</span>`
+                : ""
+            }
             ${map.spaceId ? `<span>${escapeHtml(map.spaceId)}</span>` : ""}
           </div>
         </article>
       </section>
       ${this._resultPanel()}
+    `;
+  }
+
+  _mapFacetGroups(facets) {
+    const groups = MAP_HA_FILTERS
+      .map(([key, label]) => this._mapFacetGroup(key, label, facets?.[key]))
+      .filter(Boolean);
+    return groups.length ? groups.join("") : `<p class="empty">No map filters available</p>`;
+  }
+
+  _mapFacetGroup(key, label, values) {
+    const selected = this._mapFilters?.[key] || [];
+    const baseItems = facetItems(values);
+    const known = new Set(baseItems.map((item) => item.value));
+    const selectedItems = selected
+      .filter((value) => !known.has(value))
+      .map((value) => ({ value, label: value, count: 0 }));
+    const items = [...selectedItems, ...baseItems.slice(0, 16)];
+    if (!items.length) {
+      return "";
+    }
+    return `
+      <div class="facet-group">
+        <h3>${escapeHtml(label)}</h3>
+        <div class="facet-buttons">
+          ${items
+            .map((item) => {
+              const active = (this._mapFilters?.[key] || []).includes(item.value);
+              return `
+                <button
+                  type="button"
+                  class="facet-chip ${active ? "active" : ""}"
+                  data-map-filter-key="${escapeAttr(key)}"
+                  data-map-filter-value="${escapeAttr(item.value)}"
+                  title="${escapeAttr(item.value)}"
+                >
+                  <span>${escapeHtml(item.label || item.value)}</span>
+                  <strong>${escapeHtml(String(item.count))}</strong>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
     `;
   }
 
@@ -1817,7 +1945,66 @@ class GoodVibesHomePanel extends HTMLElement {
         align-items: end;
         display: grid;
         gap: 10px;
-        grid-template-columns: minmax(110px, 170px) auto auto;
+        grid-template-columns: minmax(180px, 280px) minmax(90px, 140px) auto auto auto auto;
+      }
+      .map-filters {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        display: grid;
+        gap: 12px;
+        margin-bottom: 12px;
+        padding: 12px;
+      }
+      .map-filter-heading {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+      .map-filter-heading span {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+      }
+      .map-filter-heading button {
+        min-height: 30px;
+        padding: 5px 9px;
+      }
+      .facet-group {
+        display: grid;
+        gap: 6px;
+      }
+      .facet-group h3 {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .facet-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .facet-chip {
+        align-items: center;
+        display: inline-flex;
+        gap: 6px;
+        min-height: 28px;
+        padding: 4px 8px;
+      }
+      .facet-chip span {
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .facet-chip strong {
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .facet-chip.active {
+        border-color: var(--accent-color);
+        color: var(--accent-color);
       }
       .map-canvas {
         background: var(--primary-background-color);
@@ -2450,6 +2637,39 @@ function isDirtyField(field) {
     return field.value !== defaultValue;
   }
   return field.value !== field.defaultValue;
+}
+
+function facetItems(values) {
+  if (!values) {
+    return [];
+  }
+  if (Array.isArray(values)) {
+    return values
+      .map((item) => {
+        if (item && typeof item === "object") {
+          const value = String(item.value ?? item.id ?? item.key ?? "");
+          return {
+            value,
+            label: item.label ? String(item.label) : value,
+            count: Number(item.count) || 0,
+          };
+        }
+        const value = String(item ?? "");
+        return { value, label: value, count: 0 };
+      })
+      .filter((item) => item.value);
+  }
+  if (typeof values === "object") {
+    return Object.entries(values)
+      .map(([value, count]) => ({
+        value,
+        label: value,
+        count: Number(count) || 0,
+      }))
+      .filter((item) => item.value)
+      .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+  }
+  return [];
 }
 
 function escapeHtml(value) {

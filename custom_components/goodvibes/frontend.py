@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.28"
+FRONTEND_ASSET_VERSION = "0.5.29"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -75,6 +75,32 @@ TRIAGE_DEFAULT_LIMIT = 25
 TRIAGE_CACHE_VERSION = 1
 TRIAGE_CACHE_KEY = f"{DOMAIN}_home_graph_triage"
 TRIAGE_CACHE_MAX_ISSUES = 5000
+
+MAP_GENERIC_LIST_FIELDS = {
+    "recordKinds",
+    "ids",
+    "linkedToIds",
+    "nodeKinds",
+    "sourceTypes",
+    "sourceStatuses",
+    "nodeStatuses",
+    "issueCodes",
+    "issueStatuses",
+    "issueSeverities",
+    "edgeRelations",
+    "tags",
+}
+MAP_HA_LIST_FIELDS = {
+    "objectKinds",
+    "entityIds",
+    "deviceIds",
+    "areaIds",
+    "integrationIds",
+    "integrationDomains",
+    "domains",
+    "deviceClasses",
+    "labels",
+}
 
 SUPPORTED_ACTIONS = {
     "ask",
@@ -296,15 +322,7 @@ async def _handle_home_graph_action(
         payload = _query_payload(runtime, data, {"limit"})
         return await runtime.client.home_graph_browse(payload)
     if action == "map":
-        payload = _query_payload(runtime, data, {CONF_LIMIT, "limit"})
-        include_sources = _first_value(
-            data,
-            CONF_INCLUDE_SOURCES,
-            "includeSources",
-            default=True,
-        )
-        payload["includeSources"] = _truthy(include_sources)
-        return await runtime.client.home_graph_map(payload)
+        return await runtime.client.home_graph_map(_map_payload(runtime, data))
     if action == "export":
         return await runtime.client.home_graph_export(_base_payload(runtime, data))
     if action == "import":
@@ -1153,6 +1171,61 @@ def _query_payload(
     return payload
 
 
+def _map_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
+    """Build a daemon-side Home Graph map payload with SDK-owned filters."""
+
+    payload = _base_payload(runtime, data)
+    value = _first_value(data, CONF_LIMIT, "limit")
+    if value not in (None, ""):
+        try:
+            payload["limit"] = max(1, int(value))
+        except (TypeError, ValueError):
+            payload["limit"] = value
+    if query := _first_value(data, CONF_QUERY, "query"):
+        payload["query"] = str(query)
+    value = _first_value(data, "minConfidence", "min_confidence")
+    if value not in (None, ""):
+        try:
+            payload["minConfidence"] = float(value)
+        except (TypeError, ValueError):
+            payload["minConfidence"] = value
+    for source_key, target_key in (
+        (CONF_INCLUDE_SOURCES, "includeSources"),
+        ("includeSources", "includeSources"),
+        ("include_issues", "includeIssues"),
+        ("includeIssues", "includeIssues"),
+        ("include_generated", "includeGenerated"),
+        ("includeGenerated", "includeGenerated"),
+    ):
+        if source_key in data:
+            payload[target_key] = _truthy(data[source_key])
+
+    filters = data.get("filters")
+    if isinstance(filters, dict):
+        payload["filters"] = filters
+    for key in MAP_GENERIC_LIST_FIELDS:
+        if key in data:
+            values = _string_list(data[key])
+            if values:
+                payload[key] = values
+
+    ha_payload: dict[str, Any] = {}
+    ha = data.get("ha")
+    if isinstance(ha, dict):
+        for key in MAP_HA_LIST_FIELDS:
+            values = _string_list(ha.get(key))
+            if values:
+                ha_payload[key] = values
+    for key in MAP_HA_LIST_FIELDS:
+        if key in data:
+            values = _string_list(data[key])
+            if values:
+                ha_payload[key] = values
+    if ha_payload:
+        payload["ha"] = ha_payload
+    return payload
+
+
 def _coerce_query_value(
     key: str,
     value: str | int | float | bool,
@@ -1313,6 +1386,26 @@ def _string_set(value: Any) -> set[str]:
     if isinstance(value, (list, tuple, set)):
         return {str(item) for item in value if item not in (None, "") and str(item)}
     return {str(value)}
+
+
+def _string_list(value: Any) -> list[str]:
+    """Parse list-like values into a stable list of non-empty strings."""
+
+    if value in (None, ""):
+        return []
+    parsed = _parse_jsonish_or_text(value)
+    if isinstance(parsed, str):
+        items = parsed.split(",")
+    elif isinstance(parsed, (list, tuple, set)):
+        items = parsed
+    else:
+        items = [parsed]
+    result: list[str] = []
+    for item in items:
+        text = str(item).strip()
+        if text and text not in result:
+            result.append(text)
+    return result
 
 
 def _parse_tags(value: Any) -> list[str] | None:

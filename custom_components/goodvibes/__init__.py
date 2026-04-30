@@ -112,6 +112,42 @@ SERVICE_HOME_GRAPH_IMPORT = "home_graph_import"
 SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
 
 
+def _map_list_field(value: Any) -> str | list[str]:
+    """Validate a comma string or native list service field."""
+
+    if isinstance(value, str):
+        return value
+    return vol.All(cv.ensure_list, [cv.string])(value)
+
+
+MAP_LIST_FIELD = _map_list_field
+MAP_GENERIC_SERVICE_FIELDS = {
+    "record_kinds": "recordKinds",
+    "ids": "ids",
+    "linked_to_ids": "linkedToIds",
+    "node_kinds": "nodeKinds",
+    "source_types": "sourceTypes",
+    "source_statuses": "sourceStatuses",
+    "node_statuses": "nodeStatuses",
+    "issue_codes": "issueCodes",
+    "issue_statuses": "issueStatuses",
+    "issue_severities": "issueSeverities",
+    "edge_relations": "edgeRelations",
+    CONF_TAGS: "tags",
+}
+MAP_HA_SERVICE_FIELDS = {
+    "object_kinds": "objectKinds",
+    "entity_ids": "entityIds",
+    "device_ids": "deviceIds",
+    "area_ids": "areaIds",
+    "integration_ids": "integrationIds",
+    "integration_domains": "integrationDomains",
+    "domains": "domains",
+    "device_classes": "deviceClasses",
+    "labels": "labels",
+}
+
+
 def _optional_context_schema() -> dict[Any, Any]:
     """Return optional prompt context fields shared by prompt and run_agent."""
 
@@ -321,7 +357,19 @@ HOME_GRAPH_MAP_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
         vol.Optional(CONF_LIMIT): vol.Coerce(int),
+        vol.Optional(CONF_QUERY): cv.string,
         vol.Optional(CONF_INCLUDE_SOURCES, default=True): bool,
+        vol.Optional("include_issues", default=False): bool,
+        vol.Optional("include_generated", default=True): bool,
+        vol.Optional("min_confidence"): vol.Coerce(float),
+        **{
+            vol.Optional(field): MAP_LIST_FIELD
+            for field in MAP_GENERIC_SERVICE_FIELDS
+        },
+        **{
+            vol.Optional(field): MAP_LIST_FIELD
+            for field in MAP_HA_SERVICE_FIELDS
+        },
     }
 )
 
@@ -975,8 +1023,22 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
         _copy_optional(call.data, payload, CONF_LIMIT, "limit")
+        _copy_optional(call.data, payload, CONF_QUERY, "query")
+        if "min_confidence" in call.data:
+            payload["minConfidence"] = call.data["min_confidence"]
         if CONF_INCLUDE_SOURCES in call.data:
             payload["includeSources"] = call.data[CONF_INCLUDE_SOURCES]
+        if "include_issues" in call.data:
+            payload["includeIssues"] = call.data["include_issues"]
+        if "include_generated" in call.data:
+            payload["includeGenerated"] = call.data["include_generated"]
+        for source_key, target_key in MAP_GENERIC_SERVICE_FIELDS.items():
+            _copy_optional_list(call.data, payload, source_key, target_key)
+        ha_payload: dict[str, Any] = {}
+        for source_key, target_key in MAP_HA_SERVICE_FIELDS.items():
+            _copy_optional_list(call.data, ha_payload, source_key, target_key)
+        if ha_payload:
+            payload["ha"] = ha_payload
         return await _call_client(runtime.client.home_graph_map(payload))
 
     async def async_home_graph_export(call: ServiceCall) -> dict[str, Any]:
@@ -1370,6 +1432,28 @@ def _copy_optional(
 
     if value := source.get(source_key):
         target[target_key] = value
+
+
+def _copy_optional_list(
+    source: dict[str, Any],
+    target: dict[str, Any],
+    source_key: str,
+    target_key: str,
+) -> None:
+    """Copy a non-empty list-like service field into a daemon payload."""
+
+    value = source.get(source_key)
+    if value in (None, ""):
+        return
+    if isinstance(value, str):
+        values = [item.strip() for item in value.split(",")]
+    elif isinstance(value, (list, tuple, set)):
+        values = [str(item).strip() for item in value]
+    else:
+        values = [str(value).strip()]
+    values = [item for item in values if item]
+    if values:
+        target[target_key] = values
 
 
 def _copy_tags_and_private_hosts(

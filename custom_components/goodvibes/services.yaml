@@ -643,6 +643,108 @@ home_graph_map:
       default: true
       selector:
         boolean:
+    include_issues:
+      default: false
+      selector:
+        boolean:
+    include_generated:
+      default: true
+      selector:
+        boolean:
+    query:
+      selector:
+        text:
+    min_confidence:
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.01
+          mode: box
+    record_kinds:
+      description: Comma-separated record kinds such as source, node, issue.
+      selector:
+        text:
+    ids:
+      description: Comma-separated source, node, or issue IDs.
+      selector:
+        text:
+    linked_to_ids:
+      description: Comma-separated record IDs to show directly linked records.
+      selector:
+        text:
+    node_kinds:
+      description: Comma-separated node kinds.
+      selector:
+        text:
+    source_types:
+      description: Comma-separated source types.
+      selector:
+        text:
+    source_statuses:
+      description: Comma-separated source statuses.
+      selector:
+        text:
+    node_statuses:
+      description: Comma-separated node statuses.
+      selector:
+        text:
+    issue_codes:
+      description: Comma-separated issue codes.
+      selector:
+        text:
+    issue_statuses:
+      description: Comma-separated issue statuses.
+      selector:
+        text:
+    issue_severities:
+      description: Comma-separated issue severities.
+      selector:
+        text:
+    edge_relations:
+      description: Comma-separated edge relations.
+      selector:
+        text:
+    tags:
+      description: Comma-separated tags or labels.
+      selector:
+        text:
+    object_kinds:
+      description: Comma-separated Home Assistant object kinds.
+      selector:
+        text:
+    entity_ids:
+      description: Comma-separated Home Assistant entity IDs.
+      selector:
+        text:
+    device_ids:
+      description: Comma-separated Home Assistant device IDs.
+      selector:
+        text:
+    area_ids:
+      description: Comma-separated Home Assistant area IDs.
+      selector:
+        text:
+    integration_ids:
+      description: Comma-separated Home Assistant integration IDs.
+      selector:
+        text:
+    integration_domains:
+      description: Comma-separated Home Assistant integration domains.
+      selector:
+        text:
+    domains:
+      description: Comma-separated Home Assistant entity domains.
+      selector:
+        text:
+    device_classes:
+      description: Comma-separated Home Assistant device classes.
+      selector:
+        text:
+    labels:
+      description: Comma-separated Home Assistant labels.
+      selector:
+        text:
 
 home_graph_export:
   description: Export the daemon-owned Home Graph knowledge space.

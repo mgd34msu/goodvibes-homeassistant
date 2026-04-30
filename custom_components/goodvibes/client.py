@@ -382,7 +382,7 @@ class GoodVibesClient:
         """Return the daemon-rendered Home Graph visual map."""
 
         return await self._request(
-            "GET", _query_path(ENDPOINT_HOME_GRAPH_MAP, payload)
+            "POST", ENDPOINT_HOME_GRAPH_MAP, json=dict(payload)
         )
 
     async def home_graph_export(self, payload: Mapping[str, Any]) -> dict[str, Any]:
