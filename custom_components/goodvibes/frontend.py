@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.29"
+FRONTEND_ASSET_VERSION = "0.5.30"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -114,6 +114,7 @@ SUPPORTED_ACTIONS = {
     "issues",
     "link",
     "map",
+    "pages",
     "packet",
     "reindex",
     "review",
@@ -298,6 +299,19 @@ async def _handle_home_graph_action(
         runtime.home_graph_sources = response
         async_dispatcher_send(hass, runtime.signal)
         return response
+    if action == "pages":
+        payload = _query_payload(runtime, data, {CONF_LIMIT, "limit"})
+        include_markdown = _first_value(
+            data,
+            "includeMarkdown",
+            "include_markdown",
+            default=True,
+        )
+        payload["includeMarkdown"] = _truthy(include_markdown)
+        response = await runtime.client.home_graph_pages(payload)
+        runtime.home_graph_pages = response
+        async_dispatcher_send(hass, runtime.signal)
+        return response
     if action == "issues":
         payload = _query_payload(
             runtime,
@@ -459,6 +473,7 @@ def _status_payload(runtime: Any) -> dict[str, Any]:
         "status": runtime.home_graph_status,
         "issues": runtime.home_graph_issues,
         "sources": runtime.home_graph_sources,
+        "pages": runtime.home_graph_pages,
         "installationId": runtime.installation_id,
         "knowledgeSpaceId": runtime.effective_knowledge_space_id,
         "lastSyncAt": runtime.home_graph_last_sync_at,

@@ -105,6 +105,7 @@ SERVICE_HOME_GRAPH_PACKET = "home_graph_packet"
 SERVICE_HOME_GRAPH_ISSUES = "home_graph_issues"
 SERVICE_REVIEW_FACT = "review_fact"
 SERVICE_HOME_GRAPH_SOURCES = "home_graph_sources"
+SERVICE_HOME_GRAPH_PAGES = "home_graph_pages"
 SERVICE_HOME_GRAPH_BROWSE = "home_graph_browse"
 SERVICE_HOME_GRAPH_MAP = "home_graph_map"
 SERVICE_HOME_GRAPH_EXPORT = "home_graph_export"
@@ -353,6 +354,14 @@ HOME_GRAPH_LIST_SCHEMA = vol.Schema(
     }
 )
 
+HOME_GRAPH_PAGES_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Optional(CONF_LIMIT): vol.Coerce(int),
+        vol.Optional("include_markdown", default=True): bool,
+    }
+)
+
 HOME_GRAPH_MAP_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
@@ -418,6 +427,7 @@ class GoodVibesRuntimeData:
     home_graph_status: dict[str, Any] = field(default_factory=dict)
     home_graph_issues: dict[str, Any] = field(default_factory=dict)
     home_graph_sources: dict[str, Any] = field(default_factory=dict)
+    home_graph_pages: dict[str, Any] = field(default_factory=dict)
     status: str = "unknown"
     last_reply: str | None = None
     last_payload: dict[str, Any] = field(default_factory=dict)
@@ -803,6 +813,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             "status": runtime.home_graph_status,
             "issues": runtime.home_graph_issues,
             "sources": runtime.home_graph_sources,
+            "pages": runtime.home_graph_pages,
             "lastSyncAt": runtime.home_graph_last_sync_at,
             "lastError": runtime.home_graph_last_error,
         }
@@ -1013,6 +1024,17 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         async_dispatcher_send(hass, runtime.signal)
         return response
 
+    async def async_home_graph_pages(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        _copy_optional(call.data, payload, CONF_LIMIT, "limit")
+        if "include_markdown" in call.data:
+            payload["includeMarkdown"] = call.data["include_markdown"]
+        response = await _call_client(runtime.client.home_graph_pages(payload))
+        runtime.home_graph_pages = response
+        async_dispatcher_send(hass, runtime.signal)
+        return response
+
     async def async_home_graph_browse(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
@@ -1196,6 +1218,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         SERVICE_HOME_GRAPH_SOURCES,
         async_home_graph_sources,
         schema=HOME_GRAPH_LIST_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOME_GRAPH_PAGES,
+        async_home_graph_pages,
+        schema=HOME_GRAPH_PAGES_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(

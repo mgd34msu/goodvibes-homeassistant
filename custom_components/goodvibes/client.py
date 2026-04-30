@@ -29,6 +29,7 @@ from .const import (
     ENDPOINT_HOME_GRAPH_ISSUES,
     ENDPOINT_HOME_GRAPH_LINK,
     ENDPOINT_HOME_GRAPH_MAP,
+    ENDPOINT_HOME_GRAPH_PAGES,
     ENDPOINT_HOME_GRAPH_PACKET,
     ENDPOINT_HOME_GRAPH_REINDEX,
     ENDPOINT_HOME_GRAPH_ROOM_PAGE,
@@ -369,6 +370,13 @@ class GoodVibesClient:
 
         return await self._request(
             "GET", _query_path(ENDPOINT_HOME_GRAPH_SOURCES, payload)
+        )
+
+    async def home_graph_pages(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """List daemon-rendered Home Graph generated pages."""
+
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_PAGES, payload)
         )
 
     async def home_graph_browse(self, payload: Mapping[str, Any]) -> dict[str, Any]:

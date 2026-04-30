@@ -61,6 +61,7 @@ class GoodVibesHomePanel extends HTMLElement {
     this._error = "";
     this._status = {};
     this._sources = {};
+    this._pages = {};
     this._browse = {};
     this._map = {};
     this._issues = {};
@@ -136,7 +137,7 @@ class GoodVibesHomePanel extends HTMLElement {
       await this._call("map", this._mapPayload(), { quiet: true });
     }
     if (this._tab === "pages") {
-      await this._call("sources", { limit: 1000 }, { quiet: true });
+      await this._call("pages", { limit: 250, includeMarkdown: true }, { quiet: true });
     }
     if (options.background) {
       this._renderAfterBackgroundUpdate();
@@ -171,6 +172,8 @@ class GoodVibesHomePanel extends HTMLElement {
         this._status = result || {};
       } else if (action === "sources") {
         this._sources = result || {};
+      } else if (action === "pages") {
+        this._pages = result || {};
       } else if (action === "browse") {
         this._browse = result || {};
       } else if (action === "map") {
@@ -267,7 +270,9 @@ class GoodVibesHomePanel extends HTMLElement {
           this._call("map", this._mapPayload()).catch((err) => this._showError(err));
         }
         if (this._tab === "pages") {
-          this._call("sources", { limit: 1000 }).catch((err) => this._showError(err));
+          this._call("pages", { limit: 250, includeMarkdown: true }).catch((err) =>
+            this._showError(err)
+          );
         }
       });
     });
@@ -1333,6 +1338,10 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _generatedPages() {
+    const pages = itemsFromPayload(this._pages, ["pages"]);
+    if (pages.length) {
+      return pages.sort(compareGeneratedPages);
+    }
     const byId = new Map();
     for (const source of [
       ...itemsFromPayload(this._sources, ["sources"]),
@@ -1347,7 +1356,8 @@ class GoodVibesHomePanel extends HTMLElement {
     return Array.from(byId.values()).sort(compareGeneratedPages);
   }
 
-  _pageCard(source) {
+  _pageCard(page) {
+    const source = page?.source || page;
     const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
     const title = source?.title || source?.name || source?.sourceUri || source?.id || "Generated page";
     const projection = metadata.projectionKind || metadata.kind || source?.sourceType || "page";
@@ -1362,10 +1372,12 @@ class GoodVibesHomePanel extends HTMLElement {
           <span>${escapeHtml(detail)}</span>
           <small>${escapeHtml(String(source?.id || source?.sourceId || ""))}</small>
           ${source?.sourceUri ? `<small>${escapeHtml(String(source.sourceUri))}</small>` : ""}
+          ${page?.artifact?.id ? `<small>${escapeHtml(String(page.artifact.id))}</small>` : ""}
         </div>
         <details>
           <summary>Details</summary>
-          <pre>${escapeHtml(JSON.stringify(source, null, 2))}</pre>
+          <pre>${escapeHtml(JSON.stringify(page, null, 2))}</pre>
+          ${page?.markdown ? `<pre>${escapeHtml(String(page.markdown))}</pre>` : ""}
         </details>
       </div>
     `;
@@ -1767,6 +1779,14 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _markdownPreview() {
+    const page = itemsFromPayload(this._pages, ["pages"]).find((item) => item?.markdown);
+    if (page?.markdown) {
+      const source = page.source || {};
+      const title = source.title || source.id || "Generated page";
+      return `<div class="answer"><h3>${escapeHtml(String(title))}</h3><pre>${escapeHtml(
+        String(page.markdown)
+      )}</pre></div>`;
+    }
     const result = this._lastResult.result || this._lastResult;
     return result?.markdown
       ? `<div class="answer">${escapeHtml(result.markdown)}</div>`
@@ -2309,10 +2329,15 @@ function compareGeneratedPages(left, right) {
   if (leftTime !== rightTime) {
     return rightTime - leftTime;
   }
-  return String(left?.title || left?.id || "").localeCompare(String(right?.title || right?.id || ""));
+  const leftSource = left?.source || left;
+  const rightSource = right?.source || right;
+  return String(leftSource?.title || leftSource?.id || "").localeCompare(
+    String(rightSource?.title || rightSource?.id || "")
+  );
 }
 
-function generatedPageTime(source) {
+function generatedPageTime(page) {
+  const source = page?.source || page;
   const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
   const value = metadata.generatedAt || source?.updatedAt || source?.createdAt || 0;
   const number = Number(value);

@@ -614,6 +614,23 @@ home_graph_sources:
           min: 1
           mode: box
 
+home_graph_pages:
+  description: List daemon-rendered GoodVibes Home Graph generated pages.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    limit:
+      selector:
+        number:
+          min: 1
+          mode: box
+    include_markdown:
+      default: true
+      selector:
+        boolean:
+
 home_graph_browse:
   description: Browse GoodVibes Home Graph nodes and links.
   fields:
