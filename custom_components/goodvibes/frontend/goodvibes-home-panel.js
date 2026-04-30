@@ -123,6 +123,9 @@ class GoodVibesHomePanel extends HTMLElement {
         { quiet: true }
       );
     }
+    if (this._tab === "pages") {
+      await this._call("sources", { limit: 1000 }, { quiet: true });
+    }
     if (options.background) {
       this._renderAfterBackgroundUpdate();
     } else {
@@ -253,6 +256,9 @@ class GoodVibesHomePanel extends HTMLElement {
             limit: this._mapLimit,
             includeSources: this._mapIncludeSources,
           }).catch((err) => this._showError(err));
+        }
+        if (this._tab === "pages") {
+          this._call("sources", { limit: 1000 }).catch((err) => this._showError(err));
         }
       });
     });
@@ -1167,47 +1173,115 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _renderPages() {
+    const pages = this._generatedPages();
     return `
       <section class="grid two">
         <article class="panel">
-          <h2>Generate</h2>
-          <form data-form="page">
-            <label>
-              <span>Type</span>
-              <select name="pageType">
-                <option value="room_page">Room page</option>
-                <option value="device_passport">Device passport</option>
-                <option value="packet">Packet</option>
-              </select>
-            </label>
-            ${textInput("title", "Title")}
-            ${textInput("areaId", "Area ID")}
-            ${textInput("roomId", "Room ID")}
-            ${textInput("deviceId", "Device ID")}
-            ${textInput("packetKind", "Packet Kind")}
-            ${textInput("sharingProfile", "Sharing Profile")}
-            <button type="submit"><ha-icon icon="mdi:file-cog-outline"></ha-icon><span>Generate</span></button>
-          </form>
+          <div class="panel-heading">
+            <h2>Automatic Pages</h2>
+            <div class="mini-actions">
+              <button type="button" data-action="sync"><ha-icon icon="mdi:sync"></ha-icon><span>Sync</span></button>
+            </div>
+          </div>
+          ${
+            pages.length
+              ? `<div class="page-list" data-scroll-region="generated-pages">${pages.map((page) => this._pageCard(page)).join("")}</div>`
+              : `<p class="empty">No automatic pages yet</p>`
+          }
         </article>
         <article class="panel">
-          <h2>Generated Content</h2>
+          <h2>Preview</h2>
           ${this._markdownPreview()}
         </article>
         <article class="panel">
-          <h2>Export</h2>
+          ${this._directPageTools()}
+        </article>
+        <article class="panel">
+          ${this._dataPortabilityTools()}
+        </article>
+      </section>
+      ${this._resultPanel()}
+    `;
+  }
+
+  _generatedPages() {
+    const byId = new Map();
+    for (const source of [
+      ...itemsFromPayload(this._sources, ["sources"]),
+      ...itemsFromPayload(this._browse, ["sources"]),
+    ]) {
+      if (!isGeneratedPageSource(source)) {
+        continue;
+      }
+      const id = source?.id || source?.sourceId || JSON.stringify(source);
+      byId.set(String(id), source);
+    }
+    return Array.from(byId.values()).sort(compareGeneratedPages);
+  }
+
+  _pageCard(source) {
+    const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+    const title = source?.title || source?.name || source?.sourceUri || source?.id || "Generated page";
+    const projection = metadata.projectionKind || metadata.kind || source?.sourceType || "page";
+    const regeneration = metadata.regeneration || "automatic";
+    const generatedAt = formatTimestamp(metadata.generatedAt || source?.updatedAt || source?.createdAt);
+    const detail = [projectionLabel(projection), regeneration, generatedAt].filter(Boolean).join(" - ");
+    return `
+      <div class="page-card">
+        <ha-icon icon="${pageIcon(projection)}"></ha-icon>
+        <div>
+          <strong>${escapeHtml(String(title))}</strong>
+          <span>${escapeHtml(detail)}</span>
+          <small>${escapeHtml(String(source?.id || source?.sourceId || ""))}</small>
+          ${source?.sourceUri ? `<small>${escapeHtml(String(source.sourceUri))}</small>` : ""}
+        </div>
+        <details>
+          <summary>Details</summary>
+          <pre>${escapeHtml(JSON.stringify(source, null, 2))}</pre>
+        </details>
+      </div>
+    `;
+  }
+
+  _directPageTools() {
+    return `
+      <details class="advanced page-tools">
+        <summary>Direct Refresh</summary>
+        <form data-form="page">
+          <label>
+            <span>Type</span>
+            <select name="pageType">
+              <option value="room_page">Room page</option>
+              <option value="device_passport">Device passport</option>
+              <option value="packet">Packet</option>
+            </select>
+          </label>
+          ${textInput("title", "Title")}
+          ${textInput("areaId", "Area ID")}
+          ${textInput("roomId", "Room ID")}
+          ${textInput("deviceId", "Device ID")}
+          ${textInput("packetKind", "Packet Kind")}
+          ${textInput("sharingProfile", "Sharing Profile")}
+          <button type="submit"><ha-icon icon="mdi:file-refresh-outline"></ha-icon><span>Refresh</span></button>
+        </form>
+      </details>
+    `;
+  }
+
+  _dataPortabilityTools() {
+    return `
+      <details class="advanced page-tools">
+        <summary>Export / Import</summary>
+        <div class="advanced-fields">
           <form data-form="export">
             <button type="submit"><ha-icon icon="mdi:export"></ha-icon><span>Export Home Graph</span></button>
           </form>
-        </article>
-        <article class="panel">
-          <h2>Import</h2>
           <form data-form="import">
             <label><span>Export JSON</span><textarea name="data" rows="7"></textarea></label>
             <button type="submit"><ha-icon icon="mdi:import"></ha-icon><span>Import Home Graph</span></button>
           </form>
-        </article>
-      </section>
-      ${this._resultPanel()}
+        </div>
+      </details>
     `;
   }
 
@@ -1844,6 +1918,44 @@ class GoodVibesHomePanel extends HTMLElement {
         max-height: 560px;
         overflow: auto;
       }
+      .page-list {
+        display: grid;
+        gap: 10px;
+        max-height: 560px;
+        overflow: auto;
+      }
+      .page-card {
+        align-items: start;
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 28px minmax(0, 1fr);
+        padding: 12px;
+      }
+      .page-card ha-icon {
+        color: var(--primary-color);
+        margin-top: 1px;
+      }
+      .page-card strong,
+      .page-card span,
+      .page-card small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .page-card span,
+      .page-card small {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        margin-top: 3px;
+      }
+      .page-card details {
+        grid-column: 1 / -1;
+      }
+      .page-tools form {
+        margin-top: 12px;
+      }
       .issue-card {
         align-items: start;
         background: var(--secondary-background-color);
@@ -1991,6 +2103,71 @@ function textInput(name, label, type = "text") {
 
 function svgDataUrl(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svg))}`;
+}
+
+function isGeneratedPageSource(source) {
+  const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+  const tags = Array.isArray(source?.tags) ? source.tags.map((tag) => String(tag)) : [];
+  return (
+    metadata.homeGraphGeneratedPage === true ||
+    metadata.homeGraphSourceKind === "generated-page" ||
+    Boolean(metadata.projectionKind) ||
+    tags.includes("generated-page")
+  );
+}
+
+function compareGeneratedPages(left, right) {
+  const leftTime = generatedPageTime(left);
+  const rightTime = generatedPageTime(right);
+  if (leftTime !== rightTime) {
+    return rightTime - leftTime;
+  }
+  return String(left?.title || left?.id || "").localeCompare(String(right?.title || right?.id || ""));
+}
+
+function generatedPageTime(source) {
+  const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+  const value = metadata.generatedAt || source?.updatedAt || source?.createdAt || 0;
+  const number = Number(value);
+  if (Number.isFinite(number)) {
+    return number;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatTimestamp(value) {
+  const time = Number(value);
+  if (Number.isFinite(time) && time > 0) {
+    return new Date(time).toLocaleString();
+  }
+  if (value) {
+    const parsed = Date.parse(String(value));
+    if (Number.isFinite(parsed)) {
+      return new Date(parsed).toLocaleString();
+    }
+  }
+  return "";
+}
+
+function projectionLabel(value) {
+  return String(value || "page")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function pageIcon(value) {
+  const kind = String(value || "").toLowerCase();
+  if (kind.includes("device")) {
+    return "mdi:card-account-details-outline";
+  }
+  if (kind.includes("room")) {
+    return "mdi:floor-plan";
+  }
+  if (kind.includes("packet")) {
+    return "mdi:file-document-multiple-outline";
+  }
+  return "mdi:file-document-outline";
 }
 
 function metadataField() {
