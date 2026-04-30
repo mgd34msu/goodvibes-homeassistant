@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.32
+
+- Target `@pellux/goodvibes-sdk@0.27.5`.
+- Document SDK `0.27.5` Home Graph Ask behavior: strict semantic candidates after object-scoped search, query-intent filtering for deterministic facts, bounded provider-backed semantic calls, and bounded broad reindex LLM budget.
+- Confirm the existing GoodVibes Home panel ask/reindex/pages calls match the SDK `0.27.5` contract; no local PDF parsing, ranking, page generation, or answer synthesis was added.
+
 ## 0.5.31
 
 - Target `@pellux/goodvibes-sdk@0.27.4`.
