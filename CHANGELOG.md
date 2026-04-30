@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.36
+
+- Target `@pellux/goodvibes-sdk@0.27.9`.
+- Document SDK `0.27.9` Home Graph behavior: semantic answer synthesis is prioritized before background enrichment, and additional low-value manual boilerplate is filtered daemon-side.
+- Confirm the GoodVibes Home panel ask/pages/map/reindex calls remain compatible with the SDK `0.27.9` contract; no panel UI change was required.
+
 ## 0.5.35
 
 - Target `@pellux/goodvibes-sdk@0.27.8`.
