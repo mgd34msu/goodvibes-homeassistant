@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.35
+
+- Target `@pellux/goodvibes-sdk@0.27.8`.
+- Document SDK `0.27.8` shared semantic quality filtering for feature/spec answers and generated Home Graph pages: truncated deterministic fragments, cable snippets, feature/spec-change boilerplate, remote control noise, remote battery-low notes, dry-cloth cleaning notes, and generic service/repair/customer-service boilerplate are filtered daemon-side.
+- Confirm the GoodVibes Home panel ask/pages/map rendering remains compatible with the SDK `0.27.8` contract; no panel UI change was required.
+
 ## 0.5.34
 
 - Target `@pellux/goodvibes-sdk@0.27.7`.
