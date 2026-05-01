@@ -32,6 +32,8 @@ from .const import (
     ENDPOINT_HOME_GRAPH_PAGES,
     ENDPOINT_HOME_GRAPH_PACKET,
     ENDPOINT_HOME_GRAPH_REINDEX,
+    ENDPOINT_HOME_GRAPH_REFINEMENT_RUN,
+    ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS,
     ENDPOINT_HOME_GRAPH_ROOM_PAGE,
     ENDPOINT_HOME_GRAPH_SOURCES,
     ENDPOINT_HOME_GRAPH_STATUS,
@@ -422,6 +424,49 @@ class GoodVibesClient:
             json=dict(payload),
             timeout=HOME_GRAPH_INGEST_TIMEOUT,
         )
+
+    async def home_graph_refinement_tasks(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """List Home Graph refinement tasks."""
+
+        return await self._request(
+            "GET", _query_path(ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS, payload)
+        )
+
+    async def home_graph_refinement_task(
+        self, task_id: str,
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Return one Home Graph refinement task."""
+
+        path = f"{ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS}/{quote(task_id, safe='')}"
+        return await self._request("GET", _query_path(path, payload))
+
+    async def home_graph_refinement_run(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Run Home Graph refinement."""
+
+        return await self._request(
+            "POST",
+            ENDPOINT_HOME_GRAPH_REFINEMENT_RUN,
+            json=dict(payload),
+            timeout=HOME_GRAPH_INGEST_TIMEOUT,
+        )
+
+    async def home_graph_refinement_cancel(
+        self,
+        task_id: str,
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Cancel a queued or active Home Graph refinement task."""
+
+        path = (
+            f"{ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS}/"
+            f"{quote(task_id, safe='')}/cancel"
+        )
+        return await self._request("POST", path, json=dict(payload))
 
     async def _webhook(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """POST a payload to the daemon Home Assistant webhook."""

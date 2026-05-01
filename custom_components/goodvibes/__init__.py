@@ -428,6 +428,7 @@ class GoodVibesRuntimeData:
     home_graph_issues: dict[str, Any] = field(default_factory=dict)
     home_graph_sources: dict[str, Any] = field(default_factory=dict)
     home_graph_pages: dict[str, Any] = field(default_factory=dict)
+    home_graph_refinement_tasks: dict[str, Any] = field(default_factory=dict)
     status: str = "unknown"
     last_reply: str | None = None
     last_payload: dict[str, Any] = field(default_factory=dict)

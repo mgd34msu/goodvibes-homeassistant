@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.40
+
+- Target `@pellux/goodvibes-sdk@0.28.0`.
+- Add thin-client support for SDK-owned Home Graph refinement tasks in the GoodVibes Home panel: readiness display, task listing, manual refinement run, targeted gap/source refinement, active-task cancellation, and Ask refinement task IDs.
+- Document SDK `0.28.0` Home Graph behavior: readiness status, refinement lifecycle APIs, scoped generated pages, source-backed device page notes, map facets, and ask-time refinement task IDs remain daemon-owned.
+
 ## 0.5.39
 
 - Target `@pellux/goodvibes-sdk@0.27.12`.

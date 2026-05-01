@@ -2,6 +2,14 @@ const DEFAULT_WS_TYPE = "goodvibes/home_graph/call";
 const DEFAULT_UPLOAD_URL = "/api/goodvibes/home-graph/upload";
 const AUTO_TRIAGE_BATCH_LIMIT = 25;
 const OPEN_ISSUES_PAYLOAD = { status: "open" };
+const ACTIVE_REFINEMENT_STATES = new Set([
+  "detected",
+  "queued",
+  "searching",
+  "evaluating",
+  "extracting",
+  "applying",
+]);
 
 const TARGET_KIND_OPTIONS = [
   "",
@@ -62,6 +70,9 @@ class GoodVibesHomePanel extends HTMLElement {
     this._status = {};
     this._sources = {};
     this._pages = {};
+    this._refinement = {};
+    this._refinementState = "";
+    this._refinementLimit = 100;
     this._browse = {};
     this._map = {};
     this._issues = {};
@@ -132,6 +143,7 @@ class GoodVibesHomePanel extends HTMLElement {
       this._call("sources", {}, { quiet: true }),
       this._call("browse", {}, { quiet: true }),
       this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true }),
+      this._call("refinement_tasks", { limit: this._refinementLimit }, { quiet: true }),
     ]);
     if (this._tab === "map") {
       await this._call("map", this._mapPayload(), { quiet: true });
@@ -174,6 +186,8 @@ class GoodVibesHomePanel extends HTMLElement {
         this._sources = result || {};
       } else if (action === "pages") {
         this._pages = result || {};
+      } else if (action === "refinement_tasks") {
+        this._refinement = result || {};
       } else if (action === "browse") {
         this._browse = result || {};
       } else if (action === "map") {
@@ -274,11 +288,17 @@ class GoodVibesHomePanel extends HTMLElement {
             this._showError(err)
           );
         }
+        if (this._tab === "refine") {
+          this._call(
+            "refinement_tasks",
+            this._compact({ limit: this._refinementLimit, state: this._refinementState })
+          ).catch((err) => this._showError(err));
+        }
       });
     });
     root.querySelectorAll("[data-action]").forEach((button) => {
       button.addEventListener("click", () => {
-        this._handleAction(button.dataset.action).catch((err) => this._showError(err));
+        this._handleAction(button.dataset.action, button).catch((err) => this._showError(err));
       });
     });
     root.querySelectorAll("[data-map-filter-key]").forEach((button) => {
@@ -303,7 +323,7 @@ class GoodVibesHomePanel extends HTMLElement {
     });
   }
 
-  async _handleAction(action) {
+  async _handleAction(action, element) {
     if (action === "refresh") {
       await this._refreshAll();
       return;
@@ -316,6 +336,24 @@ class GoodVibesHomePanel extends HTMLElement {
     if (action === "reindex") {
       await this._call("reindex");
       await this._refreshAll();
+      return;
+    }
+    if (action === "refinement_refresh") {
+      await this._call(
+        "refinement_tasks",
+        this._compact({ limit: this._refinementLimit, state: this._refinementState })
+      );
+      return;
+    }
+    if (action === "refinement_run") {
+      await this._call("refinement_run", { limit: 25 });
+      await this._refreshAll({ triage: false });
+      return;
+    }
+    if (action === "refinement_cancel") {
+      const id = element?.dataset?.taskId || "";
+      await this._call("refinement_cancel", { id });
+      await this._refreshAll({ triage: false });
       return;
     }
     if (action === "map_clear_filters") {
@@ -376,6 +414,28 @@ class GoodVibesHomePanel extends HTMLElement {
       this._mapIncludeIssues = Boolean(fields.includeIssues);
       this._mapIncludeGenerated = Boolean(fields.includeGenerated);
       await this._call("map", this._mapPayload());
+      return;
+    }
+    if (name === "refinement") {
+      this._refinementLimit = Number(fields.limit) || 100;
+      this._refinementState = fields.state || "";
+      await this._call(
+        "refinement_tasks",
+        this._compact({ limit: this._refinementLimit, state: this._refinementState })
+      );
+      return;
+    }
+    if (name === "refinement_run") {
+      await this._call(
+        "refinement_run",
+        this._compact({
+          limit: fields.limit,
+          force: fields.force,
+          gapIds: this._tagsFromText(fields.gapIds),
+          sourceIds: this._tagsFromText(fields.sourceIds),
+        })
+      );
+      await this._refreshAll({ triage: false });
       return;
     }
     if (name === "url") {
@@ -851,6 +911,7 @@ class GoodVibesHomePanel extends HTMLElement {
           ${this._tabButton("ingest", "mdi:tray-arrow-up", "Ingest")}
           ${this._tabButton("ask", "mdi:message-question-outline", "Ask")}
           ${this._tabButton("link", "mdi:link-variant", "Link")}
+          ${this._tabButton("refine", "mdi:auto-fix", "Refine")}
           ${this._tabButton("review", "mdi:clipboard-edit-outline", "Review")}
           ${this._tabButton("pages", "mdi:file-document-outline", "Pages")}
         </nav>
@@ -892,6 +953,9 @@ class GoodVibesHomePanel extends HTMLElement {
     if (this._tab === "link") {
       return this._renderLink();
     }
+    if (this._tab === "refine") {
+      return this._renderRefinement();
+    }
     if (this._tab === "review") {
       return this._renderReview();
     }
@@ -919,6 +983,8 @@ class GoodVibesHomePanel extends HTMLElement {
             <div><dt>Edges</dt><dd>${escapeHtml(statusCount(this._status, "edgeCount"))}</dd></div>
             <div><dt>Issues</dt><dd>${escapeHtml(statusCount(this._status, "issueCount"))}</dd></div>
             <div><dt>Extractions</dt><dd>${escapeHtml(statusCount(this._status, "extractionCount"))}</dd></div>
+            <div><dt>Readiness</dt><dd>${escapeHtml(readinessLabel(this._status))}</dd></div>
+            <div><dt>Refinement</dt><dd>${escapeHtml(refinementStatusLabel(this._status, this._refinement))}</dd></div>
             <div><dt>Capabilities</dt><dd>${escapeHtml(statusCapabilities(this._status))}</dd></div>
           </dl>
         </article>
@@ -1287,6 +1353,107 @@ class GoodVibesHomePanel extends HTMLElement {
         </article>
       </section>
       ${this._resultPanel()}
+    `;
+  }
+
+  _renderRefinement() {
+    const tasks = itemsFromPayload(this._refinement, ["tasks"]);
+    const readiness = statusReadiness(this._status);
+    const activeCount = tasks.filter((task) => ACTIVE_REFINEMENT_STATES.has(String(task?.state || ""))).length;
+    return `
+      <section class="grid two">
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Readiness</h2>
+            <div class="mini-actions">
+              <button type="button" data-action="refinement_refresh"><ha-icon icon="mdi:refresh"></ha-icon><span>Refresh</span></button>
+              <button type="button" data-action="refinement_run"><ha-icon icon="mdi:auto-fix"></ha-icon><span>Run refinement</span></button>
+            </div>
+          </div>
+          <dl class="facts">
+            <div><dt>State</dt><dd>${escapeHtml(readiness?.state || "unknown")}</dd></div>
+            <div><dt>Open Issues</dt><dd>${escapeHtml(String(readiness?.openIssueCount ?? ""))}</dd></div>
+            <div><dt>Active Tasks</dt><dd>${escapeHtml(String(readiness?.activeRefinementTaskCount ?? activeCount))}</dd></div>
+            <div><dt>Needs Review</dt><dd>${escapeHtml(String(readiness?.needsReviewTaskCount ?? ""))}</dd></div>
+            <div><dt>Task Records</dt><dd>${escapeHtml(String(tasks.length))}</dd></div>
+          </dl>
+        </article>
+        <article class="panel">
+          <h2>Task Filter</h2>
+          <form data-form="refinement" class="inline-form">
+            <label>
+              <span>State</span>
+              <select name="state">
+                ${refinementStateOptions(this._refinementState)}
+              </select>
+            </label>
+            <label>
+              <span>Limit</span>
+              <input name="limit" type="number" min="1" max="1000" value="${escapeAttr(String(this._refinementLimit))}">
+            </label>
+            <button type="submit"><ha-icon icon="mdi:filter-outline"></ha-icon><span>Apply</span></button>
+          </form>
+          <form data-form="refinement_run" class="refinement-run-form">
+            <details class="advanced">
+              <summary>Run targeted refinement</summary>
+              <div class="advanced-fields">
+                ${textInput("gapIds", "Gap IDs")}
+                ${textInput("sourceIds", "Source IDs")}
+                ${textInput("limit", "Limit", "number")}
+                <label class="check"><input name="force" type="checkbox"><span>Force</span></label>
+                <button type="submit"><ha-icon icon="mdi:auto-fix"></ha-icon><span>Run targeted refinement</span></button>
+              </div>
+            </details>
+          </form>
+        </article>
+      </section>
+      <section class="grid">
+        <article class="panel">
+          <h2>Refinement Tasks</h2>
+          ${
+            tasks.length
+              ? `<div class="task-list" data-scroll-region="refinement-tasks">${tasks.map((task) => this._taskCard(task)).join("")}</div>`
+              : `<p class="empty">No refinement tasks</p>`
+          }
+        </article>
+      </section>
+      ${this._resultPanel()}
+    `;
+  }
+
+  _taskCard(task) {
+    const id = task?.id || "";
+    const state = task?.state || "unknown";
+    const title = task?.subjectTitle || task?.title || task?.gapId || id || "Refinement task";
+    const meta = [
+      state,
+      task?.priority,
+      task?.trigger,
+      task?.subjectKind,
+      task?.blockedReason,
+    ]
+      .filter(Boolean)
+      .join(" - ");
+    const canCancel = ACTIVE_REFINEMENT_STATES.has(String(state));
+    return `
+      <div class="task-card ${canCancel ? "active" : ""}">
+        <ha-icon icon="${refinementTaskIcon(state)}"></ha-icon>
+        <div>
+          <strong>${escapeHtml(String(title))}</strong>
+          <span>${escapeHtml(meta)}</span>
+          <small>${escapeHtml(String(id))}</small>
+          ${task?.gapId ? `<small>Gap ${escapeHtml(String(task.gapId))}</small>` : ""}
+        </div>
+        ${
+          canCancel
+            ? `<button type="button" data-action="refinement_cancel" data-task-id="${escapeAttr(String(id))}"><ha-icon icon="mdi:cancel"></ha-icon><span>Cancel</span></button>`
+            : ""
+        }
+        <details>
+          <summary>Trace and metadata</summary>
+          <pre>${escapeHtml(JSON.stringify(task, null, 2))}</pre>
+        </details>
+      </div>
     `;
   }
 
@@ -1785,11 +1952,18 @@ class GoodVibesHomePanel extends HTMLElement {
       answer.synthesized === true ? "Synthesized" : "",
       answer.mode ? `Mode: ${answer.mode}` : "",
       answer.confidence !== undefined ? `Confidence: ${answer.confidence}` : "",
+      Array.isArray(answer.refinementTaskIds) && answer.refinementTaskIds.length
+        ? `${answer.refinementTaskIds.length} refinement task(s)`
+        : "",
     ].filter(Boolean);
+    const refinementTasks = Array.isArray(answer.refinementTaskIds)
+      ? answer.refinementTaskIds.map((id) => ({ id, title: `Refinement task ${id}` }))
+      : [];
     return `
       <div class="answer answer-card">
         ${meta.length ? `<div class="answer-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
         <div class="answer-text">${escapeHtml(String(text))}</div>
+        ${this._answerRecords("Refinement Tasks", refinementTasks, "mdi:auto-fix")}
         ${this._answerRecords("Facts", answer.facts, "mdi:check-decagram-outline")}
         ${this._answerRecords("Gaps", answer.gaps, "mdi:alert-circle-outline")}
         ${this._answerRecords("Sources", answer.sources, "mdi:file-document-outline")}
@@ -1855,8 +2029,9 @@ class GoodVibesHomePanel extends HTMLElement {
       return this._error;
     }
     const status = statusValue(this._status.status);
+    const readiness = statusReadiness(this._status).state || "";
     const issueCount = itemsFromPayload(this._issues, ["issues"]).length;
-    return [status, issueCount ? `${issueCount} issue(s)` : ""]
+    return [status, readiness, issueCount ? `${issueCount} issue(s)` : ""]
       .filter(Boolean)
       .join(" - ");
   }
@@ -2179,6 +2354,48 @@ class GoodVibesHomePanel extends HTMLElement {
         max-height: 560px;
         overflow: auto;
       }
+      .task-list {
+        display: grid;
+        gap: 10px;
+        max-height: 660px;
+        overflow: auto;
+      }
+      .task-card {
+        align-items: start;
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        padding: 12px;
+      }
+      .task-card.active {
+        border-color: var(--primary-color);
+      }
+      .task-card ha-icon {
+        color: var(--primary-color);
+        margin-top: 1px;
+      }
+      .task-card strong,
+      .task-card span,
+      .task-card small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .task-card span,
+      .task-card small {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        margin-top: 3px;
+      }
+      .task-card details {
+        grid-column: 1 / -1;
+      }
+      .task-card button {
+        min-height: 32px;
+        padding: 5px 9px;
+      }
       .page-card {
         align-items: start;
         background: var(--secondary-background-color);
@@ -2209,6 +2426,9 @@ class GoodVibesHomePanel extends HTMLElement {
         grid-column: 1 / -1;
       }
       .page-tools form {
+        margin-top: 12px;
+      }
+      .refinement-run-form {
         margin-top: 12px;
       }
       .issue-card {
@@ -2484,6 +2704,51 @@ function pageIcon(value) {
   return "mdi:file-document-outline";
 }
 
+function refinementTaskIcon(state) {
+  const value = String(state || "").toLowerCase();
+  if (ACTIVE_REFINEMENT_STATES.has(value)) {
+    return "mdi:progress-wrench";
+  }
+  if (value === "closed" || value === "verified") {
+    return "mdi:check-decagram-outline";
+  }
+  if (value === "blocked" || value === "failed") {
+    return "mdi:alert-circle-outline";
+  }
+  if (value === "needs_review") {
+    return "mdi:clipboard-edit-outline";
+  }
+  if (value === "cancelled") {
+    return "mdi:cancel";
+  }
+  return "mdi:auto-fix";
+}
+
+function refinementStateOptions(selected) {
+  const states = [
+    "",
+    "detected",
+    "queued",
+    "searching",
+    "evaluating",
+    "extracting",
+    "applying",
+    "verified",
+    "closed",
+    "blocked",
+    "suppressed",
+    "needs_review",
+    "cancelled",
+    "failed",
+  ];
+  return states
+    .map((state) => {
+      const label = state ? projectionLabel(state) : "Any state";
+      return `<option value="${escapeAttr(state)}" ${state === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+}
+
 function metadataField() {
   return `<label><span>Metadata JSON</span><textarea name="metadata" rows="3"></textarea></label>`;
 }
@@ -2652,6 +2917,38 @@ function statusCapabilities(payload) {
   return Array.isArray(value) ? value.join(", ") : "";
 }
 
+function statusReadiness(payload) {
+  const value = payload?.readiness ?? payload?.status?.readiness;
+  return value && typeof value === "object" ? value : {};
+}
+
+function readinessLabel(payload) {
+  const readiness = statusReadiness(payload);
+  const parts = [
+    readiness.state || "unknown",
+    readiness.openIssueCount !== undefined ? `${readiness.openIssueCount} open issue(s)` : "",
+    readiness.activeRefinementTaskCount !== undefined
+      ? `${readiness.activeRefinementTaskCount} active task(s)`
+      : "",
+    readiness.needsReviewTaskCount !== undefined
+      ? `${readiness.needsReviewTaskCount} needs review`
+      : "",
+  ].filter(Boolean);
+  return parts.join(" - ");
+}
+
+function refinementStatusLabel(statusPayload, refinementPayload) {
+  const readiness = statusReadiness(statusPayload);
+  const tasks = itemsFromPayload(refinementPayload, ["tasks"]);
+  const active = tasks.filter((task) => ACTIVE_REFINEMENT_STATES.has(String(task?.state || ""))).length;
+  const needsReview = tasks.filter((task) => String(task?.state || "") === "needs_review").length;
+  return [
+    `${tasks.length} task record(s)`,
+    `${readiness.activeRefinementTaskCount ?? active} active`,
+    `${readiness.needsReviewTaskCount ?? needsReview} needs review`,
+  ].join(" - ");
+}
+
 function issueKey(issue) {
   return String(
     issue?.id ||
@@ -2740,6 +3037,9 @@ function itemsFromPayload(payload, keys) {
 }
 
 function recordTitle(record) {
+  if (record === null || typeof record !== "object") {
+    return String(record ?? "Record");
+  }
   return String(
     record?.title ||
       record?.name ||
@@ -2751,6 +3051,9 @@ function recordTitle(record) {
 }
 
 function recordSubtitle(record) {
+  if (record === null || typeof record !== "object") {
+    return "";
+  }
   const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
   return [
     record?.kind || record?.sourceType || metadata.semanticKind,

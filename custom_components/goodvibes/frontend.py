@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.31"
+FRONTEND_ASSET_VERSION = "0.5.40"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -117,6 +117,10 @@ SUPPORTED_ACTIONS = {
     "pages",
     "packet",
     "reindex",
+    "refinement_cancel",
+    "refinement_run",
+    "refinement_task",
+    "refinement_tasks",
     "review",
     "room_page",
     "sources",
@@ -353,6 +357,60 @@ async def _handle_home_graph_action(
         runtime.async_apply_home_graph_response(response)
         await runtime.async_refresh_home_graph()
         return response
+    if action == "refinement_tasks":
+        payload = _query_payload(
+            runtime,
+            data,
+            {"limit", "state", "subjectId", "gapId"},
+        )
+        response = await runtime.client.home_graph_refinement_tasks(payload)
+        runtime.home_graph_refinement_tasks = response
+        async_dispatcher_send(hass, runtime.signal)
+        return response
+    if action == "refinement_task":
+        task_id = _required_text(data, "id", "taskId", "task_id")
+        payload = _base_payload(runtime, data)
+        response = await runtime.client.home_graph_refinement_task(task_id, payload)
+        return response
+    if action == "refinement_run":
+        payload = _base_payload(runtime, data)
+        for source_key, payload_key in (
+            ("gapIds", "gapIds"),
+            ("gap_ids", "gapIds"),
+            ("sourceIds", "sourceIds"),
+            ("source_ids", "sourceIds"),
+        ):
+            if source_key in data:
+                values = _string_list(data[source_key])
+                if values:
+                    payload[payload_key] = values
+        if "limit" in data:
+            try:
+                payload["limit"] = max(1, int(data["limit"]))
+            except (TypeError, ValueError):
+                payload["limit"] = data["limit"]
+        if "force" in data:
+            payload["force"] = _truthy(data["force"])
+        response = await runtime.client.home_graph_refinement_run(payload)
+        runtime.async_apply_home_graph_response(response)
+        runtime.home_graph_refinement_tasks = await runtime.client.home_graph_refinement_tasks(
+            _query_payload(runtime, {"limit": 100}, {"limit"})
+        )
+        await runtime.async_refresh_home_graph()
+        async_dispatcher_send(hass, runtime.signal)
+        return response
+    if action == "refinement_cancel":
+        task_id = _required_text(data, "id", "taskId", "task_id")
+        response = await runtime.client.home_graph_refinement_cancel(
+            task_id,
+            _base_payload(runtime, data),
+        )
+        runtime.home_graph_refinement_tasks = await runtime.client.home_graph_refinement_tasks(
+            _query_payload(runtime, {"limit": 100}, {"limit"})
+        )
+        await runtime.async_refresh_home_graph()
+        async_dispatcher_send(hass, runtime.signal)
+        return response
     if action == "ask":
         if not runtime.home_graph_last_sync_at:
             await _async_sync_home_graph_context(hass, runtime, data)
@@ -474,6 +532,7 @@ def _status_payload(runtime: Any) -> dict[str, Any]:
         "issues": runtime.home_graph_issues,
         "sources": runtime.home_graph_sources,
         "pages": runtime.home_graph_pages,
+        "refinementTasks": runtime.home_graph_refinement_tasks,
         "installationId": runtime.installation_id,
         "knowledgeSpaceId": runtime.effective_knowledge_space_id,
         "lastSyncAt": runtime.home_graph_last_sync_at,

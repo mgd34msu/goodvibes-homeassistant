@@ -105,6 +105,8 @@ ENDPOINT_HOME_GRAPH_MAP = "/api/homeassistant/home-graph/map"
 ENDPOINT_HOME_GRAPH_EXPORT = "/api/homeassistant/home-graph/export"
 ENDPOINT_HOME_GRAPH_IMPORT = "/api/homeassistant/home-graph/import"
 ENDPOINT_HOME_GRAPH_REINDEX = "/api/homeassistant/home-graph/reindex"
+ENDPOINT_HOME_GRAPH_REFINEMENT_RUN = "/api/homeassistant/home-graph/refinement/run"
+ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS = "/api/homeassistant/home-graph/refinement/tasks"
 
 TOOL_NAME_TO_ID = {
     "homeassistant_manifest": "homeassistant:manifest",
