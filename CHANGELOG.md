@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.39
+
+- Target `@pellux/goodvibes-sdk@0.27.12`.
+- Document SDK `0.27.12` Home Graph quality fixes: reindex quality issues should drop stale missing-manual and battery questions for linked LG TV manuals, generated pages should filter remote/accessory noise, and gap repair source metadata may include confidence scoring.
+- Confirm the GoodVibes Home panel status/reindex/ask/pages/map calls remain compatible with the SDK `0.27.12` contract; no panel UI change was required.
+
 ## 0.5.38
 
 - Target `@pellux/goodvibes-sdk@0.27.11`.
