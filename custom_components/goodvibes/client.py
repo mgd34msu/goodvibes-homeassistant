@@ -34,6 +34,7 @@ from .const import (
     ENDPOINT_HOME_GRAPH_REINDEX,
     ENDPOINT_HOME_GRAPH_REFINEMENT_RUN,
     ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS,
+    ENDPOINT_HOME_GRAPH_RESET,
     ENDPOINT_HOME_GRAPH_ROOM_PAGE,
     ENDPOINT_HOME_GRAPH_SOURCES,
     ENDPOINT_HOME_GRAPH_STATUS,
@@ -413,6 +414,16 @@ class GoodVibesClient:
             ENDPOINT_HOME_GRAPH_IMPORT,
             json=dict(payload),
             timeout=HOME_GRAPH_INGEST_TIMEOUT,
+        )
+
+    async def home_graph_reset(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Request a daemon-owned Home Graph space reset."""
+
+        return await self._request(
+            "POST",
+            ENDPOINT_HOME_GRAPH_RESET,
+            json=dict(payload),
+            timeout=HOME_GRAPH_GENERATE_TIMEOUT,
         )
 
     async def home_graph_reindex(self, payload: Mapping[str, Any]) -> dict[str, Any]:

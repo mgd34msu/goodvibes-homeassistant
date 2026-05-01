@@ -192,7 +192,6 @@ def _device_snapshot(device: Any) -> dict[str, Any]:
             "identifiers": _jsonable(getattr(device, "identifiers", None)),
             "connections": _jsonable(getattr(device, "connections", None)),
             "labels": _jsonable(getattr(device, "labels", None)),
-            "suggestedArea": getattr(device, "suggested_area", None),
             "metadata": {
                 "source": "device_registry",
                 "nameByUser": getattr(device, "name_by_user", None),
@@ -207,7 +206,6 @@ def _device_snapshot(device: Any) -> dict[str, Any]:
                 "configEntries": _jsonable(getattr(device, "config_entries", None)),
                 "identifiers": _jsonable(getattr(device, "identifiers", None)),
                 "connections": _jsonable(getattr(device, "connections", None)),
-                "suggestedArea": getattr(device, "suggested_area", None),
             },
         }
     )

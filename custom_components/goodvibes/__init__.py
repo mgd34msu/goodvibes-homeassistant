@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -22,6 +23,7 @@ from .const import (
     CONF_AREA_ID,
     CONF_ARTIFACT_ID,
     CONF_CODE,
+    CONF_CONFIRM,
     CONF_CONFIG_ENTRY_ID,
     CONF_CONVERSATION_ID,
     CONF_DAEMON_TOKEN,
@@ -87,6 +89,8 @@ from .home_graph import (
 )
 from .frontend import async_setup_frontend, async_unload_frontend_panel
 
+_LOGGER = logging.getLogger(__name__)
+
 SERVICE_PROMPT = "prompt"
 SERVICE_RUN_AGENT = "run_agent"
 SERVICE_STATUS = "status"
@@ -111,6 +115,7 @@ SERVICE_HOME_GRAPH_BROWSE = "home_graph_browse"
 SERVICE_HOME_GRAPH_MAP = "home_graph_map"
 SERVICE_HOME_GRAPH_EXPORT = "home_graph_export"
 SERVICE_HOME_GRAPH_IMPORT = "home_graph_import"
+SERVICE_HOME_GRAPH_RESET = "home_graph_reset"
 SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
 
 
@@ -387,6 +392,13 @@ HOME_GRAPH_IMPORT_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
         vol.Required("data"): dict,
+    }
+)
+
+HOME_GRAPH_RESET_SCHEMA = vol.Schema(
+    {
+        **_home_graph_common_schema(),
+        vol.Required(CONF_CONFIRM): vol.All(cv.string, vol.In(["RESET"])),
     }
 )
 
@@ -833,6 +845,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         )
         response = await _call_client(runtime.client.home_graph_sync(snapshot))
         runtime.async_apply_home_graph_response(response, sync=True)
+        _log_home_graph_sync(snapshot, response, trigger="service")
         await runtime.async_refresh_home_graph()
         return response
 
@@ -1082,6 +1095,14 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         await runtime.async_refresh_home_graph()
         return response
 
+    async def async_home_graph_reset(call: ServiceCall) -> dict[str, Any]:
+        runtime = _runtime_from_service_call(hass, call)
+        payload = runtime.home_graph_base_payload(call.data)
+        response = await _call_client(runtime.client.home_graph_reset(payload))
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+        return response
+
     async def async_home_graph_reindex(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
@@ -1260,6 +1281,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_HOME_GRAPH_RESET,
+        async_home_graph_reset,
+        schema=HOME_GRAPH_RESET_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_HOME_GRAPH_REINDEX,
         async_home_graph_reindex,
         schema=HOME_GRAPH_REINDEX_SCHEMA,
@@ -1335,6 +1363,7 @@ async def _async_auto_sync_home_graph(runtime: GoodVibesRuntimeData) -> None:
         )
         response = await runtime.client.home_graph_sync(snapshot)
         runtime.async_apply_home_graph_response(response, sync=True)
+        _log_home_graph_sync(snapshot, response, trigger="startup")
         await runtime.async_refresh_home_graph()
     except GoodVibesClientError as err:
         runtime.home_graph_last_error = str(err)
@@ -1423,6 +1452,68 @@ def _home_graph_payload(
     if target := _target_payload(data):
         payload["target"] = target
     return payload
+
+
+def _log_home_graph_sync(
+    snapshot: dict[str, Any],
+    response: dict[str, Any],
+    *,
+    trigger: str,
+) -> None:
+    """Log a compact Home Graph sync summary for clean rebuild coordination."""
+
+    _LOGGER.info(
+        (
+            "GoodVibes Home Graph sync completed: trigger=%s installation_id=%s "
+            "knowledge_space_id=%s entities=%s devices=%s areas=%s automations=%s "
+            "scripts=%s scenes=%s integrations=%s ok=%s sources=%s nodes=%s edges=%s "
+            "issues=%s status=%s"
+        ),
+        trigger,
+        snapshot.get("installationId"),
+        snapshot.get("knowledgeSpaceId"),
+        _count(snapshot.get("entities")),
+        _count(snapshot.get("devices")),
+        _count(snapshot.get("areas")),
+        _count(snapshot.get("automations")),
+        _count(snapshot.get("scripts")),
+        _count(snapshot.get("scenes")),
+        _count(snapshot.get("integrations")),
+        response.get("ok"),
+        _first_number(response, "sourceCount", "sources"),
+        _first_number(response, "nodeCount", "nodes"),
+        _first_number(response, "edgeCount", "edges"),
+        _first_number(response, "issueCount", "issues"),
+        response.get("status"),
+    )
+
+
+def _count(value: Any) -> int:
+    """Return a count for list-like or count-bearing payload values."""
+
+    if isinstance(value, list | tuple | set):
+        return len(value)
+    if isinstance(value, dict):
+        count = value.get("count")
+        if isinstance(count, int):
+            return count
+    return 0
+
+
+def _first_number(payload: dict[str, Any], *keys: str) -> int | None:
+    """Return the first numeric count or list length from a payload."""
+
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, int | float):
+            return int(value)
+        if isinstance(value, list | tuple | set):
+            return len(value)
+        if isinstance(value, dict):
+            count = value.get("count")
+            if isinstance(count, int | float):
+                return int(count)
+    return None
 
 
 def _knowledge_link_payload(

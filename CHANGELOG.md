@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.51
+
+- Target `@pellux/goodvibes-sdk@0.28.10`.
+- Add thin-client support for the SDK-owned admin reset route `POST /api/homeassistant/home-graph/reset` through the GoodVibes Home panel websocket bridge and the `goodvibes.home_graph_reset` service.
+- Require typed `RESET` confirmation before calling the dangerous reset route, and keep export/import documented as backup/transfer only, not reset.
+- Document the clean-space rebuild flow: export diagnostics, reset the target `homeassistant:<installationId>` space through the SDK route, sync the real Home Assistant snapshot, reingest or relink uploads, then run reindex/refinement/page generation before retesting.
+- Stop reading Home Assistant's deprecated `device.suggested_area` field while building Home Graph snapshots.
+
 ## 0.5.50
 
 - Target `@pellux/goodvibes-sdk@0.28.9`.

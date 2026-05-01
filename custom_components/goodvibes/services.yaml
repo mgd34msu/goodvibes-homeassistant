@@ -783,6 +783,25 @@ home_graph_import:
       selector:
         object:
 
+home_graph_reset:
+  description: Reset one daemon-owned Home Graph knowledge space. Export first; this is a dangerous SDK admin route and is not an import mechanism.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    installation_id:
+      selector:
+        text:
+    knowledge_space_id:
+      selector:
+        text:
+    confirm:
+      required: true
+      description: Type RESET to confirm this operation.
+      selector:
+        text:
+
 home_graph_reindex:
   description: Reindex and semantically enrich existing Home Graph uploads without reuploading files.
   fields:
