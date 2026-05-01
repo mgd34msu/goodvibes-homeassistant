@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.37
+
+- Target `@pellux/goodvibes-sdk@0.27.10`.
+- Document SDK `0.27.10` Home Graph semantic self-improvement support: Home Graph now advertises `semantic-self-improvement`, and reindex semantic output may include `selfImprovement`.
+- Confirm the GoodVibes Home panel sync/reindex/ask/pages/map calls remain compatible with the SDK `0.27.10` contract; no panel UI change was required.
+
 ## 0.5.36
 
 - Target `@pellux/goodvibes-sdk@0.27.9`.
