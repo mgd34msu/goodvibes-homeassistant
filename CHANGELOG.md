@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.48
+
+- Target `@pellux/goodvibes-sdk@0.28.8`.
+- Document SDK `0.28.8` Home Graph behavior: no panel contract change is expected except optional `coalesced` in reindex responses.
+- Surface the optional reindex `coalesced` flag in the panel operation summary.
+- Retest changed-only reindex, repeated reindex, Home Graph Ask, base knowledge Ask with `knowledgeSpaceId: "homeassistant"`, generated pages, and map filters against the live daemon after TUI version confirmation.
+
 ## 0.5.47
 
 - Target `@pellux/goodvibes-sdk@0.28.7`.

@@ -3170,6 +3170,7 @@ function operationSummaryFields(result) {
     ["Generated Pages Skipped", result.skippedGeneratedPageArtifactCount],
     ["Generated Pages Refreshed", result.refreshedGeneratedPageCount],
     ["Page Policy", result.generatedPagePolicyVersion],
+    ["Coalesced", booleanLabel(result.coalesced)],
     ["Sources", Array.isArray(result.sources) ? result.sources.length : undefined],
     ["Failures", Array.isArray(result.failures) ? result.failures.length : undefined],
     ["Quality Issues", Array.isArray(result.qualityIssues) ? result.qualityIssues.length : undefined],
