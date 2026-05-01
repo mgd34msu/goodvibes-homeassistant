@@ -598,12 +598,15 @@ class GoodVibesHomePanel extends HTMLElement {
       return;
     }
     if (name === "reset") {
-      if (fields.confirm !== "RESET") {
+      if (!fields.dryRun && fields.confirm !== "RESET") {
         this._showError(new Error("Type RESET to reset the Home Graph space."));
         return;
       }
-      await this._call("reset", { confirm: fields.confirm });
-      if (!this._error) {
+      await this._call("reset", {
+        confirm: fields.confirm,
+        dryRun: fields.dryRun,
+      });
+      if (!this._error && !fields.dryRun) {
         await this._syncAndRefresh();
       }
     }
@@ -1735,8 +1738,9 @@ class GoodVibesHomePanel extends HTMLElement {
             <button type="submit"><ha-icon icon="mdi:import"></ha-icon><span>Import Home Graph</span></button>
           </form>
           <form data-form="reset" class="danger-zone">
+            <label class="check"><input name="dryRun" type="checkbox" checked><span>Preview only</span></label>
             <label><span>Reset confirmation</span><input name="confirm" type="text" autocomplete="off" placeholder="RESET"></label>
-            <p>Export first. Reset clears this Home Graph space, then the panel syncs the real Home Assistant snapshot again.</p>
+            <p>Preview first. Destructive reset requires typing RESET, clears this Home Graph space, then the panel syncs the real Home Assistant snapshot again.</p>
             <button type="submit"><ha-icon icon="mdi:database-refresh-outline"></ha-icon><span>Reset Home Graph</span></button>
           </form>
         </div>

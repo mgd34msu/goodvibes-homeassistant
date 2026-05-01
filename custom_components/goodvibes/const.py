@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "goodvibes"
-INTEGRATION_VERSION = "0.5.51"
+INTEGRATION_VERSION = "0.5.52"
 UPDATE_REPOSITORY = "OWNER/goodvibes-homeassistant"
 UPDATE_RELEASES_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
 UPDATE_RELEASES_URL = f"https://github.com/{UPDATE_REPOSITORY}/releases"
@@ -60,6 +60,7 @@ CONF_STATUS = "status"
 CONF_SEVERITY = "severity"
 CONF_CODE = "code"
 CONF_CONFIRM = "confirm"
+CONF_DRY_RUN = "dry_run"
 
 DEFAULT_DAEMON_URL = "http://127.0.0.1:3210"
 DEFAULT_EVENT_TYPE = "goodvibes_message"

@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.51"
+FRONTEND_ASSET_VERSION = "0.5.52"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -353,12 +353,17 @@ async def _handle_home_graph_action(
         await runtime.async_refresh_home_graph()
         return response
     if action == "reset":
-        confirm = _required_text(data, "confirm")
-        if confirm != "RESET":
+        dry_run = _truthy(data.get("dryRun") or data.get("dry_run"))
+        confirm = str(data.get("confirm") or "").strip()
+        if confirm != "RESET" and not dry_run:
             raise HomeAssistantError("Type RESET to reset the Home Graph space.")
-        response = await runtime.client.home_graph_reset(_base_payload(runtime, data))
-        runtime.async_apply_home_graph_response(response)
-        await runtime.async_refresh_home_graph()
+        payload = _base_payload(runtime, data)
+        if dry_run:
+            payload["dryRun"] = True
+        response = await runtime.client.home_graph_reset(payload)
+        if not dry_run:
+            runtime.async_apply_home_graph_response(response)
+            await runtime.async_refresh_home_graph()
         return response
     if action == "reindex":
         response = await runtime.client.home_graph_reindex(_base_payload(runtime, data))

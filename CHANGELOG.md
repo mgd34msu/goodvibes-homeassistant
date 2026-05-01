@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.52
+
+- Target `@pellux/goodvibes-sdk@0.28.11`.
+- Add Home Graph reset preview support through `dry_run`/`dryRun`, so the panel and service can call the SDK reset route non-destructively before requiring typed `RESET` for deletion.
+- Document SDK `0.28.11` validation focus: reset dry-run previews, clean-space sync/reindex/ask/pages/map, bounded feature/spec repair during Ask, concrete Home Assistant knowledge-space repair task placement, and map self-loop filtering.
+
 ## 0.5.51
 
 - Target `@pellux/goodvibes-sdk@0.28.10`.

@@ -796,9 +796,13 @@ home_graph_reset:
     knowledge_space_id:
       selector:
         text:
+    dry_run:
+      default: true
+      description: Preview reset counts without deleting anything.
+      selector:
+        boolean:
     confirm:
-      required: true
-      description: Type RESET to confirm this operation.
+      description: Type RESET to confirm destructive reset. Not required for dry_run.
       selector:
         text:
 

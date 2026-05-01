@@ -31,6 +31,7 @@ from .const import (
     CONF_DECISION,
     CONF_DEVICE_ID,
     CONF_DISPLAY_NAME,
+    CONF_DRY_RUN,
     CONF_ENTITY_ID,
     CONF_EVENT_TYPE,
     CONF_FACT_ID,
@@ -398,7 +399,8 @@ HOME_GRAPH_IMPORT_SCHEMA = vol.Schema(
 HOME_GRAPH_RESET_SCHEMA = vol.Schema(
     {
         **_home_graph_common_schema(),
-        vol.Required(CONF_CONFIRM): vol.All(cv.string, vol.In(["RESET"])),
+        vol.Optional(CONF_CONFIRM): cv.string,
+        vol.Optional(CONF_DRY_RUN, default=False): bool,
     }
 )
 
@@ -1098,9 +1100,15 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     async def async_home_graph_reset(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
         payload = runtime.home_graph_base_payload(call.data)
+        dry_run = bool(call.data.get(CONF_DRY_RUN))
+        if dry_run:
+            payload["dryRun"] = True
+        elif call.data.get(CONF_CONFIRM) != "RESET":
+            raise HomeAssistantError("Type RESET to reset the Home Graph space.")
         response = await _call_client(runtime.client.home_graph_reset(payload))
-        runtime.async_apply_home_graph_response(response)
-        await runtime.async_refresh_home_graph()
+        if not dry_run:
+            runtime.async_apply_home_graph_response(response)
+            await runtime.async_refresh_home_graph()
         return response
 
     async def async_home_graph_reindex(call: ServiceCall) -> dict[str, Any]:
