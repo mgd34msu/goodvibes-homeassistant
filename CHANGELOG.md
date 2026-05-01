@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.53
+
+- Target `@pellux/goodvibes-sdk@0.28.12`.
+- Document the `0.28.12` validation focus: clean-space reset/sync/reindex/ask/pages/map, Home Assistant sync return behavior, Home Graph readiness/refinement tasks, base knowledge `knowledgeSpaceId: "homeassistant"` routing, and UI contract compatibility.
+- Note that Home Assistant should be restarted after daemon SDK restarts during live validation so the integration reconnects cleanly.
+
 ## 0.5.52
 
 - Target `@pellux/goodvibes-sdk@0.28.11`.
