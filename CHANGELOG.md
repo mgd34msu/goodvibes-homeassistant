@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.38
+
+- Target `@pellux/goodvibes-sdk@0.27.11`.
+- Document SDK `0.27.11` Home Graph semantic quality fixes: self-improvement skip counts are now gap-specific, and Magic Remote/Bluetooth accessory compatibility is filtered from feature/spec facts, pages, and answers unless the user asks for remote or accessory details.
+- Confirm the GoodVibes Home panel status/reindex/ask/pages/map calls remain compatible with the SDK `0.27.11` contract; no panel UI change was required.
+
 ## 0.5.37
 
 - Target `@pellux/goodvibes-sdk@0.27.10`.
