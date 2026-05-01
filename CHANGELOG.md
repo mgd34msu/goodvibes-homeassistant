@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.54
+
+- Target `@pellux/goodvibes-sdk@0.28.13`.
+- Document the `0.28.13` validation focus: bounded Home Graph Ask responses, refinement task IDs, background targeted source repair, LG TV feature/spec gap closure, scoped sources/facts/linked objects, and clean reset/sync/reindex/base-ask/pages/map/tasks/readiness timings.
+
 ## 0.5.53
 
 - Target `@pellux/goodvibes-sdk@0.28.12`.
