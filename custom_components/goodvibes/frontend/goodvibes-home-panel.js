@@ -50,15 +50,38 @@ const RELATION_OPTIONS = [
 
 const MAP_HA_FILTERS = [
   ["objectKinds", "Objects"],
+  ["automations", "Automations"],
   ["areaIds", "Areas"],
   ["integrationDomains", "Integrations"],
   ["domains", "Domains"],
-  ["deviceClasses", "Classes"],
+  ["deviceClasses", "Device Classes"],
   ["labels", "Labels"],
   ["entityIds", "Entities"],
   ["deviceIds", "Devices"],
   ["integrationIds", "Integration IDs"],
 ];
+const MAP_FILTER_GROUPS = [
+  { key: "entityIds", alias: "automations", label: "Automations", match: (value) => String(value || "").startsWith("automation."), defaultOpen: true },
+  { key: "areaIds", label: "Areas", defaultOpen: true },
+  { key: "integrationDomains", label: "Integrations", defaultOpen: true },
+  { key: "domains", label: "Domains", defaultOpen: true },
+  { key: "objectKinds", label: "Objects" },
+  { key: "entityIds", label: "Entities", match: (value) => !String(value || "").startsWith("automation.") },
+  { key: "deviceIds", label: "Devices", technical: true },
+  { key: "deviceClasses", label: "Device Classes" },
+  { key: "labels", label: "Labels", noisy: true },
+  { key: "integrationIds", label: "Integration IDs", technical: true },
+];
+const MAP_DEFAULT_LIMIT = 150;
+const MAP_VISIBLE_FACET_LIMIT = 14;
+const MAP_DEFAULT_OPEN_FILTERS = new Set([
+  "objectKinds",
+  "automations",
+  "areaIds",
+  "integrationDomains",
+  "domains",
+]);
+const MAP_TECHNICAL_FILTERS = new Set(["entityIds", "deviceIds", "integrationIds"]);
 
 class GoodVibesHomePanel extends HTMLElement {
   constructor() {
@@ -79,11 +102,12 @@ class GoodVibesHomePanel extends HTMLElement {
     this._answer = {};
     this._lastResult = {};
     this._filter = "";
-    this._mapLimit = 500;
+    this._mapLimit = MAP_DEFAULT_LIMIT;
     this._mapQuery = "";
-    this._mapIncludeSources = true;
+    this._mapFacetQuery = "";
+    this._mapIncludeSources = false;
     this._mapIncludeIssues = false;
-    this._mapIncludeGenerated = true;
+    this._mapIncludeGenerated = false;
     this._mapFilters = {};
     this._loaded = false;
     this._pendingBackgroundRender = false;
@@ -361,6 +385,11 @@ class GoodVibesHomePanel extends HTMLElement {
       await this._call("map", this._mapPayload());
       return;
     }
+    if (action === "map_clear_facet_search") {
+      this._mapFacetQuery = "";
+      this._render();
+      return;
+    }
     if (action === "review_select_all") {
       this._visibleIssues().forEach((issue) => this._selectedReviewIds.add(issueKey(issue)));
       this._render();
@@ -408,12 +437,17 @@ class GoodVibesHomePanel extends HTMLElement {
       return;
     }
     if (name === "map") {
-      this._mapLimit = Number(fields.limit) || 500;
+      this._mapLimit = Number(fields.limit) || MAP_DEFAULT_LIMIT;
       this._mapQuery = fields.query || "";
       this._mapIncludeSources = Boolean(fields.includeSources);
       this._mapIncludeIssues = Boolean(fields.includeIssues);
       this._mapIncludeGenerated = Boolean(fields.includeGenerated);
       await this._call("map", this._mapPayload());
+      return;
+    }
+    if (name === "map_facet_search") {
+      this._mapFacetQuery = fields.facetQuery || "";
+      this._render();
       return;
     }
     if (name === "refinement") {
@@ -1032,6 +1066,7 @@ class GoodVibesHomePanel extends HTMLElement {
     const nodes = itemsFromPayload(map, ["nodes"]);
     const edges = itemsFromPayload(map, ["edges"]);
     const facets = map?.facets?.homeAssistant || {};
+    const labelIndex = mapLabelIndex(map);
     const selectedFilters = Object.values(this._mapFilters || {}).reduce(
       (total, values) => total + (Array.isArray(values) ? values.length : 0),
       0
@@ -1065,26 +1100,38 @@ class GoodVibesHomePanel extends HTMLElement {
               <button type="submit"><ha-icon icon="mdi:vector-polyline"></ha-icon><span>Update</span></button>
             </form>
           </div>
-          <div class="map-filters">
-            <div class="map-filter-heading">
-              <span>${escapeHtml(String(selectedFilters))} selected</span>
-              <button type="button" data-action="map_clear_filters">Clear filters</button>
+          <div class="map-workspace">
+            <aside class="map-filters">
+              <div class="map-filter-heading">
+                <span>${escapeHtml(String(selectedFilters))} selected</span>
+                <button type="button" data-action="map_clear_filters">Clear filters</button>
+              </div>
+              <form data-form="map_facet_search" class="facet-search">
+                <label>
+                  <span>Find Filter</span>
+                  <input name="facetQuery" type="search" autocomplete="off" value="${escapeAttr(this._mapFacetQuery)}" placeholder="Automation, room, entity, device">
+                </label>
+                <button type="submit"><ha-icon icon="mdi:magnify"></ha-icon><span>Find</span></button>
+                ${this._mapFacetQuery ? `<button type="button" data-action="map_clear_facet_search">Clear</button>` : ""}
+              </form>
+              ${this._selectedMapFilters(labelIndex)}
+              ${this._mapFacetGroups(facets, map, labelIndex)}
+            </aside>
+            <div class="map-main">
+              <div class="map-canvas">
+                ${this._mapVisual(map, nodes, edges)}
+              </div>
+              <div class="map-stats">
+                <span>${escapeHtml(String(map.nodeCount ?? nodes.length))} nodes</span>
+                <span>${escapeHtml(String(map.edgeCount ?? edges.length))} edges</span>
+                ${
+                  map.totalNodeCount !== undefined
+                    ? `<span>${escapeHtml(String(map.totalNodeCount))} matching records</span>`
+                    : ""
+                }
+                ${map.spaceId ? `<span>${escapeHtml(map.spaceId)}</span>` : ""}
+              </div>
             </div>
-            ${this._selectedMapFilters()}
-            ${this._mapFacetGroups(facets)}
-          </div>
-          <div class="map-canvas">
-            ${this._mapVisual(map, nodes)}
-          </div>
-          <div class="map-stats">
-            <span>${escapeHtml(String(map.nodeCount ?? nodes.length))} nodes</span>
-            <span>${escapeHtml(String(map.edgeCount ?? edges.length))} edges</span>
-            ${
-              map.totalNodeCount !== undefined
-                ? `<span>${escapeHtml(String(map.totalNodeCount))} matching records</span>`
-                : ""
-            }
-            ${map.spaceId ? `<span>${escapeHtml(map.spaceId)}</span>` : ""}
           </div>
         </article>
       </section>
@@ -1092,60 +1139,77 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  _mapFacetGroups(facets) {
-    const groups = MAP_HA_FILTERS
-      .map(([key, label]) => this._mapFacetGroup(key, label, facets?.[key]))
+  _mapFacetGroups(facets, map, labelIndex) {
+    const groups = MAP_FILTER_GROUPS
+      .map((group) => this._mapFacetGroup(group, facets?.[group.key], map, labelIndex))
       .filter(Boolean);
     return groups.length ? groups.join("") : `<p class="empty">No map filters available</p>`;
   }
 
-  _mapFacetGroup(key, label, values) {
+  _mapFacetGroup(group, values, map, labelIndex) {
+    const key = group.key;
+    const label = group.label;
+    const groupId = group.alias || key;
+    const localQuery = this._mapFacetQuery.trim().toLowerCase();
     const selected = this._mapFilters?.[key] || [];
-    const baseItems = facetItems(values);
+    const baseItems = facetItems(values, key, labelIndex)
+      .filter((item) => !group.match || group.match(item.value, item));
     const known = new Set(baseItems.map((item) => item.value));
     const selectedItems = selected
-      .filter((value) => !known.has(value))
-      .map((value) => ({ value, label: value, count: 0 }));
+      .filter((value) => !known.has(value) && (!group.match || group.match(value)))
+      .map((value) => enrichFacetItem({ value, label: friendlyFacetLabel(value), count: 0 }, key, labelIndex));
     const selectedKnownItems = baseItems.filter((item) => selected.includes(item.value));
     const selectedValues = new Set(
       [...selectedItems, ...selectedKnownItems].map((item) => item.value)
     );
-    const topItems = baseItems.filter((item) => !selectedValues.has(item.value)).slice(0, 10);
+    const visibleBaseItems = baseItems
+      .filter((item) => shouldShowFacetItem(key, item, group))
+      .filter((item) => !localQuery || facetSearchText(item, key).includes(localQuery));
+    const hiddenTechnicalCount = baseItems.length - visibleBaseItems.length;
+    const topItems = visibleBaseItems
+      .filter((item) => !selectedValues.has(item.value))
+      .slice(0, MAP_VISIBLE_FACET_LIMIT);
     const items = [...selectedItems, ...selectedKnownItems, ...topItems];
-    if (!items.length) {
+    if (!items.length && (!baseItems.length || localQuery)) {
       return "";
     }
+    const open = selected.length || MAP_DEFAULT_OPEN_FILTERS.has(groupId) || group.defaultOpen || localQuery;
+    const detail = selected.length
+      ? `${selected.length} selected`
+      : `${baseItems.length} available`;
     return `
-      <details class="facet-group" ${selected.length ? "open" : ""}>
+      <details class="facet-group ${MAP_TECHNICAL_FILTERS.has(key) || group.technical ? "technical" : ""}" ${open ? "open" : ""}>
         <summary>
           <span>${escapeHtml(label)}</span>
-          <small>${escapeHtml(String(selected.length || baseItems.length))}${selected.length ? " selected" : ""}</small>
+          <small>${escapeHtml(detail)}</small>
         </summary>
-        <div class="facet-buttons">
-          ${items
-            .map((item) => {
-              const active = (this._mapFilters?.[key] || []).includes(item.value);
-              return `
-                <button
-                  type="button"
-                  class="facet-chip ${active ? "active" : ""}"
-                  data-map-filter-key="${escapeAttr(key)}"
-                  data-map-filter-value="${escapeAttr(item.value)}"
-                  title="${escapeAttr(item.value)}"
-                >
-                  <span>${escapeHtml(item.label || item.value)}</span>
-                  <strong>${escapeHtml(String(item.count))}</strong>
-                </button>
-              `;
-            })
-            .join("")}
-        </div>
+        ${
+          items.length
+            ? `<div class="facet-buttons">${items.map((item) => this._mapFacetChip(key, item)).join("")}</div>`
+            : `<p class="facet-note">${escapeHtml(`${hiddenTechnicalCount || baseItems.length} unlabeled technical ID${(hiddenTechnicalCount || baseItems.length) === 1 ? "" : "s"} hidden`)}</p>`
+        }
+        ${hiddenTechnicalCount && items.length ? `<p class="facet-note">${escapeHtml(`${hiddenTechnicalCount} unlabeled technical ID${hiddenTechnicalCount === 1 ? "" : "s"} hidden`)}</p>` : ""}
       </details>
     `;
   }
 
-  _selectedMapFilters() {
-    const labelByKey = new Map(MAP_HA_FILTERS);
+  _mapFacetChip(key, item) {
+    const active = (this._mapFilters?.[key] || []).includes(item.value);
+    return `
+      <button
+        type="button"
+        class="facet-chip ${active ? "active" : ""}"
+        data-map-filter-key="${escapeAttr(key)}"
+        data-map-filter-value="${escapeAttr(item.value)}"
+        title="${escapeAttr(item.value)}"
+      >
+        <span>${escapeHtml(item.label || friendlyFacetLabel(item.value))}</span>
+        ${item.count !== undefined ? `<strong>${escapeHtml(String(item.count))}</strong>` : ""}
+      </button>
+    `;
+  }
+
+  _selectedMapFilters(labelIndex) {
     const entries = Object.entries(this._mapFilters || {}).flatMap(([key, values]) =>
       (Array.isArray(values) ? values : []).map((value) => ({ key, value }))
     );
@@ -1164,7 +1228,7 @@ class GoodVibesHomePanel extends HTMLElement {
                 data-map-filter-value="${escapeAttr(value)}"
                 title="${escapeAttr(value)}"
               >
-                <span>${escapeHtml(`${labelByKey.get(key) || key}: ${friendlyFacetLabel(value)}`)}</span>
+                <span>${escapeHtml(`${selectedMapFilterLabel(key, value)}: ${displayFacetValue(key, value, labelIndex)}`)}</span>
               </button>
             `
           )
@@ -1173,12 +1237,21 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  _mapVisual(map, nodes) {
-    if (typeof map?.svg === "string" && map.svg) {
+  _mapVisual(map, nodes, edges) {
+    if (typeof map?.svg === "string" && map.svg && edges.length) {
       return `<img class="map-image" alt="Home Graph knowledge map" src="${escapeAttr(svgDataUrl(map.svg))}">`;
     }
     if (!nodes.length) {
       return `<p class="empty">No map loaded</p>`;
+    }
+    if (!edges.length) {
+      return `
+        <div class="map-empty">
+          <ha-icon icon="mdi:vector-polyline-remove"></ha-icon>
+          <strong>No relationships in this view</strong>
+          <span>Select an automation, entity, device, room, or integration from the drilldown filters, or enable Sources/Pages when you want source relationships.</span>
+        </div>
+      `;
     }
     return `<p class="empty">The daemon did not return a rendered map.</p>`;
   }
@@ -2274,13 +2347,19 @@ class GoodVibesHomePanel extends HTMLElement {
         gap: 10px;
         grid-template-columns: minmax(180px, 280px) minmax(90px, 140px) auto auto auto auto;
       }
+      .map-workspace {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+      }
       .map-filters {
         background: var(--secondary-background-color);
         border: 1px solid var(--divider-color);
         border-radius: 8px;
         display: grid;
         gap: 12px;
-        margin-bottom: 12px;
+        max-height: 680px;
+        overflow: auto;
         padding: 12px;
       }
       .map-filter-heading {
@@ -2323,6 +2402,20 @@ class GoodVibesHomePanel extends HTMLElement {
         gap: 6px;
         padding-top: 8px;
       }
+      .facet-search {
+        align-items: end;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+      }
+      .facet-search button {
+        min-height: 40px;
+      }
+      .facet-note {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        margin: 2px 0 0;
+      }
       .selected-filters {
         display: flex;
         flex-wrap: wrap;
@@ -2350,17 +2443,41 @@ class GoodVibesHomePanel extends HTMLElement {
         border-color: var(--accent-color);
         color: var(--accent-color);
       }
+      .map-main {
+        min-width: 0;
+      }
       .map-canvas {
         background: var(--primary-background-color);
         border: 1px solid var(--divider-color);
         border-radius: 8px;
+        display: grid;
         min-height: 520px;
         overflow: auto;
+      }
+      .map-empty {
+        align-content: center;
+        color: var(--secondary-text-color);
+        display: grid;
+        gap: 8px;
+        justify-items: center;
+        min-height: 520px;
+        padding: 24px;
+        text-align: center;
+      }
+      .map-empty ha-icon {
+        color: var(--secondary-text-color);
+        --mdc-icon-size: 34px;
+      }
+      .map-empty strong {
+        color: var(--primary-text-color);
+      }
+      .map-empty span {
+        max-width: 520px;
       }
       .map-image {
         display: block;
         height: auto;
-        min-width: 900px;
+        min-width: 760px;
         width: 100%;
       }
       .map-stats {
@@ -2747,8 +2864,10 @@ class GoodVibesHomePanel extends HTMLElement {
       @media (max-width: 860px) {
         .topbar,
         .grid.two,
+        .facet-search,
         .inline-form,
         .map-form,
+        .map-workspace,
         .target-grid {
           grid-template-columns: 1fr;
         }
@@ -3452,7 +3571,7 @@ function isDirtyField(field) {
   return field.value !== field.defaultValue;
 }
 
-function facetItems(values) {
+function facetItems(values, key, labelIndex) {
   if (!values) {
     return [];
   }
@@ -3470,7 +3589,8 @@ function facetItems(values) {
         const value = String(item ?? "");
         return { value, label: friendlyFacetLabel(value), count: 0 };
       })
-      .filter((item) => item.value);
+      .filter((item) => item.value)
+      .map((item) => enrichFacetItem(item, key, labelIndex));
   }
   if (typeof values === "object") {
     return Object.entries(values)
@@ -3480,6 +3600,7 @@ function facetItems(values) {
         count: Number(count) || 0,
       }))
       .filter((item) => item.value)
+      .map((item) => enrichFacetItem(item, key, labelIndex))
       .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
   }
   return [];
@@ -3502,12 +3623,219 @@ function facetItemLabel(item, value) {
   );
 }
 
+function enrichFacetItem(item, key, labelIndex) {
+  const value = String(item?.value || "");
+  const indexed = labelIndex?.[key]?.get(value);
+  const candidateLabel = indexed || item.label || "";
+  const hasHumanLabel = isHumanFacetLabel(value, candidateLabel);
+  const label = hasHumanLabel && candidateLabel !== value
+    ? String(candidateLabel)
+    : friendlyFacetLabel(value);
+  return {
+    ...item,
+    label,
+    hasHumanLabel,
+  };
+}
+
+function shouldShowFacetItem(key, item, group = {}) {
+  if (group.noisy && looksLikeNoisyFacetLabel(item?.label || item?.value)) {
+    return false;
+  }
+  if (!MAP_TECHNICAL_FILTERS.has(key) && !group.technical) {
+    return Boolean(item?.value);
+  }
+  return Boolean(item?.hasHumanLabel);
+}
+
+function displayFacetValue(key, value, labelIndex) {
+  const indexed = labelIndex?.[key]?.get(String(value || ""));
+  return indexed || friendlyFacetLabel(value);
+}
+
+function selectedMapFilterLabel(key, value) {
+  if (key === "entityIds" && String(value || "").startsWith("automation.")) {
+    return "Automations";
+  }
+  return new Map(MAP_HA_FILTERS).get(key) || key;
+}
+
+function facetSearchText(item, key) {
+  return [
+    key,
+    item?.value,
+    item?.label,
+    friendlyFacetLabel(item?.value),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function mapLabelIndex(map) {
+  const index = {
+    entityIds: new Map(),
+    deviceIds: new Map(),
+    integrationIds: new Map(),
+    areaIds: new Map(),
+    labels: new Map(),
+  };
+  const nodes = itemsFromPayload(map || {}, ["nodes"]);
+  const edges = itemsFromPayload(map || {}, ["edges"]);
+  const nodeTitles = new Map();
+
+  nodes.forEach((node) => {
+    const title = humanMapTitle(node);
+    const id = String(node?.id || "");
+    if (id && title) {
+      nodeTitles.set(id, title);
+    }
+    addIndexedLabels(index.entityIds, title, mapRecordValues(node, [
+      "entityId",
+      "entity_id",
+      "entity",
+      "uniqueId",
+      "unique_id",
+    ]));
+    addIndexedLabels(index.deviceIds, title, mapRecordValues(node, [
+      "deviceId",
+      "device_id",
+      "device",
+    ]));
+    addIndexedLabels(index.integrationIds, title, mapRecordValues(node, [
+      "integrationId",
+      "integration_id",
+      "configEntryId",
+      "config_entry_id",
+    ]));
+    addIndexedLabels(index.areaIds, title, mapRecordValues(node, [
+      "areaId",
+      "area_id",
+      "area",
+    ]));
+    addIndexedLabels(index.labels, title, mapRecordValues(node, ["label", "labels"]));
+  });
+
+  edges.forEach((edge) => {
+    if (edge?.source && edge?.sourceTitle) {
+      nodeTitles.set(String(edge.source), String(edge.sourceTitle));
+    }
+    if (edge?.target && edge?.targetTitle) {
+      nodeTitles.set(String(edge.target), String(edge.targetTitle));
+    }
+  });
+
+  nodeTitles.forEach((title, id) => {
+    if (!isRawTechnicalId(id)) {
+      return;
+    }
+    addIndexedLabels(index.deviceIds, title, [id]);
+    addIndexedLabels(index.entityIds, title, [id]);
+    addIndexedLabels(index.integrationIds, title, [id]);
+  });
+
+  return index;
+}
+
+function mapRecordValues(record, keys) {
+  const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
+  const ha = metadata.homeAssistant && typeof metadata.homeAssistant === "object"
+    ? metadata.homeAssistant
+    : {};
+  const containers = [record, record?.homeAssistant, record?.ha, metadata, ha].filter(
+    (item) => item && typeof item === "object"
+  );
+  return keys.flatMap((key) =>
+    containers.flatMap((item) => normalizeLabelValues(item?.[key]))
+  );
+}
+
+function normalizeLabelValues(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => normalizeLabelValues(item));
+  }
+  if (value && typeof value === "object") {
+    return normalizeLabelValues(value.id || value.value || value.name);
+  }
+  return value === undefined || value === null || value === "" ? [] : [String(value)];
+}
+
+function addIndexedLabels(index, title, values) {
+  if (!title) {
+    return;
+  }
+  values.forEach((value) => {
+    if (!value || index.has(value)) {
+      return;
+    }
+    index.set(value, title);
+  });
+}
+
+function humanMapTitle(record) {
+  const title = String(
+    record?.title ||
+      record?.name ||
+      record?.label ||
+      record?.friendlyName ||
+      record?.displayName ||
+      ""
+  ).trim();
+  if (!title || isRawTechnicalId(title)) {
+    return "";
+  }
+  return title;
+}
+
 function friendlyFacetLabel(value) {
   const text = String(value || "");
   if (/^[a-f0-9]{16,}$/i.test(text) || /^[a-f0-9]{8,}_.+/i.test(text)) {
     return `${text.slice(0, 8)}...`;
   }
+  const entity = text.match(/^([a-z0-9_]+)\.(.+)$/);
+  if (entity) {
+    return `${entity[1].replace(/_/g, " ")}: ${entity[2].replace(/_/g, " ")}`;
+  }
   return text.replace(/_/g, " ");
+}
+
+function isHumanFacetLabel(value, label) {
+  const text = String(label || "").trim();
+  if (!text) {
+    return false;
+  }
+  const rawValue = String(value || "").trim();
+  if (text === rawValue || text === friendlyFacetLabel(rawValue) || isRawTechnicalId(text)) {
+    return !isRawTechnicalId(rawValue);
+  }
+  return !looksLikeRawIdToken(text);
+}
+
+function isRawTechnicalId(value) {
+  const text = String(value || "");
+  return looksLikeRawIdToken(text);
+}
+
+function looksLikeRawIdToken(value) {
+  const text = String(value || "").trim();
+  return (
+    /^[a-f0-9]{16,}$/i.test(text) ||
+    /^[a-f0-9]{8,}_.+/i.test(text) ||
+    /^[a-f0-9]{8,}[-_][a-f0-9_-]{8,}$/i.test(text)
+  );
+}
+
+function looksLikeNoisyFacetLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return false;
+  }
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  return (
+    wordCount > 7 ||
+    /[?!.]$/.test(text) ||
+    /^(do not|never|always|make sure|check if|connect to|you have|everything you|can bluetooth|manuals?|missing[- ]|knowledge\.)/i.test(text)
+  );
 }
 
 function escapeHtml(value) {

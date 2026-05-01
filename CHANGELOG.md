@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.50
+
+- Target `@pellux/goodvibes-sdk@0.28.9`.
+- Refine the Home Graph map panel after live use: add an Automations drilldown, add local filter search, avoid rendering a useless graph when the daemon returns no edges, and keep raw technical device/entity IDs out of the primary filter list unless they have a human label.
+- Keep current graph contents out of source-quality conclusions until the SDK-owned Home Graph reset route lands; the current space is likely contaminated by earlier ingest/link/page behavior.
+
+## 0.5.49
+
+- Target `@pellux/goodvibes-sdk@0.28.9`.
+- Improve the Home Graph map panel: use a quieter default graph, keep filters in a dedicated drilldown sidebar, hide unlabeled raw technical IDs from primary chip lists, and prefer human labels when the daemon returns matching map node or edge metadata.
+- Keep the optional `coalesced` reindex field visible in operation summaries and retest Home Graph Ask, base knowledge Ask, pages, map edges, and reindex responsiveness against the live daemon after TUI confirms the daemon update.
+
 ## 0.5.48
 
 - Target `@pellux/goodvibes-sdk@0.28.8`.
