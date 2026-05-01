@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 DOMAIN = "goodvibes"
+INTEGRATION_VERSION = "0.5.47"
+UPDATE_REPOSITORY = "OWNER/goodvibes-homeassistant"
+UPDATE_RELEASES_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
+UPDATE_RELEASES_URL = f"https://github.com/{UPDATE_REPOSITORY}/releases"
 
 CONF_DAEMON_URL = "daemon_url"
 CONF_DAEMON_TOKEN = "daemon_token"
@@ -66,7 +70,7 @@ DEFAULT_DISPLAY_NAME = "Home Assistant"
 DEFAULT_CONVERSATION_TIMEOUT_MS = 120000
 DEFAULT_HOME_GRAPH_ENABLED = True
 
-PLATFORMS = ["sensor", "conversation"]
+PLATFORMS = ["sensor", "conversation", "update"]
 
 SIGNAL_UPDATE = "goodvibes_update"
 

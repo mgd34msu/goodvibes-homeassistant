@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
@@ -442,6 +443,7 @@ class GoodVibesRuntimeData:
     active_agent_id: str | None = None
     active_run_id: str | None = None
     unsubscribe_event: Any | None = None
+    unsubscribe_auto_sync: Any | None = None
 
     @property
     def signal(self) -> str:
@@ -1310,7 +1312,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if runtime.home_graph_enabled:
-        hass.async_create_task(_async_auto_sync_home_graph(runtime))
+        if getattr(hass, "is_running", False):
+            hass.async_create_task(_async_auto_sync_home_graph(runtime))
+        else:
+            runtime.unsubscribe_auto_sync = hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED,
+                lambda _event: hass.async_create_task(_async_auto_sync_home_graph(runtime)),
+            )
     return True
 
 
@@ -1341,6 +1349,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         runtime = hass.data[DOMAIN].pop(entry.entry_id, None)
         if runtime and runtime.unsubscribe_event:
             runtime.unsubscribe_event()
+        if runtime and runtime.unsubscribe_auto_sync:
+            runtime.unsubscribe_auto_sync()
         if not any(
             isinstance(value, GoodVibesRuntimeData)
             for value in hass.data.get(DOMAIN, {}).values()

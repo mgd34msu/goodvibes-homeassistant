@@ -3,12 +3,12 @@ const DEFAULT_UPLOAD_URL = "/api/goodvibes/home-graph/upload";
 const AUTO_TRIAGE_BATCH_LIMIT = 25;
 const OPEN_ISSUES_PAYLOAD = { status: "open" };
 const ACTIVE_REFINEMENT_STATES = new Set([
-  "detected",
   "queued",
   "searching",
   "evaluating",
   "extracting",
   "applying",
+  "verifying",
 ]);
 
 const TARGET_KIND_OPTIONS = [
@@ -875,6 +875,8 @@ class GoodVibesHomePanel extends HTMLElement {
     if (!this.shadowRoot) {
       return;
     }
+    const busy = Boolean(this._busy);
+    const busyAttr = busy ? "disabled" : "";
     const scrollState = this._captureScrollState();
     this._pendingBackgroundRender = false;
     this.shadowRoot.innerHTML = `
@@ -891,15 +893,15 @@ class GoodVibesHomePanel extends HTMLElement {
             </div>
           </div>
           <div class="actions">
-            <button type="button" data-action="refresh" title="Refresh">
+            <button type="button" data-action="refresh" title="Refresh" ${busyAttr}>
               <ha-icon icon="mdi:refresh"></ha-icon>
               <span>Refresh</span>
             </button>
-            <button type="button" data-action="sync" title="Sync Home Graph">
+            <button type="button" data-action="sync" title="Sync Home Graph" ${busyAttr}>
               <ha-icon icon="mdi:sync"></ha-icon>
               <span>Sync</span>
             </button>
-            <button type="button" data-action="reindex" title="Repair Home Graph extraction">
+            <button type="button" data-action="reindex" title="Repair Home Graph extraction" ${busyAttr}>
               <ha-icon icon="mdi:file-refresh-outline"></ha-icon>
               <span>Reindex uploads</span>
             </button>
@@ -916,7 +918,7 @@ class GoodVibesHomePanel extends HTMLElement {
           ${this._tabButton("pages", "mdi:file-document-outline", "Pages")}
         </nav>
         ${this._error ? `<div class="notice error">${escapeHtml(this._error)}</div>` : ""}
-        ${this._busy ? `<div class="notice">Working: ${escapeHtml(this._busy)}</div>` : ""}
+        ${this._busy ? this._workingNotice(busyLabel(this._busy)) : ""}
         ${
           this._tab !== "review" && (this._triageInFlight || this._triageQueued)
             ? this._triageProgressNotice("GoodVibes is classifying review issues.")
@@ -929,6 +931,18 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
     this._wireEvents();
     this._restoreScrollState(scrollState);
+  }
+
+  _workingNotice(label) {
+    return `
+      <div class="notice working">
+        <ha-icon class="spin" icon="mdi:loading"></ha-icon>
+        <div>
+          <strong>${escapeHtml(label)}</strong>
+          <small>GoodVibes is working. Long-running graph repair can continue in the background after the request returns.</small>
+        </div>
+      </div>
+    `;
   }
 
   _tabButton(tab, icon, label) {
@@ -1056,6 +1070,7 @@ class GoodVibesHomePanel extends HTMLElement {
               <span>${escapeHtml(String(selectedFilters))} selected</span>
               <button type="button" data-action="map_clear_filters">Clear filters</button>
             </div>
+            ${this._selectedMapFilters()}
             ${this._mapFacetGroups(facets)}
           </div>
           <div class="map-canvas">
@@ -1091,13 +1106,21 @@ class GoodVibesHomePanel extends HTMLElement {
     const selectedItems = selected
       .filter((value) => !known.has(value))
       .map((value) => ({ value, label: value, count: 0 }));
-    const items = [...selectedItems, ...baseItems.slice(0, 16)];
+    const selectedKnownItems = baseItems.filter((item) => selected.includes(item.value));
+    const selectedValues = new Set(
+      [...selectedItems, ...selectedKnownItems].map((item) => item.value)
+    );
+    const topItems = baseItems.filter((item) => !selectedValues.has(item.value)).slice(0, 10);
+    const items = [...selectedItems, ...selectedKnownItems, ...topItems];
     if (!items.length) {
       return "";
     }
     return `
-      <div class="facet-group">
-        <h3>${escapeHtml(label)}</h3>
+      <details class="facet-group" ${selected.length ? "open" : ""}>
+        <summary>
+          <span>${escapeHtml(label)}</span>
+          <small>${escapeHtml(String(selected.length || baseItems.length))}${selected.length ? " selected" : ""}</small>
+        </summary>
         <div class="facet-buttons">
           ${items
             .map((item) => {
@@ -1117,6 +1140,35 @@ class GoodVibesHomePanel extends HTMLElement {
             })
             .join("")}
         </div>
+      </details>
+    `;
+  }
+
+  _selectedMapFilters() {
+    const labelByKey = new Map(MAP_HA_FILTERS);
+    const entries = Object.entries(this._mapFilters || {}).flatMap(([key, values]) =>
+      (Array.isArray(values) ? values : []).map((value) => ({ key, value }))
+    );
+    if (!entries.length) {
+      return "";
+    }
+    return `
+      <div class="selected-filters">
+        ${entries
+          .map(
+            ({ key, value }) => `
+              <button
+                type="button"
+                class="facet-chip active"
+                data-map-filter-key="${escapeAttr(key)}"
+                data-map-filter-value="${escapeAttr(value)}"
+                title="${escapeAttr(value)}"
+              >
+                <span>${escapeHtml(`${labelByKey.get(key) || key}: ${friendlyFacetLabel(value)}`)}</span>
+              </button>
+            `
+          )
+          .join("")}
       </div>
     `;
   }
@@ -1295,13 +1347,14 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _renderAsk() {
+    const asking = this._busy === "ask";
     return `
       <section class="grid two">
         <article class="panel">
           <div class="panel-heading">
             <h2>Ask The House</h2>
             <div class="mini-actions">
-              <button type="button" data-action="reindex"><ha-icon icon="mdi:file-refresh-outline"></ha-icon><span>Reindex uploads</span></button>
+              <button type="button" data-action="reindex" ${this._busy ? "disabled" : ""}><ha-icon icon="mdi:file-refresh-outline"></ha-icon><span>Reindex uploads</span></button>
             </div>
           </div>
           <form data-form="ask">
@@ -1316,7 +1369,10 @@ class GoodVibesHomePanel extends HTMLElement {
                 <label class="check"><input name="includeConfidence" type="checkbox"><span>Include confidence</span></label>
               </div>
             </details>
-            <button type="submit"><ha-icon icon="mdi:message-processing-outline"></ha-icon><span>Ask</span></button>
+            <button type="submit" ${asking ? "disabled" : ""}>
+              <ha-icon class="${asking ? "spin" : ""}" icon="${asking ? "mdi:loading" : "mdi:message-processing-outline"}"></ha-icon>
+              <span>${asking ? "Thinking" : "Ask"}</span>
+            </button>
           </form>
         </article>
         <article class="panel">
@@ -1360,6 +1416,7 @@ class GoodVibesHomePanel extends HTMLElement {
     const tasks = itemsFromPayload(this._refinement, ["tasks"]);
     const readiness = statusReadiness(this._status);
     const activeCount = tasks.filter((task) => ACTIVE_REFINEMENT_STATES.has(String(task?.state || ""))).length;
+    const runSummary = refinementRunSummary(this._lastResult);
     return `
       <section class="grid two">
         <article class="panel">
@@ -1407,6 +1464,7 @@ class GoodVibesHomePanel extends HTMLElement {
           </form>
         </article>
       </section>
+      ${runSummary ? refinementRunPanel(runSummary) : ""}
       <section class="grid">
         <article class="panel">
           <h2>Refinement Tasks</h2>
@@ -1942,16 +2000,19 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _answerText() {
-    const answerPayload = this._answer.result || this._answer;
-    const answer = answerPayload.answer || {};
-    const text = answer.text || answerPayload.text || "";
+    const answer = normalizeAnswerPayload(this._answer);
+    const text = answer.text || "";
+    const thinking = this._busy === "ask";
     if (!text) {
-      return `<p class="empty">No answer</p>`;
+      return thinking
+        ? `<div class="thinking"><ha-icon class="spin" icon="mdi:loading"></ha-icon><span>Thinking through the Home Graph...</span></div>`
+        : `<p class="empty">No answer</p>`;
     }
+    const confidence = formatConfidence(answer.confidence);
     const meta = [
       answer.synthesized === true ? "Synthesized" : "",
       answer.mode ? `Mode: ${answer.mode}` : "",
-      answer.confidence !== undefined ? `Confidence: ${answer.confidence}` : "",
+      confidence ? `Confidence: ${confidence}` : "",
       Array.isArray(answer.refinementTaskIds) && answer.refinementTaskIds.length
         ? `${answer.refinementTaskIds.length} refinement task(s)`
         : "",
@@ -1961,40 +2022,57 @@ class GoodVibesHomePanel extends HTMLElement {
       : [];
     return `
       <div class="answer answer-card">
+        ${thinking ? `<div class="thinking inline"><ha-icon class="spin" icon="mdi:loading"></ha-icon><span>Updating answer...</span></div>` : ""}
         ${meta.length ? `<div class="answer-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
         <div class="answer-text">${escapeHtml(String(text))}</div>
-        ${this._answerRecords("Refinement Tasks", refinementTasks, "mdi:auto-fix")}
-        ${this._answerRecords("Facts", answer.facts, "mdi:check-decagram-outline")}
-        ${this._answerRecords("Gaps", answer.gaps, "mdi:alert-circle-outline")}
-        ${this._answerRecords("Sources", answer.sources, "mdi:file-document-outline")}
-        ${this._answerRecords("Linked Objects", answer.linkedObjects, "mdi:vector-link")}
+        ${this._answerRecords("Gaps To Repair", answer.gaps, "mdi:alert-circle-outline", { limit: 6 })}
+        ${this._answerRecords("Refinement Tasks", refinementTasks, "mdi:auto-fix", { limit: 6 })}
+        ${this._answerRecords("Sources", answer.sources, "mdi:file-document-outline", { limit: 8, collapsed: true })}
+        ${this._answerRecords("Linked Home Objects", answer.linkedObjects, "mdi:vector-link", { limit: 8, collapsed: true })}
+        ${this._answerRecords("Evidence Facts", answer.facts, "mdi:check-decagram-outline", { limit: 8, collapsed: true })}
       </div>
     `;
   }
 
-  _answerRecords(title, records, icon) {
+  _answerRecords(title, records, icon, options = {}) {
     if (!Array.isArray(records) || !records.length) {
       return "";
     }
+    const limit = options.limit || 12;
+    const hiddenCount = Math.max(0, records.length - limit);
+    const body = `
+      <div class="answer-list">
+        ${records.slice(0, limit).map((record) => this._answerRecord(record)).join("")}
+        ${hiddenCount ? `<p class="empty">${escapeHtml(String(hiddenCount))} more in raw result.</p>` : ""}
+      </div>
+    `;
+    if (options.collapsed) {
+      return `
+        <details class="answer-section answer-collapse">
+          <summary><ha-icon icon="${icon}"></ha-icon><span>${escapeHtml(title)} (${escapeHtml(String(records.length))})</span></summary>
+          ${body}
+        </details>
+      `;
+    }
     return `
       <section class="answer-section">
-        <h3><ha-icon icon="${icon}"></ha-icon><span>${escapeHtml(title)}</span></h3>
-        <div class="answer-list">
-          ${records.slice(0, 12).map((record) => this._answerRecord(record)).join("")}
-        </div>
+        <h3><ha-icon icon="${icon}"></ha-icon><span>${escapeHtml(title)} (${escapeHtml(String(records.length))})</span></h3>
+        ${body}
       </section>
     `;
   }
 
   _answerRecord(record) {
-    const title = recordTitle(record);
-    const subtitle = recordSubtitle(record);
+    const title = answerRecordTitle(record);
+    const subtitle = answerRecordSubtitle(record);
+    const summary = answerRecordSummary(record);
     return `
       <details class="answer-record">
         <summary>
           <strong>${escapeHtml(title)}</strong>
           ${subtitle ? `<span>${escapeHtml(subtitle)}</span>` : ""}
         </summary>
+        ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
         <pre>${escapeHtml(JSON.stringify(record, null, 2))}</pre>
       </details>
     `;
@@ -2016,7 +2094,9 @@ class GoodVibesHomePanel extends HTMLElement {
   }
 
   _resultPanel() {
+    const summary = operationSummaryPanel(this._lastResult);
     return `
+      ${summary}
       <details class="result">
         <summary>Last result</summary>
         <pre>${escapeHtml(JSON.stringify(this._lastResult || {}, null, 2))}</pre>
@@ -2124,6 +2204,10 @@ class GoodVibesHomePanel extends HTMLElement {
         border-color: var(--primary-color);
         color: var(--primary-color);
       }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
       .tabs {
         border-bottom: 1px solid var(--divider-color);
         margin-bottom: 16px;
@@ -2213,16 +2297,33 @@ class GoodVibesHomePanel extends HTMLElement {
         padding: 5px 9px;
       }
       .facet-group {
+        border-top: 1px solid var(--divider-color);
         display: grid;
         gap: 6px;
+        padding-top: 8px;
       }
-      .facet-group h3 {
+      .facet-group summary {
+        align-items: center;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+      }
+      .facet-group summary span {
         color: var(--secondary-text-color);
         font-size: 12px;
         font-weight: 600;
-        margin: 0;
+      }
+      .facet-group summary small {
+        color: var(--secondary-text-color);
+        font-size: 11px;
       }
       .facet-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-top: 8px;
+      }
+      .selected-filters {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
@@ -2538,6 +2639,17 @@ class GoodVibesHomePanel extends HTMLElement {
         display: grid;
         gap: 8px;
       }
+      .answer-collapse {
+        border-top: 1px solid var(--divider-color);
+        padding-top: 10px;
+      }
+      .answer-collapse summary {
+        align-items: center;
+        cursor: pointer;
+        display: flex;
+        font-size: 13px;
+        gap: 6px;
+      }
       .answer-section h3 {
         align-items: center;
         display: flex;
@@ -2568,6 +2680,10 @@ class GoodVibesHomePanel extends HTMLElement {
         font-size: 12px;
         margin-top: 2px;
       }
+      .answer-record p {
+        color: var(--secondary-text-color);
+        margin-top: 8px;
+      }
       .empty {
         color: var(--secondary-text-color);
       }
@@ -2586,6 +2702,28 @@ class GoodVibesHomePanel extends HTMLElement {
         display: block;
         font-size: 12px;
         margin-top: 6px;
+      }
+      .working,
+      .thinking {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+      }
+      .thinking {
+        color: var(--secondary-text-color);
+      }
+      .thinking.inline {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .spin {
+        animation: goodvibes-spin 900ms linear infinite;
+      }
+      @keyframes goodvibes-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
       }
       .progress {
         background: var(--primary-background-color);
@@ -2937,6 +3075,21 @@ function readinessLabel(payload) {
   return parts.join(" - ");
 }
 
+function busyLabel(action) {
+  const labels = {
+    ask: "Thinking through the Home Graph",
+    reindex: "Reindexing Home Graph sources",
+    refinement_run: "Running Home Graph refinement",
+    refinement_tasks: "Loading refinement tasks",
+    map: "Updating the knowledge map",
+    pages: "Loading automatic pages",
+    upload: "Uploading and ingesting",
+    sync: "Syncing Home Assistant context",
+    review: "Applying review decisions",
+  };
+  return labels[action] || `Working: ${action}`;
+}
+
 function refinementStatusLabel(statusPayload, refinementPayload) {
   const readiness = statusReadiness(statusPayload);
   const tasks = itemsFromPayload(refinementPayload, ["tasks"]);
@@ -2947,6 +3100,127 @@ function refinementStatusLabel(statusPayload, refinementPayload) {
     `${readiness.activeRefinementTaskCount ?? active} active`,
     `${readiness.needsReviewTaskCount ?? needsReview} needs review`,
   ].join(" - ");
+}
+
+function refinementRunSummary(payload) {
+  const result = payload?.result && typeof payload.result === "object" ? payload.result : payload;
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+  const keys = [
+    "candidateGaps",
+    "processedGaps",
+    "requestedLimit",
+    "effectiveLimit",
+    "truncated",
+    "budgetExhausted",
+  ];
+  return keys.some((key) => result[key] !== undefined) ? result : null;
+}
+
+function operationSummaryPanel(payload) {
+  const result = payload?.result && typeof payload.result === "object" ? payload.result : payload;
+  if (!result || typeof result !== "object" || result.ok === false) {
+    return "";
+  }
+  const fields = operationSummaryFields(result);
+  if (!fields.length) {
+    return "";
+  }
+  return `
+    <article class="panel operation-summary">
+      <h2>${escapeHtml(operationSummaryTitle(result))}</h2>
+      <dl class="facts">
+        ${fields.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join("")}
+      </dl>
+    </article>
+  `;
+}
+
+function operationSummaryTitle(result) {
+  if (result.scanned !== undefined || result.reparsed !== undefined) {
+    return "Reindex Summary";
+  }
+  if (result.candidateGaps !== undefined || result.processedGaps !== undefined) {
+    return "Refinement Summary";
+  }
+  if (result.reviewed !== undefined) {
+    return "Review Summary";
+  }
+  if (result.pages !== undefined) {
+    return "Pages Summary";
+  }
+  return "Result Summary";
+}
+
+function operationSummaryFields(result) {
+  const generated = result.generated && typeof result.generated === "object" ? result.generated : {};
+  const semantic = result.semantic && typeof result.semantic === "object" ? result.semantic : {};
+  const selfImprovement =
+    semantic.selfImprovement && typeof semantic.selfImprovement === "object"
+      ? semantic.selfImprovement
+      : {};
+  return [
+    ["Scanned", result.scanned],
+    ["Reparsed", result.reparsed],
+    ["Skipped", result.skipped],
+    ["Failed", result.failed],
+    ["Changed Sources", result.changedSourceCount],
+    ["Forced Sources", result.forcedSourceCount],
+    ["Generated Pages Skipped", result.skippedGeneratedPageArtifactCount],
+    ["Generated Pages Refreshed", result.refreshedGeneratedPageCount],
+    ["Page Policy", result.generatedPagePolicyVersion],
+    ["Sources", Array.isArray(result.sources) ? result.sources.length : undefined],
+    ["Failures", Array.isArray(result.failures) ? result.failures.length : undefined],
+    ["Quality Issues", Array.isArray(result.qualityIssues) ? result.qualityIssues.length : undefined],
+    ["Truncated", booleanLabel(result.truncated)],
+    ["Budget Exhausted", booleanLabel(result.budgetExhausted)],
+    ["Device Passports", generated.devicePassports],
+    ["Room Pages", generated.roomPages],
+    ["Page Artifacts", generated.artifacts],
+    ["Page Sources", generated.sources],
+    ["Semantic Scanned", semantic.scanned],
+    ["Semantic Enriched", semantic.enriched],
+    ["Semantic Skipped", semantic.skipped],
+    ["Semantic Failed", semantic.failed],
+    ["Candidate Gaps", result.candidateGaps ?? selfImprovement.candidateGaps],
+    ["Processed Gaps", result.processedGaps ?? selfImprovement.processedGaps],
+    ["Requested Limit", result.requestedLimit ?? selfImprovement.requestedLimit],
+    ["Effective Limit", result.effectiveLimit ?? selfImprovement.effectiveLimit],
+    ["Queued Tasks", result.queuedTasks ?? result.queuedTaskCount ?? selfImprovement.queuedTasks],
+    ["Task IDs", Array.isArray(result.taskIds) ? result.taskIds.length : Array.isArray(selfImprovement.taskIds) ? selfImprovement.taskIds.length : undefined],
+    ["Reviewed", result.reviewed],
+  ].filter(([, value]) => value !== undefined && value !== "");
+}
+
+function refinementRunPanel(result) {
+  const fields = [
+    ["Candidate Gaps", result.candidateGaps],
+    ["Processed Gaps", result.processedGaps],
+    ["Requested Limit", result.requestedLimit],
+    ["Effective Limit", result.effectiveLimit],
+    ["Truncated", booleanLabel(result.truncated)],
+    ["Budget Exhausted", booleanLabel(result.budgetExhausted)],
+    ["Queued Tasks", result.queuedTasks ?? result.queuedTaskCount],
+    ["Task IDs", Array.isArray(result.taskIds) ? result.taskIds.length : undefined],
+  ].filter(([, value]) => value !== undefined && value !== "");
+  if (!fields.length) {
+    return "";
+  }
+  return `
+    <section class="grid">
+      <article class="panel">
+        <h2>Latest Run</h2>
+        <dl class="facts">
+          ${fields.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join("")}
+        </dl>
+      </article>
+    </section>
+  `;
+}
+
+function booleanLabel(value) {
+  return typeof value === "boolean" ? (value ? "yes" : "no") : value;
 }
 
 function issueKey(issue) {
@@ -3066,6 +3340,90 @@ function recordSubtitle(record) {
     .join(" - ");
 }
 
+function normalizeAnswerPayload(payload) {
+  const result = payload?.result && typeof payload.result === "object" ? payload.result : payload || {};
+  const answer = result?.answer && typeof result.answer === "object" ? result.answer : {};
+  return {
+    text: answer.text || result.text || "",
+    mode: answer.mode ?? result.mode,
+    confidence: answer.confidence ?? result.confidence,
+    synthesized: answer.synthesized ?? result.synthesized,
+    refinementTaskIds: arrayField(answer.refinementTaskIds ?? result.refinementTaskIds),
+    facts: arrayField(answer.facts ?? result.facts),
+    gaps: arrayField(answer.gaps ?? result.gaps),
+    sources: arrayField(answer.sources ?? result.sources),
+    linkedObjects: arrayField(answer.linkedObjects ?? result.linkedObjects),
+  };
+}
+
+function arrayField(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function formatConfidence(value) {
+  if (value === undefined || value === null || value === "") {
+    return "";
+  }
+  const number = Number(value);
+  if (Number.isFinite(number)) {
+    if (number <= 0) {
+      return "";
+    }
+    return number <= 1 ? `${Math.round(number * 100)}%` : String(number);
+  }
+  return String(value);
+}
+
+function answerRecordTitle(record) {
+  if (record === null || typeof record !== "object") {
+    return shortText(String(record ?? "Record"), 140);
+  }
+  return shortText(
+    String(
+      record.title ||
+        record.name ||
+        record.summary ||
+        record.text ||
+        record.question ||
+        record.sourceUri ||
+        record.url ||
+        record.id ||
+        "Record"
+    ),
+    140
+  );
+}
+
+function answerRecordSubtitle(record) {
+  if (record === null || typeof record !== "object") {
+    return "";
+  }
+  const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
+  const confidence = formatConfidence(record.confidence);
+  return [
+    record.kind || record.sourceType || metadata.semanticKind,
+    record.status,
+    confidence ? `confidence ${confidence}` : "",
+    record.sourceUri || record.url || record.canonicalUri,
+  ]
+    .filter(Boolean)
+    .map((item) => shortText(String(item), 140))
+    .join(" - ");
+}
+
+function answerRecordSummary(record) {
+  if (record === null || typeof record !== "object") {
+    return "";
+  }
+  const text = record.summary || record.description || record.reason || record.evidence;
+  return text ? shortText(String(text), 280) : "";
+}
+
+function shortText(value, limit) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, Math.max(0, limit - 1))}...` : text;
+}
+
 function isFormControl(element) {
   return Boolean(
     element &&
@@ -3104,12 +3462,12 @@ function facetItems(values) {
           const value = String(item.value ?? item.id ?? item.key ?? "");
           return {
             value,
-            label: item.label ? String(item.label) : value,
+            label: facetItemLabel(item, value),
             count: Number(item.count) || 0,
           };
         }
         const value = String(item ?? "");
-        return { value, label: value, count: 0 };
+        return { value, label: friendlyFacetLabel(value), count: 0 };
       })
       .filter((item) => item.value);
   }
@@ -3117,13 +3475,38 @@ function facetItems(values) {
     return Object.entries(values)
       .map(([value, count]) => ({
         value,
-        label: value,
+        label: friendlyFacetLabel(value),
         count: Number(count) || 0,
       }))
       .filter((item) => item.value)
       .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
   }
   return [];
+}
+
+function facetItemLabel(item, value) {
+  const metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const ha = metadata.homeAssistant && typeof metadata.homeAssistant === "object"
+    ? metadata.homeAssistant
+    : {};
+  return String(
+    item.label ||
+      item.title ||
+      item.name ||
+      item.displayName ||
+      item.friendlyName ||
+      ha.name ||
+      ha.friendlyName ||
+      friendlyFacetLabel(value)
+  );
+}
+
+function friendlyFacetLabel(value) {
+  const text = String(value || "");
+  if (/^[a-f0-9]{16,}$/i.test(text) || /^[a-f0-9]{8,}_.+/i.test(text)) {
+    return `${text.slice(0, 8)}...`;
+  }
+  return text.replace(/_/g, " ");
 }
 
 function escapeHtml(value) {

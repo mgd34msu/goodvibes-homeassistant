@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.5.47
+
+- Target `@pellux/goodvibes-sdk@0.28.7`.
+- Document SDK `0.28.7` Home Graph behavior from static package review: generated pages should no longer render `knowledge.answer_gap`, `knowledge.semantic_gap`, or `knowledge.intrinsic_gap` records as page issues.
+- Confirm the reindex contract remains compatible: changed-only reindex only auto-links reparsed sources, forced reindex still runs a broad source audit, and reindex keeps the `0.28.6` accounting fields.
+- Confirm base knowledge Ask now treats `knowledgeSpaceId: "homeassistant"` as a Home Assistant namespace alias while the Home Graph panel contract remains unchanged.
+
+## 0.5.46
+
+- Target `@pellux/goodvibes-sdk@0.28.6`.
+- Document SDK `0.28.6` Home Graph contract details from static package review: reindex returns `changedSourceCount`, `forcedSourceCount`, `skippedGeneratedPageArtifactCount`, `refreshedGeneratedPageCount`, `generatedPagePolicyVersion`, top-level `truncated`, and top-level `budgetExhausted`.
+- Surface reindex accounting and generated-page refresh counts in the panel result summary instead of requiring raw JSON inspection.
+- Improve Ask answer rendering so synthesized answer text stays primary, gaps/refinement work remain visible, and raw facts/sources/linked objects are compact supporting evidence.
+- Add a Home Assistant `update` entity backed by GitHub releases with placeholder repository metadata for the upcoming public repo.
+- Review pages/map/refinement contracts statically against the `0.28.6` package; endpoint shapes remain compatible with the existing thin-client panel.
+
+## 0.5.45
+
+- Target `@pellux/goodvibes-sdk@0.28.5`.
+- Document SDK `0.28.5` Home Graph fixes: reindex should skip generated-page artifacts, enrich only changed or forced sources, refresh stale generated pages by page policy version, return `truncated` and `budgetExhausted`, and keep daemon health routes responsive.
+- Document map and page quality expectations: filtered map edges should include endpoint ids and titles, readiness active counts should exclude detected backlog, and generated pages should filter additional SpeakerCompare, equal-power, Magic Remote, and manual boilerplate text.
+- Keep the GoodVibes Home panel contract unchanged while retesting status, refinement, reindex, Ask, pages, and map against the updated daemon.
+
+## 0.5.44
+
+- Target `@pellux/goodvibes-sdk@0.28.4`.
+- Document SDK `0.28.4` Home Graph fixes: reindex should stay bounded without wedging daemon health routes, filtered map responses should preserve graph edges, Ask sources should include source id and URL aliases, and generated pages should filter more SpeakerCompare and Magic Remote noise.
+- Keep the GoodVibes Home panel contract unchanged while retesting status, refinement, reindex, Ask, pages, and map against the updated daemon.
+
+## 0.5.43
+
+- Target `@pellux/goodvibes-sdk@0.28.3`.
+- Document SDK `0.28.3` Home Graph behavior: Ask responses repaired from web sources should keep real Home Assistant `linkedObjects`, overlapping repair requests should coalesce instead of stacking duplicate daemon work, and Home Graph status/refinement/reindex/ask/pages/map contracts remain daemon-owned.
+- Keep the GoodVibes Home panel compatible with the SDK refinement run result fields introduced in `0.28.1` and capped in `0.28.2`.
+
+## 0.5.42
+
+- Target `@pellux/goodvibes-sdk@0.28.2`.
+- Document SDK `0.28.2` Home Graph refinement behavior: broad refinement requests should cap foreground repair at an effective limit of 24, historical `No semantic gap repairer is configured` tasks should reopen or become retriable once the daemon wires a repairer, and Ask/reindex should remain responsive while repair continues asynchronously.
+- Confirm the GoodVibes Home panel refinement summary remains compatible with the SDK `0.28.2` result fields.
+
+## 0.5.41
+
+- Target `@pellux/goodvibes-sdk@0.28.1`.
+- Document SDK `0.28.1` Home Graph refinement behavior: Ask returns current evidence quickly with refinement task IDs when repair continues asynchronously, reindex queues repair work instead of blocking on foreground semantic repair, and broad refinement runs report `candidateGaps`, `processedGaps`, `requestedLimit`, `effectiveLimit`, `truncated`, and `budgetExhausted`.
+- Surface the latest refinement run budget/result fields in the GoodVibes Home Refine tab so capped SDK work is visible without opening raw JSON.
+
 ## 0.5.40
 
 - Target `@pellux/goodvibes-sdk@0.28.0`.
