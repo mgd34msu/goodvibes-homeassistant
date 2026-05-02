@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.64
+
+- Target `@pellux/goodvibes-sdk@0.28.21`.
+- Document the `0.28.21` validation focus: structured `answer.refinement` metadata, preserved answer-gap IDs, source-backed foreground repair completion, title/URL-only promotion blocking, verified repair tasks only after usable subject-linked facts exist, generated-page source collection through promoted fact links, stale missing-source suppression when evidence exists, base Ask parity, and clean LG page fact/source enrichment.
+
 ## 0.5.63
 
 - Target `@pellux/goodvibes-sdk@0.28.20`.

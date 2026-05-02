@@ -2183,10 +2183,12 @@ class GoodVibesHomePanel extends HTMLElement {
         : `<p class="empty">No answer</p>`;
     }
     const confidence = formatConfidence(answer.confidence);
+    const repairStatus = answer.refinement?.status || answer.refinement?.state || "";
     const meta = [
       answer.synthesized === true ? "Synthesized" : "",
       answer.mode ? `Mode: ${answer.mode}` : "",
       confidence ? `Confidence: ${confidence}` : "",
+      repairStatus ? `Repair: ${repairStatus}` : "",
       Array.isArray(answer.refinementTaskIds) && answer.refinementTaskIds.length
         ? `${answer.refinementTaskIds.length} refinement task(s)`
         : "",
@@ -2194,11 +2196,15 @@ class GoodVibesHomePanel extends HTMLElement {
     const refinementTasks = Array.isArray(answer.refinementTaskIds)
       ? answer.refinementTaskIds.map((id) => ({ id, title: `Refinement task ${id}` }))
       : [];
+    const refinementRecords = answer.refinement && typeof answer.refinement === "object"
+      ? [{ ...answer.refinement, title: answer.refinement.title || "Answer refinement" }]
+      : [];
     return `
       <div class="answer answer-card">
         ${thinking ? `<div class="thinking inline"><ha-icon class="spin" icon="mdi:loading"></ha-icon><span>Updating answer...</span></div>` : ""}
         ${meta.length ? `<div class="answer-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
         <div class="answer-text">${escapeHtml(String(text))}</div>
+        ${this._answerRecords("Repair Status", refinementRecords, "mdi:progress-wrench", { limit: 1 })}
         ${this._answerRecords("Gaps To Repair", answer.gaps, "mdi:alert-circle-outline", { limit: 6 })}
         ${this._answerRecords("Refinement Tasks", refinementTasks, "mdi:auto-fix", { limit: 6 })}
         ${this._answerRecords("Sources", answer.sources, "mdi:file-document-outline", { limit: 8, collapsed: true })}
@@ -4399,6 +4405,7 @@ function normalizeAnswerPayload(payload) {
     mode: answer.mode ?? result.mode,
     confidence: answer.confidence ?? result.confidence,
     synthesized: answer.synthesized ?? result.synthesized,
+    refinement: objectField(answer.refinement ?? result.refinement),
     refinementTaskIds: arrayField(answer.refinementTaskIds ?? result.refinementTaskIds),
     facts: arrayField(answer.facts ?? result.facts),
     gaps: arrayField(answer.gaps ?? result.gaps),
@@ -4409,6 +4416,10 @@ function normalizeAnswerPayload(payload) {
 
 function arrayField(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function objectField(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
 function formatConfidence(value) {
