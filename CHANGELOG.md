@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.58
+
+- Target `@pellux/goodvibes-sdk@0.28.17`.
+- Document the `0.28.17` validation focus: reset artifact clearing, sync/reindex accounting, effective refinement limits, LG TV Ask source/fact quality, generated page structure, nested and top-level map filters, task retry lifecycle, and concrete linked object scoping.
+- Change the GoodVibes Home Pages tab into a generated page browser and wiki-style reader, with raw maintenance controls moved behind collapsed sections.
+
 ## 0.5.57
 
 - Target `@pellux/goodvibes-sdk@0.28.16`.

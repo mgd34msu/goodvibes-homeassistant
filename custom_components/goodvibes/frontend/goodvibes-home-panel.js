@@ -93,6 +93,7 @@ class GoodVibesHomePanel extends HTMLElement {
     this._status = {};
     this._sources = {};
     this._pages = {};
+    this._selectedPageKey = "";
     this._refinement = {};
     this._refinementState = "";
     this._refinementLimit = 100;
@@ -383,6 +384,11 @@ class GoodVibesHomePanel extends HTMLElement {
     if (action === "map_clear_filters") {
       this._mapFilters = {};
       await this._call("map", this._mapPayload());
+      return;
+    }
+    if (action === "page_select") {
+      this._selectedPageKey = element?.dataset?.pageKey || "";
+      this._render();
       return;
     }
     if (action === "map_clear_facet_search") {
@@ -1624,25 +1630,28 @@ class GoodVibesHomePanel extends HTMLElement {
 
   _renderPages() {
     const pages = this._generatedPages();
+    const selected = this._selectedPage(pages);
+    const selectedKey = selected ? pageKey(selected) : "";
     return `
-      <section class="grid two">
-        <article class="panel">
+      <section class="page-workspace">
+        <aside class="panel page-index">
           <div class="panel-heading">
-            <h2>Automatic Pages</h2>
+            <h2>Pages</h2>
             <div class="mini-actions">
               <button type="button" data-action="sync"><ha-icon icon="mdi:sync"></ha-icon><span>Sync</span></button>
             </div>
           </div>
           ${
             pages.length
-              ? `<div class="page-list" data-scroll-region="generated-pages">${pages.map((page) => this._pageCard(page)).join("")}</div>`
-              : `<p class="empty">No automatic pages yet</p>`
+              ? `<div class="page-list" data-scroll-region="generated-pages">${pages.map((page) => this._pageCard(page, selectedKey)).join("")}</div>`
+              : `<p class="empty">No generated pages yet</p>`
           }
+        </aside>
+        <article class="panel page-reader-panel">
+          ${selected ? this._pageReader(selected) : `<p class="empty">No page selected</p>`}
         </article>
-        <article class="panel">
-          <h2>Preview</h2>
-          ${this._markdownPreview()}
-        </article>
+      </section>
+      <section class="grid two page-maintenance">
         <article class="panel">
           ${this._directPageTools()}
         </article>
@@ -1652,6 +1661,19 @@ class GoodVibesHomePanel extends HTMLElement {
       </section>
       ${this._resultPanel()}
     `;
+  }
+
+  _selectedPage(pages) {
+    if (!pages.length) {
+      this._selectedPageKey = "";
+      return null;
+    }
+    const selected = this._selectedPageKey
+      ? pages.find((page) => pageKey(page) === this._selectedPageKey)
+      : null;
+    const page = selected || pages.find((item) => pageMarkdown(item)) || pages[0];
+    this._selectedPageKey = pageKey(page);
+    return page;
   }
 
   _generatedPages() {
@@ -1673,29 +1695,63 @@ class GoodVibesHomePanel extends HTMLElement {
     return Array.from(byId.values()).sort(compareGeneratedPages);
   }
 
-  _pageCard(page) {
-    const source = page?.source || page;
-    const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
-    const title = source?.title || source?.name || source?.sourceUri || source?.id || "Generated page";
-    const projection = metadata.projectionKind || metadata.kind || source?.sourceType || "page";
+  _pageCard(page, selectedKey) {
+    const source = pageSource(page);
+    const metadata = pageMetadata(page);
+    const title = pageTitle(page);
+    const projection = pageProjection(page);
     const regeneration = metadata.regeneration || "automatic";
     const generatedAt = formatTimestamp(metadata.generatedAt || source?.updatedAt || source?.createdAt);
     const detail = [projectionLabel(projection), regeneration, generatedAt].filter(Boolean).join(" - ");
+    const key = pageKey(page);
+    const active = key && key === selectedKey;
     return `
-      <div class="page-card">
+      <button type="button" class="page-card ${active ? "selected" : ""}" data-action="page_select" data-page-key="${escapeAttr(key)}">
         <ha-icon icon="${pageIcon(projection)}"></ha-icon>
         <div>
           <strong>${escapeHtml(String(title))}</strong>
           <span>${escapeHtml(detail)}</span>
-          <small>${escapeHtml(String(source?.id || source?.sourceId || ""))}</small>
-          ${source?.sourceUri ? `<small>${escapeHtml(String(source.sourceUri))}</small>` : ""}
-          ${page?.artifact?.id ? `<small>${escapeHtml(String(page.artifact.id))}</small>` : ""}
+          ${source?.summary ? `<small>${escapeHtml(shortText(String(source.summary), 120))}</small>` : ""}
         </div>
-        <details>
-          <summary>Details</summary>
-          <pre>${escapeHtml(JSON.stringify(page, null, 2))}</pre>
-          ${page?.markdown ? `<pre>${escapeHtml(String(page.markdown))}</pre>` : ""}
-        </details>
+      </button>
+    `;
+  }
+
+  _pageReader(page) {
+    const source = pageSource(page);
+    const metadata = pageMetadata(page);
+    const title = pageTitle(page);
+    const projection = pageProjection(page);
+    const generatedAt = formatTimestamp(metadata.generatedAt || source?.updatedAt || source?.createdAt);
+    const markdown = stripLeadingMarkdownTitle(pageMarkdown(page), title);
+    const sourceUri = source?.sourceUri || source?.canonicalUri || "";
+    const meta = [
+      projectionLabel(projection),
+      metadata.regeneration || "",
+      generatedAt,
+    ].filter(Boolean);
+    return `
+      <div class="wiki-page">
+        <header class="wiki-header">
+          <div>
+            <span class="wiki-kicker">${escapeHtml(projectionLabel(projection))}</span>
+            <h1>${escapeHtml(String(title))}</h1>
+          </div>
+          ${meta.length ? `<div class="page-meta">${meta.map((item) => `<span>${escapeHtml(String(item))}</span>`).join("")}</div>` : ""}
+          ${source?.summary ? `<p>${escapeHtml(String(source.summary))}</p>` : ""}
+        </header>
+        <div class="wiki-body">
+          ${markdown ? renderMarkdown(markdown) : `<p class="empty">This page has no rendered markdown yet.</p>`}
+        </div>
+        ${
+          sourceUri || source?.id || page?.artifact?.id
+            ? `<footer class="wiki-footer">
+                ${sourceUri ? `<span>${escapeHtml(String(sourceUri))}</span>` : ""}
+                ${source?.id ? `<span>Source ${escapeHtml(String(source.id))}</span>` : ""}
+                ${page?.artifact?.id ? `<span>Artifact ${escapeHtml(String(page.artifact.id))}</span>` : ""}
+              </footer>`
+            : ""
+        }
       </div>
     `;
   }
@@ -2174,15 +2230,11 @@ class GoodVibesHomePanel extends HTMLElement {
   _markdownPreview() {
     const page = itemsFromPayload(this._pages, ["pages"]).find((item) => item?.markdown);
     if (page?.markdown) {
-      const source = page.source || {};
-      const title = source.title || source.id || "Generated page";
-      return `<div class="answer"><h3>${escapeHtml(String(title))}</h3><pre>${escapeHtml(
-        String(page.markdown)
-      )}</pre></div>`;
+      return this._pageReader(page);
     }
     const result = this._lastResult.result || this._lastResult;
     return result?.markdown
-      ? `<div class="answer">${escapeHtml(result.markdown)}</div>`
+      ? `<div class="wiki-page compact"><div class="wiki-body">${renderMarkdown(result.markdown)}</div></div>`
       : `<p class="empty">No generated content</p>`;
   }
 
@@ -2314,6 +2366,13 @@ class GoodVibesHomePanel extends HTMLElement {
       }
       .grid.two {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .page-workspace {
+        align-items: start;
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+        margin-bottom: 16px;
       }
       .panel {
         background: var(--card-background-color);
@@ -2600,7 +2659,7 @@ class GoodVibesHomePanel extends HTMLElement {
       .page-list {
         display: grid;
         gap: 10px;
-        max-height: 560px;
+        max-height: calc(100vh - 250px);
         overflow: auto;
       }
       .task-list {
@@ -2653,7 +2712,15 @@ class GoodVibesHomePanel extends HTMLElement {
         display: grid;
         gap: 10px;
         grid-template-columns: 28px minmax(0, 1fr);
+        justify-items: start;
+        min-height: 0;
         padding: 12px;
+        text-align: left;
+        width: 100%;
+      }
+      .page-card.selected {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
       }
       .page-card ha-icon {
         color: var(--primary-color);
@@ -2671,11 +2738,138 @@ class GoodVibesHomePanel extends HTMLElement {
         font-size: 12px;
         margin-top: 3px;
       }
-      .page-card details {
-        grid-column: 1 / -1;
+      .page-reader-panel {
+        min-height: calc(100vh - 210px);
+        overflow: hidden;
       }
       .page-tools form {
         margin-top: 12px;
+      }
+      .wiki-page {
+        display: grid;
+        gap: 20px;
+      }
+      .wiki-header {
+        border-bottom: 1px solid var(--divider-color);
+        display: grid;
+        gap: 10px;
+        padding-bottom: 16px;
+      }
+      .wiki-header h1 {
+        font-size: 30px;
+        line-height: 1.15;
+        margin: 0;
+      }
+      .wiki-kicker {
+        color: var(--primary-color);
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+      }
+      .page-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .page-meta span {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 999px;
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        padding: 4px 8px;
+      }
+      .wiki-header p {
+        color: var(--secondary-text-color);
+        line-height: 1.5;
+      }
+      .wiki-body {
+        color: var(--primary-text-color);
+        display: block;
+        font-size: 15px;
+        line-height: 1.65;
+        max-height: calc(100vh - 360px);
+        overflow: auto;
+        padding-right: 6px;
+      }
+      .wiki-body h1,
+      .wiki-body h2,
+      .wiki-body h3,
+      .wiki-body h4 {
+        color: var(--primary-text-color);
+        font-weight: 600;
+        line-height: 1.25;
+        margin: 28px 0 10px;
+      }
+      .wiki-body h1:first-child,
+      .wiki-body h2:first-child,
+      .wiki-body h3:first-child {
+        margin-top: 0;
+      }
+      .wiki-body h1 {
+        font-size: 28px;
+      }
+      .wiki-body h2 {
+        border-bottom: 1px solid var(--divider-color);
+        font-size: 21px;
+        padding-bottom: 6px;
+      }
+      .wiki-body h3 {
+        font-size: 17px;
+      }
+      .wiki-body h4 {
+        font-size: 15px;
+      }
+      .wiki-body p {
+        margin: 0 0 12px;
+      }
+      .wiki-body ul,
+      .wiki-body ol {
+        margin: 0 0 16px 22px;
+        padding: 0;
+      }
+      .wiki-body li {
+        margin: 4px 0;
+      }
+      .wiki-body code {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        font-family: var(--code-font-family, monospace);
+        font-size: 0.92em;
+        padding: 1px 4px;
+      }
+      .wiki-body pre {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        overflow: auto;
+        padding: 12px;
+      }
+      .wiki-body pre code {
+        background: transparent;
+        border: 0;
+        padding: 0;
+      }
+      .wiki-body blockquote {
+        border-left: 3px solid var(--primary-color);
+        color: var(--secondary-text-color);
+        margin: 0 0 16px;
+        padding: 4px 0 4px 14px;
+      }
+      .wiki-body a {
+        color: var(--primary-color);
+      }
+      .wiki-footer {
+        border-top: 1px solid var(--divider-color);
+        color: var(--secondary-text-color);
+        display: grid;
+        font-size: 12px;
+        gap: 4px;
+        padding-top: 12px;
+        overflow-wrap: anywhere;
       }
       .refinement-run-form {
         margin-top: 12px;
@@ -2899,6 +3093,7 @@ class GoodVibesHomePanel extends HTMLElement {
         .inline-form,
         .map-form,
         .map-workspace,
+        .page-workspace,
         .target-grid {
           grid-template-columns: 1fr;
         }
@@ -2990,6 +3185,204 @@ function pageIcon(value) {
     return "mdi:file-document-multiple-outline";
   }
   return "mdi:file-document-outline";
+}
+
+function pageSource(page) {
+  return page?.source && typeof page.source === "object" ? page.source : page || {};
+}
+
+function pageMetadata(page) {
+  const source = pageSource(page);
+  const sourceMetadata =
+    source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+  const artifactMetadata =
+    page?.artifact?.metadata && typeof page.artifact.metadata === "object"
+      ? page.artifact.metadata
+      : {};
+  return { ...artifactMetadata, ...sourceMetadata };
+}
+
+function pageKey(page) {
+  const source = pageSource(page);
+  return String(
+    source?.id ||
+      source?.sourceId ||
+      page?.artifact?.id ||
+      source?.sourceUri ||
+      source?.canonicalUri ||
+      source?.title ||
+      page?.markdown ||
+      ""
+  );
+}
+
+function pageTitle(page) {
+  const source = pageSource(page);
+  const markdownTitle = String(pageMarkdown(page)).match(/^#\s+(.+)$/m)?.[1];
+  return String(
+    markdownTitle ||
+      source?.title ||
+      source?.name ||
+      source?.sourceUri ||
+      source?.id ||
+      "Generated page"
+  );
+}
+
+function pageProjection(page) {
+  const source = pageSource(page);
+  const metadata = pageMetadata(page);
+  return metadata.projectionKind || metadata.kind || source?.sourceType || "page";
+}
+
+function pageMarkdown(page) {
+  return String(
+    page?.markdown ||
+      page?.content ||
+      page?.text ||
+      page?.artifact?.markdown ||
+      page?.artifact?.content ||
+      ""
+  );
+}
+
+function stripLeadingMarkdownTitle(markdown, title) {
+  const text = String(markdown || "");
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const firstContentIndex = lines.findIndex((line) => line.trim());
+  if (firstContentIndex < 0) {
+    return text;
+  }
+  const heading = lines[firstContentIndex].trim().match(/^#\s+(.+)$/);
+  if (!heading) {
+    return text;
+  }
+  const headingText = heading[1].trim().toLowerCase();
+  const titleText = String(title || "").trim().toLowerCase();
+  if (!titleText || headingText === titleText || titleText.includes(headingText)) {
+    lines.splice(firstContentIndex, 1);
+    return lines.join("\n").trimStart();
+  }
+  return text;
+}
+
+function renderMarkdown(markdown) {
+  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  const html = [];
+  let paragraph = [];
+  let listType = "";
+  let listItems = [];
+  let codeLines = [];
+  let inCode = false;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) {
+      return;
+    }
+    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) {
+      return;
+    }
+    const tag = listType === "ol" ? "ol" : "ul";
+    html.push(`<${tag}>${listItems.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</${tag}>`);
+    listItems = [];
+    listType = "";
+  };
+  const flushCode = () => {
+    if (!codeLines.length) {
+      return;
+    }
+    html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    codeLines = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(4, heading[1].length);
+      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const unordered = trimmed.match(/^[-*]\s+(.+)$/);
+    if (unordered) {
+      flushParagraph();
+      if (listType && listType !== "ul") {
+        flushList();
+      }
+      listType = "ul";
+      listItems.push(unordered[1]);
+      continue;
+    }
+
+    const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      flushParagraph();
+      if (listType && listType !== "ol") {
+        flushList();
+      }
+      listType = "ol";
+      listItems.push(ordered[1]);
+      continue;
+    }
+
+    if (trimmed.startsWith(">")) {
+      flushParagraph();
+      flushList();
+      html.push(`<blockquote>${renderInlineMarkdown(trimmed.replace(/^>\s?/, ""))}</blockquote>`);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  if (inCode || codeLines.length) {
+    flushCode();
+  }
+  return html.join("");
+}
+
+function renderInlineMarkdown(value) {
+  let html = escapeHtml(value);
+  html = html.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    (_match, label, url) =>
+      `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer">${label}</a>`
+  );
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return html;
 }
 
 function refinementTaskIcon(state) {
