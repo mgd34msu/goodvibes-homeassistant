@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.57
+
+- Target `@pellux/goodvibes-sdk@0.28.16`.
+- Document the `0.28.16` validation focus: bounded foreground Ask repair for weak Home Assistant object answers, official/vendor already-indexed source reuse, typed subject-linked fact promotion, deferred-not-closed behavior when accepted sources produce no usable facts, coalesced refinement limit accounting, pages route reliability, and Home Assistant map filter behavior.
+
 ## 0.5.56
 
 - Target `@pellux/goodvibes-sdk@0.28.15`.
