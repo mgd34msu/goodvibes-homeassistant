@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.65
+
+- Target `@pellux/goodvibes-sdk@0.28.22`.
+- Document the `0.28.22` validation focus: Ask-to-pages propagation, persisted source-to-fact and fact-to-Home-Assistant-device links before page regeneration, official source and canonical fact rendering on generated device passports, preservation of legitimate specs such as `2 x 10W`, and removal of stale `0 source(s)` and manual/source open questions when source-backed evidence exists.
+
 ## 0.5.64
 
 - Target `@pellux/goodvibes-sdk@0.28.21`.
