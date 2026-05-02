@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.63
+
+- Target `@pellux/goodvibes-sdk@0.28.20`.
+- Document the `0.28.20` validation focus: initial Home Graph Ask waiting for overlapping same-gap repair and re-answering from repaired evidence, follow-up/base/concrete Ask parity, official LG/vendor source preference, real LG Home Assistant linked object scoping, top-level fact linkage fields, generated-page canonical fact dedupe, removal of table debris/direct-comparison/raw-evidence noise, preservation of legitimate specs such as `2 x 10W` speakers, map contract sanity, and daemon responsiveness.
+
 ## 0.5.62
 
 - Target `@pellux/goodvibes-sdk@0.28.19`.

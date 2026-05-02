@@ -59,7 +59,7 @@ from .home_graph import async_build_home_graph_snapshot
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.62"
+FRONTEND_ASSET_VERSION = "0.5.63"
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
