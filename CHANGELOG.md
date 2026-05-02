@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.59
+
+- Add internal navigation to generated Home Graph pages: room/device markdown rows now link to matching generated pages when available and fall back to scoped map/search links for missing pages, models, areas, integrations, entities, and device IDs.
+- Add a linked-pages and graph-context section to the Pages reader so Home Graph pages behave more like navigable wiki pages.
+
 ## 0.5.58
 
 - Target `@pellux/goodvibes-sdk@0.28.17`.

@@ -261,7 +261,7 @@ data:
   include_markdown: true
 ```
 
-The pages response includes `ok`, `spaceId`, and `pages`. Each page has a daemon source record plus optional artifact metadata and markdown content when `include_markdown` is true. SDK `0.28.17` filters `knowledge.answer_gap`, `knowledge.semantic_gap`, and `knowledge.intrinsic_gap` records out of generated page issue sections so generated pages show actionable Home Graph issues instead of internal knowledge gaps. The GoodVibes Home Pages tab renders these records as a wiki-style page browser and reader; direct regeneration, export/import, and reset controls are kept in collapsed maintenance sections.
+The pages response includes `ok`, `spaceId`, and `pages`. Each page has a daemon source record plus optional artifact metadata and markdown content when `include_markdown` is true. SDK `0.28.17` filters `knowledge.answer_gap`, `knowledge.semantic_gap`, and `knowledge.intrinsic_gap` records out of generated page issue sections so generated pages show actionable Home Graph issues instead of internal knowledge gaps. The GoodVibes Home Pages tab renders these records as a wiki-style page browser and reader; direct regeneration, export/import, and reset controls are kept in collapsed maintenance sections. The reader derives internal navigation from returned page metadata and markdown rows: matching generated pages open directly, while missing page targets, model names, areas, integrations, entities, and device IDs can jump into scoped map/search views until the SDK returns first-class page relationship links.
 
 Example visual map request:
 

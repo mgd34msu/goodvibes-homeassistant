@@ -391,6 +391,25 @@ class GoodVibesHomePanel extends HTMLElement {
       this._render();
       return;
     }
+    if (action === "page_map_filter") {
+      const key = element?.dataset?.mapFilterKey || "";
+      const value = element?.dataset?.mapFilterValue || "";
+      if (key && value) {
+        this._mapFilters = { ...this._mapFilters, [key]: [value] };
+        this._tab = "map";
+        await this._call("map", this._mapPayload());
+      }
+      return;
+    }
+    if (action === "page_map_query") {
+      const query = element?.dataset?.mapQuery || "";
+      if (query) {
+        this._mapQuery = query;
+        this._tab = "map";
+        await this._call("map", this._mapPayload());
+      }
+      return;
+    }
     if (action === "map_clear_facet_search") {
       this._mapFacetQuery = "";
       this._render();
@@ -1632,6 +1651,7 @@ class GoodVibesHomePanel extends HTMLElement {
     const pages = this._generatedPages();
     const selected = this._selectedPage(pages);
     const selectedKey = selected ? pageKey(selected) : "";
+    const pageIndex = buildPageNavigationIndex(pages);
     return `
       <section class="page-workspace">
         <aside class="panel page-index">
@@ -1648,7 +1668,7 @@ class GoodVibesHomePanel extends HTMLElement {
           }
         </aside>
         <article class="panel page-reader-panel">
-          ${selected ? this._pageReader(selected) : `<p class="empty">No page selected</p>`}
+          ${selected ? this._pageReader(selected, pages, pageIndex) : `<p class="empty">No page selected</p>`}
         </article>
       </section>
       <section class="grid two page-maintenance">
@@ -1717,7 +1737,7 @@ class GoodVibesHomePanel extends HTMLElement {
     `;
   }
 
-  _pageReader(page) {
+  _pageReader(page, pages = [], pageIndex = buildPageNavigationIndex(pages)) {
     const source = pageSource(page);
     const metadata = pageMetadata(page);
     const title = pageTitle(page);
@@ -1725,6 +1745,9 @@ class GoodVibesHomePanel extends HTMLElement {
     const generatedAt = formatTimestamp(metadata.generatedAt || source?.updatedAt || source?.createdAt);
     const markdown = stripLeadingMarkdownTitle(pageMarkdown(page), title);
     const sourceUri = source?.sourceUri || source?.canonicalUri || "";
+    const profile = pageProfile(page);
+    const related = relatedPagesForPage(page, pages, pageIndex);
+    const contextLinks = pageContextLinks(profile, pageIndex);
     const meta = [
       projectionLabel(projection),
       metadata.regeneration || "",
@@ -1740,8 +1763,10 @@ class GoodVibesHomePanel extends HTMLElement {
           ${meta.length ? `<div class="page-meta">${meta.map((item) => `<span>${escapeHtml(String(item))}</span>`).join("")}</div>` : ""}
           ${source?.summary ? `<p>${escapeHtml(String(source.summary))}</p>` : ""}
         </header>
+        ${related.length ? linkedPagesPanel(related) : ""}
+        ${contextLinks.length ? pageContextPanel(contextLinks) : ""}
         <div class="wiki-body">
-          ${markdown ? renderMarkdown(markdown) : `<p class="empty">This page has no rendered markdown yet.</p>`}
+          ${markdown ? renderMarkdown(markdown, { pageIndex, currentKey: pageKey(page) }) : `<p class="empty">This page has no rendered markdown yet.</p>`}
         </div>
         ${
           sourceUri || source?.id || page?.artifact?.id
@@ -2230,7 +2255,7 @@ class GoodVibesHomePanel extends HTMLElement {
   _markdownPreview() {
     const page = itemsFromPayload(this._pages, ["pages"]).find((item) => item?.markdown);
     if (page?.markdown) {
-      return this._pageReader(page);
+      return this._pageReader(page, this._generatedPages());
     }
     const result = this._lastResult.result || this._lastResult;
     return result?.markdown
@@ -2785,6 +2810,79 @@ class GoodVibesHomePanel extends HTMLElement {
         color: var(--secondary-text-color);
         line-height: 1.5;
       }
+      .linked-pages {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        display: grid;
+        gap: 12px;
+        padding: 12px;
+      }
+      .linked-pages h2 {
+        font-size: 15px;
+        margin: 0;
+      }
+      .linked-page-list {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      }
+      .linked-page {
+        align-items: start;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 24px minmax(0, 1fr);
+        justify-items: start;
+        min-height: 48px;
+        padding: 9px 10px;
+        text-align: left;
+      }
+      .linked-page ha-icon {
+        color: var(--primary-color);
+        margin-top: 1px;
+      }
+      .linked-page strong,
+      .linked-page small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .linked-page small {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .page-context {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .context-chip {
+        align-items: center;
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 999px;
+        display: inline-flex;
+        gap: 6px;
+        min-height: 30px;
+        max-width: 100%;
+        padding: 4px 9px;
+      }
+      .context-chip span {
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      .context-chip strong {
+        font-size: 12px;
+        max-width: 260px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .wiki-body {
         color: var(--primary-text-color);
         display: block;
@@ -2861,6 +2959,27 @@ class GoodVibesHomePanel extends HTMLElement {
       }
       .wiki-body a {
         color: var(--primary-color);
+      }
+      .inline-page-link {
+        background: transparent;
+        border: 0;
+        color: var(--primary-color);
+        cursor: pointer;
+        display: inline;
+        font: inherit;
+        min-height: 0;
+        padding: 0;
+        text-align: left;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .inline-page-link:hover,
+      .linked-page:hover,
+      .context-chip:hover {
+        border-color: var(--primary-color);
+      }
+      .list-separator {
+        color: var(--secondary-text-color);
       }
       .wiki-footer {
         border-top: 1px solid var(--divider-color);
@@ -3246,6 +3365,332 @@ function pageMarkdown(page) {
   );
 }
 
+function buildPageNavigationIndex(pages) {
+  const profiles = pages.map((page) => pageProfile(page)).filter((profile) => profile.key);
+  const index = {
+    profiles,
+    byKey: new Map(),
+    byTitle: new Map(),
+    byAreaId: new Map(),
+    byDeviceId: new Map(),
+  };
+  profiles.forEach((profile) => {
+    index.byKey.set(profile.key, profile);
+    pageLookupTitles(profile.page).forEach((title) => {
+      const normalized = normalizePageLookup(title);
+      if (normalized && !index.byTitle.has(normalized)) {
+        index.byTitle.set(normalized, profile);
+      }
+    });
+    if (
+      profile.areaId &&
+      (!index.byAreaId.has(profile.areaId) || profile.projection === "room-page")
+    ) {
+      index.byAreaId.set(profile.areaId, profile);
+    }
+    if (profile.deviceId && !index.byDeviceId.has(profile.deviceId)) {
+      index.byDeviceId.set(profile.deviceId, profile);
+    }
+  });
+  return index;
+}
+
+function pageProfile(page) {
+  const metadata = pageMetadata(page);
+  const source = pageSource(page);
+  const markdown = pageMarkdown(page);
+  const homeAssistant =
+    metadata.homeAssistant && typeof metadata.homeAssistant === "object"
+      ? metadata.homeAssistant
+      : {};
+  const title = pageTitle(page);
+  const entityIds = uniqueStrings([
+    ...extractEntityIds(markdown),
+    ...normalizeLabelValues(homeAssistant.entityId),
+    ...normalizeLabelValues(metadata.entityId),
+  ]);
+  const integrationDomains = uniqueStrings([
+    ...extractIntegrationDomains(markdown),
+    ...normalizeLabelValues(homeAssistant.integrationId),
+    ...normalizeLabelValues(metadata.integrationId),
+    ...normalizeLabelValues(metadata.integrationDomain),
+  ]);
+  return {
+    page,
+    key: pageKey(page),
+    title,
+    projection: pageProjection(page),
+    sourceId: source?.id || source?.sourceId || "",
+    areaId:
+      metadata.areaId ||
+      homeAssistant.areaId ||
+      markdownField(markdown, "Area") ||
+      "",
+    deviceId:
+      metadata.deviceId ||
+      homeAssistant.deviceId ||
+      firstDeviceIdFromMarkdown(markdown) ||
+      "",
+    manufacturer: metadata.manufacturer || markdownField(markdown, "Manufacturer") || "",
+    model: metadata.model || markdownField(markdown, "Model") || "",
+    entityIds,
+    integrationDomains,
+    markdown,
+  };
+}
+
+function pageLookupTitles(page) {
+  const source = pageSource(page);
+  return uniqueStrings([
+    pageTitle(page),
+    source?.title,
+    source?.name,
+    stripPageSuffix(source?.title),
+    stripPageSuffix(pageTitle(page)),
+  ]);
+}
+
+function stripPageSuffix(value) {
+  return String(value || "").replace(/\s+(passport|page|wiki)$/i, "").trim();
+}
+
+function normalizePageLookup(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+(passport|page|wiki)$/g, "")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function markdownField(markdown, label) {
+  const pattern = new RegExp(`^[-*]\\s+${escapeRegExp(label)}:\\s*(.+)$`, "im");
+  const match = String(markdown || "").match(pattern);
+  return match ? match[1].trim() : "";
+}
+
+function firstDeviceIdFromMarkdown(markdown) {
+  const match = String(markdown || "").match(/\bdevice\s+([a-f0-9]{16,})\b/i);
+  return match ? match[1] : "";
+}
+
+function extractEntityIds(markdown) {
+  const matches = String(markdown || "").match(/\b[a-z_]+\.[a-z0-9_]+\b/gi) || [];
+  return matches;
+}
+
+function extractIntegrationDomains(markdown) {
+  const matches = [];
+  const text = String(markdown || "");
+  let match;
+  const pattern = /\bintegration\s+([a-z0-9_]+)/gi;
+  while ((match = pattern.exec(text))) {
+    matches.push(match[1]);
+  }
+  return matches;
+}
+
+function relatedPagesForPage(page, pages, pageIndex) {
+  const current = pageProfile(page);
+  const related = new Map();
+  const add = (profile, reason, weight = 10) => {
+    if (!profile?.key || profile.key === current.key) {
+      return;
+    }
+    const existing = related.get(profile.key);
+    if (!existing || weight < existing.weight) {
+      related.set(profile.key, { profile, reason, weight });
+    }
+  };
+  const isRoom = current.projection === "room-page" || Boolean(current.areaId && !current.deviceId);
+  if (current.areaId) {
+    const room = pageIndex.byAreaId.get(current.areaId);
+    if (room && room.projection === "room-page") {
+      add(room, "Room", 1);
+    }
+  }
+  pageIndex.profiles.forEach((profile) => {
+    const isDevice = profile.projection === "device-passport" || Boolean(profile.deviceId);
+    if (isRoom && isDevice && profile.areaId === current.areaId) {
+      add(profile, "Device in this room", 2);
+      return;
+    }
+    if (current.deviceId && profile.markdown.includes(current.deviceId)) {
+      add(profile, "Mentions this device", 3);
+      return;
+    }
+    if (profile.deviceId && current.markdown.includes(profile.deviceId)) {
+      add(profile, "Linked device", 3);
+      return;
+    }
+    if (current.areaId && isDevice && profile.areaId === current.areaId) {
+      add(profile, "Nearby device", 5);
+      return;
+    }
+    if (profile.title && current.markdown.includes(profile.title)) {
+      add(profile, "Mentioned page", 6);
+    }
+  });
+  return Array.from(related.values())
+    .sort((left, right) => left.weight - right.weight || left.profile.title.localeCompare(right.profile.title))
+    .slice(0, 18);
+}
+
+function linkedPagesPanel(related) {
+  return `
+    <nav class="linked-pages" aria-label="Linked pages">
+      <h2>Linked Pages</h2>
+      <div class="linked-page-list">
+        ${related.map(({ profile, reason }) => `
+          <button type="button" class="linked-page" data-action="page_select" data-page-key="${escapeAttr(profile.key)}">
+            <ha-icon icon="${pageIcon(profile.projection)}"></ha-icon>
+            <span>
+              <strong>${escapeHtml(profile.title)}</strong>
+              <small>${escapeHtml(reason)}</small>
+            </span>
+          </button>
+        `).join("")}
+      </div>
+    </nav>
+  `;
+}
+
+function pageContextLinks(profile, pageIndex) {
+  const links = [];
+  const add = (label, value, action, data = {}) => {
+    if (!value) {
+      return;
+    }
+    links.push({ label, value, action, data });
+  };
+  const room = profile.areaId ? pageIndex.byAreaId.get(profile.areaId) : null;
+  if (room?.key && room.key !== profile.key) {
+    add("Room", room.title, "page_select", { pageKey: room.key });
+  } else if (profile.areaId) {
+    add("Area", profile.areaId, "page_map_filter", { mapFilterKey: "areaIds", mapFilterValue: profile.areaId });
+  }
+  if (profile.deviceId) {
+    add("Device", shortText(profile.deviceId, 18), "page_map_filter", { mapFilterKey: "deviceIds", mapFilterValue: profile.deviceId });
+  }
+  if (profile.model) {
+    add("Model", profile.model, "page_map_query", { mapQuery: profile.model });
+  }
+  profile.integrationDomains.slice(0, 4).forEach((domain) =>
+    add("Integration", domain, "page_map_filter", { mapFilterKey: "integrationDomains", mapFilterValue: domain })
+  );
+  profile.entityIds.slice(0, 6).forEach((entityId) =>
+    add("Entity", entityId, "page_map_filter", { mapFilterKey: "entityIds", mapFilterValue: entityId })
+  );
+  return links;
+}
+
+function pageContextPanel(links) {
+  return `
+    <div class="page-context">
+      ${links.map((link) => contextLinkButton(link)).join("")}
+    </div>
+  `;
+}
+
+function contextLinkButton(link) {
+  const attrs = Object.entries(link.data || {})
+    .map(([key, value]) => `data-${kebabCase(key)}="${escapeAttr(String(value))}"`)
+    .join(" ");
+  return `
+    <button type="button" class="context-chip" data-action="${escapeAttr(link.action)}" ${attrs}>
+      <span>${escapeHtml(link.label)}</span>
+      <strong>${escapeHtml(String(link.value))}</strong>
+    </button>
+  `;
+}
+
+function pageLinkForListItem(value, context = {}) {
+  const pageIndex = context.pageIndex;
+  if (!pageIndex?.byTitle) {
+    return null;
+  }
+  const raw = String(value || "").trim();
+  const candidates = [
+    raw.split(/\s+-\s+/)[0],
+    raw.split(/\s+--\s+/)[0],
+    raw.split(":")[0],
+    raw,
+  ].map((item) => item.trim()).filter(Boolean);
+  for (const candidate of candidates) {
+    const profile = pageIndex.byTitle.get(normalizePageLookup(candidate));
+    if (profile?.key && profile.key !== context.currentKey) {
+      return { profile, text: candidate, rest: raw.slice(candidate.length) };
+    }
+  }
+  return null;
+}
+
+function renderListItem(value, context = {}) {
+  const link = pageLinkForListItem(value, context);
+  if (!link) {
+    return renderGraphListItem(value, context);
+  }
+  return `
+    <button type="button" class="inline-page-link" data-action="page_select" data-page-key="${escapeAttr(link.profile.key)}">
+      ${escapeHtml(link.text)}
+    </button>${renderInlineMarkdown(link.rest, context)}
+  `;
+}
+
+function renderGraphListItem(value, context = {}) {
+  const raw = String(value || "").trim();
+  const parts = raw.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) {
+    return renderInlineMarkdown(value, context);
+  }
+  return parts.map((part, index) => renderGraphListSegment(part, index)).join('<span class="list-separator"> - </span>');
+}
+
+function renderGraphListSegment(part, index) {
+  const area = part.match(/^area\s+(.+)$/i);
+  if (area) {
+    return inlineActionButton("page_map_filter", `area ${area[1]}`, {
+      mapFilterKey: "areaIds",
+      mapFilterValue: area[1],
+    });
+  }
+  const integration = part.match(/^integration\s+(.+)$/i);
+  if (integration) {
+    return inlineActionButton("page_map_filter", `integration ${integration[1]}`, {
+      mapFilterKey: "integrationDomains",
+      mapFilterValue: integration[1],
+    });
+  }
+  const device = part.match(/^device\s+([a-f0-9]{16,})$/i);
+  if (device) {
+    return inlineActionButton("page_map_filter", `device ${shortText(device[1], 12)}`, {
+      mapFilterKey: "deviceIds",
+      mapFilterValue: device[1],
+    });
+  }
+  if (index === 0 || looksLikeModelToken(part)) {
+    return inlineActionButton("page_map_query", part, { mapQuery: part });
+  }
+  return renderInlineMarkdown(part);
+}
+
+function inlineActionButton(action, label, data = {}) {
+  const attrs = Object.entries(data)
+    .map(([key, value]) => `data-${kebabCase(key)}="${escapeAttr(String(value))}"`)
+    .join(" ");
+  return `<button type="button" class="inline-page-link" data-action="${escapeAttr(action)}" ${attrs}>${escapeHtml(label)}</button>`;
+}
+
+function looksLikeModelToken(value) {
+  const text = String(value || "").trim();
+  return (
+    text.length >= 4 &&
+    /[a-z]/i.test(text) &&
+    /[0-9_:-]/.test(text) &&
+    !/^https?:\/\//i.test(text)
+  );
+}
+
 function stripLeadingMarkdownTitle(markdown, title) {
   const text = String(markdown || "");
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -3266,7 +3711,7 @@ function stripLeadingMarkdownTitle(markdown, title) {
   return text;
 }
 
-function renderMarkdown(markdown) {
+function renderMarkdown(markdown, context = {}) {
   const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
   const html = [];
   let paragraph = [];
@@ -3279,7 +3724,7 @@ function renderMarkdown(markdown) {
     if (!paragraph.length) {
       return;
     }
-    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "), context)}</p>`);
     paragraph = [];
   };
   const flushList = () => {
@@ -3287,7 +3732,7 @@ function renderMarkdown(markdown) {
       return;
     }
     const tag = listType === "ol" ? "ol" : "ul";
-    html.push(`<${tag}>${listItems.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</${tag}>`);
+    html.push(`<${tag}>${listItems.map((item) => `<li>${renderListItem(item, context)}</li>`).join("")}</${tag}>`);
     listItems = [];
     listType = "";
   };
@@ -3327,7 +3772,7 @@ function renderMarkdown(markdown) {
       flushParagraph();
       flushList();
       const level = Math.min(4, heading[1].length);
-      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      html.push(`<h${level}>${renderInlineMarkdown(heading[2], context)}</h${level}>`);
       continue;
     }
 
@@ -3356,7 +3801,7 @@ function renderMarkdown(markdown) {
     if (trimmed.startsWith(">")) {
       flushParagraph();
       flushList();
-      html.push(`<blockquote>${renderInlineMarkdown(trimmed.replace(/^>\s?/, ""))}</blockquote>`);
+      html.push(`<blockquote>${renderInlineMarkdown(trimmed.replace(/^>\s?/, ""), context)}</blockquote>`);
       continue;
     }
 
@@ -3372,7 +3817,7 @@ function renderMarkdown(markdown) {
   return html.join("");
 }
 
-function renderInlineMarkdown(value) {
+function renderInlineMarkdown(value, _context = {}) {
   let html = escapeHtml(value);
   html = html.replace(
     /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
@@ -4260,6 +4705,27 @@ function looksLikeNoisyFacetLabel(value) {
     /[?!.]$/.test(text) ||
     /^(do not|never|always|make sure|check if|connect to|you have|everything you|can bluetooth|manuals?|missing[- ]|knowledge\.)/i.test(text)
   );
+}
+
+function uniqueStrings(values) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function kebabCase(value) {
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[_\s]+/g, "-")
+    .toLowerCase();
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function escapeHtml(value) {
