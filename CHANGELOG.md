@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.62
+
+- Target `@pellux/goodvibes-sdk@0.28.19`.
+- Document the `0.28.19` validation focus: clean-space reset/sync/reindex, Home Graph and base knowledge Ask quality, official/vendor source preference, clean synthesized prose without routing fragments, top-level fact linkage, low-value fragment filtering, canonical typed generated pages, map/filter edges, and coalesced refinement contracts.
+
 ## 0.5.61
 
 - Use SDK-provided Home Graph page relationship metadata in the Pages reader: `subject`, `target`, `neighbors`, and `relatedPages` now drive page navigation before markdown-derived fallback links.
