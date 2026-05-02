@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.56
+
+- Target `@pellux/goodvibes-sdk@0.28.15`.
+- Document the `0.28.15` validation focus: daemon status responsiveness, Home Assistant sync return timing with foreground page caps, reset dry-run/destructive reset behavior, changed-only reindex accounting, Home Graph Ask and base knowledge Ask quality for the LG TV feature/spec query, synthesized prose versus raw snippets, official/vendor source preference, typed subject-linked repair facts, real Home Assistant linked objects, refinement run limit accounting, top-level `nextRepairAttemptAt`, generated page/passport cleanliness, map edge/self-loop/facet integrity, and panel status/progress compatibility.
+
 ## 0.5.55
 
 - Target `@pellux/goodvibes-sdk@0.28.14`.
