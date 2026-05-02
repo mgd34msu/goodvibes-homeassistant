@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.61
+
+- Use SDK-provided Home Graph page relationship metadata in the Pages reader: `subject`, `target`, `neighbors`, and `relatedPages` now drive page navigation before markdown-derived fallback links.
+
+## 0.5.60
+
+- Target `@pellux/goodvibes-sdk@0.28.18`.
+- Document the `0.28.18` validation focus: clean-space reset/sync/reindex/refinement, LG TV Home Graph and base knowledge Ask quality, exact linked Home Assistant object scoping, fact subject linkage fields, SDK-provided page subject/target/neighbor metadata, source/fact enriched pages, map filters/edges/facets, and task retry metadata.
+
 ## 0.5.59
 
 - Add internal navigation to generated Home Graph pages: room/device markdown rows now link to matching generated pages when available and fall back to scoped map/search links for missing pages, models, areas, integrations, entities, and device IDs.

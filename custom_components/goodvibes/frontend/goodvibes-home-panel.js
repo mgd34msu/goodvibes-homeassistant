@@ -3370,12 +3370,22 @@ function buildPageNavigationIndex(pages) {
   const index = {
     profiles,
     byKey: new Map(),
+    bySourceId: new Map(),
+    byNodeId: new Map(),
+    byObjectId: new Map(),
     byTitle: new Map(),
     byAreaId: new Map(),
     byDeviceId: new Map(),
   };
   profiles.forEach((profile) => {
     index.byKey.set(profile.key, profile);
+    addIndexValue(index.bySourceId, profile.sourceId, profile);
+    addIndexValue(index.byNodeId, profile.subject?.id, profile);
+    addIndexValue(index.byNodeId, profile.target?.id, profile);
+    addIndexValue(index.byObjectId, profile.subject?.objectId, profile);
+    addIndexValue(index.byObjectId, profile.target?.objectId, profile);
+    addIndexValue(index.byObjectId, profile.deviceId, profile);
+    addIndexValue(index.byObjectId, profile.areaId, profile);
     pageLookupTitles(profile.page).forEach((title) => {
       const normalized = normalizePageLookup(title);
       if (normalized && !index.byTitle.has(normalized)) {
@@ -3393,6 +3403,13 @@ function buildPageNavigationIndex(pages) {
     }
   });
   return index;
+}
+
+function addIndexValue(index, value, profile) {
+  if (!value || index.has(String(value))) {
+    return;
+  }
+  index.set(String(value), profile);
 }
 
 function pageProfile(page) {
@@ -3415,18 +3432,31 @@ function pageProfile(page) {
     ...normalizeLabelValues(metadata.integrationId),
     ...normalizeLabelValues(metadata.integrationDomain),
   ]);
+  const subject = objectRecord(page?.subject || metadata.subject || metadata.homeGraphSubject);
+  const target = objectRecord(page?.target || metadata.target || metadata.homeGraphTarget);
+  const neighbors = arrayField(page?.neighbors || metadata.neighbors).map(objectRecord).filter(Boolean);
+  const relatedPages = arrayField(page?.relatedPages || metadata.relatedPages).filter(
+    (item) => item && typeof item === "object"
+  );
   return {
     page,
     key: pageKey(page),
     title,
     projection: pageProjection(page),
     sourceId: source?.id || source?.sourceId || "",
+    subject,
+    target,
+    neighbors,
+    relatedPages,
     areaId:
+      subject?.areaId ||
       metadata.areaId ||
       homeAssistant.areaId ||
       markdownField(markdown, "Area") ||
       "",
     deviceId:
+      (subject?.objectKind === "device" ? subject?.objectId : "") ||
+      (target?.objectKind === "device" ? target?.objectId : "") ||
       metadata.deviceId ||
       homeAssistant.deviceId ||
       firstDeviceIdFromMarkdown(markdown) ||
@@ -3437,6 +3467,10 @@ function pageProfile(page) {
     integrationDomains,
     markdown,
   };
+}
+
+function objectRecord(value) {
+  return value && typeof value === "object" ? value : null;
 }
 
 function pageLookupTitles(page) {
@@ -3502,6 +3536,14 @@ function relatedPagesForPage(page, pages, pageIndex) {
       related.set(profile.key, { profile, reason, weight });
     }
   };
+  current.relatedPages.forEach((entry) => {
+    const profile = pageProfileFromReference(entry, pageIndex);
+    add(profile, entry.relation || entry.projectionKind || "Related page", 0);
+  });
+  current.neighbors.forEach((entry) => {
+    const profile = pageProfileFromReference(entry, pageIndex);
+    add(profile, entry.relation || "Graph neighbor", 4);
+  });
   const isRoom = current.projection === "room-page" || Boolean(current.areaId && !current.deviceId);
   if (current.areaId) {
     const room = pageIndex.byAreaId.get(current.areaId);
@@ -3534,6 +3576,20 @@ function relatedPagesForPage(page, pages, pageIndex) {
   return Array.from(related.values())
     .sort((left, right) => left.weight - right.weight || left.profile.title.localeCompare(right.profile.title))
     .slice(0, 18);
+}
+
+function pageProfileFromReference(entry, pageIndex) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  return (
+    pageIndex.byKey.get(String(entry.pageKey || "")) ||
+    pageIndex.bySourceId.get(String(entry.sourceId || entry.id || "")) ||
+    pageIndex.byNodeId.get(String(entry.id || entry.nodeId || "")) ||
+    pageIndex.byObjectId.get(String(entry.objectId || "")) ||
+    pageIndex.byTitle.get(normalizePageLookup(entry.title || entry.name || "")) ||
+    null
+  );
 }
 
 function linkedPagesPanel(related) {
@@ -3571,6 +3627,12 @@ function pageContextLinks(profile, pageIndex) {
   }
   if (profile.deviceId) {
     add("Device", shortText(profile.deviceId, 18), "page_map_filter", { mapFilterKey: "deviceIds", mapFilterValue: profile.deviceId });
+  }
+  if (profile.subject?.title && profile.subject?.id) {
+    add("Subject", profile.subject.title, "page_map_query", { mapQuery: profile.subject.title });
+  }
+  if (profile.target?.title && profile.target?.id) {
+    add("Target", profile.target.title, "page_map_query", { mapQuery: profile.target.title });
   }
   if (profile.model) {
     add("Model", profile.model, "page_map_query", { mapQuery: profile.model });
