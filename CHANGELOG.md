@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.55
+
+- Target `@pellux/goodvibes-sdk@0.28.14`.
+- Document the `0.28.14` validation focus: bounded refinement/run deadlines, synthesized Ask answers from usable sources/facts, official/vendor source preference, retryable/deferred repair task lifecycle with `nextRepairAttemptAt`, typed subject-linked facts from repaired evidence, bounded Home Assistant sync/page generation through `pageAutomation.maxRunMs`, already-indexed accepted sources counting as repair evidence, and matching base `knowledgeSpaceId: "homeassistant"` Ask behavior.
+
 ## 0.5.54
 
 - Target `@pellux/goodvibes-sdk@0.28.13`.

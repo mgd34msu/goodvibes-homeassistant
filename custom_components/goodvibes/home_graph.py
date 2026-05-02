@@ -43,10 +43,13 @@ HELPER_DOMAINS = {
     "timer",
 }
 
+DEFAULT_PAGE_AUTOMATION_MAX_RUN_MS = 120000
+
 DEFAULT_PAGE_AUTOMATION = {
     "enabled": True,
     "devicePassports": True,
     "roomPages": True,
+    "maxRunMs": DEFAULT_PAGE_AUTOMATION_MAX_RUN_MS,
 }
 
 
