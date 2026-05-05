@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.66
+
+- Target `@pellux/goodvibes-sdk@0.33.4`.
+- Document the `0.33.4` validation focus: daemon/runtime contract compatibility, strict public `remote.snapshot` shape, `/api/remote` schema cleanup, persisted shared-session normalization during daemon startup, and no expected Home Assistant panel contract changes.
+
 ## 0.5.65
 
 - Target `@pellux/goodvibes-sdk@0.28.22`.
