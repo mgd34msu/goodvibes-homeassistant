@@ -133,7 +133,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodVibesSensorDescription, ...] = (
         icon="mdi:alert-rhombus",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: _home_graph_issue_count(data),
-        attrs_fn=lambda data: {"issues": data.home_graph_issues},
+        attrs_fn=lambda data: _home_graph_issue_attrs(data),
     ),
     GoodVibesSensorDescription(
         key="home_graph_sources",
@@ -141,7 +141,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodVibesSensorDescription, ...] = (
         icon="mdi:book-search",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: _home_graph_source_count(data),
-        attrs_fn=lambda data: {"sources": data.home_graph_sources},
+        attrs_fn=lambda data: _home_graph_source_attrs(data),
     ),
 )
 
@@ -193,6 +193,60 @@ def _home_graph_source_count(data: GoodVibesRuntimeData) -> int:
     if isinstance(count, int):
         return count
     return 0
+
+
+def _home_graph_issue_attrs(data: GoodVibesRuntimeData) -> dict[str, Any]:
+    """Return recorder-safe Home Graph issue attributes."""
+
+    return _compact_collection_attrs(
+        data.home_graph_issues,
+        "issues",
+        _home_graph_issue_count(data),
+        ("id", "title", "code", "severity", "status", "nodeId", "sourceId"),
+    )
+
+
+def _home_graph_source_attrs(data: GoodVibesRuntimeData) -> dict[str, Any]:
+    """Return recorder-safe Home Graph source attributes."""
+
+    return _compact_collection_attrs(
+        data.home_graph_sources,
+        "sources",
+        _home_graph_source_count(data),
+        ("id", "title", "url", "status", "sourceType", "nodeId"),
+    )
+
+
+def _compact_collection_attrs(
+    payload: dict[str, Any],
+    key: str,
+    count: int,
+    fields: tuple[str, ...],
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Return a compact sample instead of storing large daemon payloads."""
+
+    items = payload.get(key)
+    if not isinstance(items, list):
+        return {
+            "count": count,
+            "truncated": False,
+        }
+    sample = [
+        {
+            field: value
+            for field in fields
+            if (value := item.get(field)) not in (None, "")
+        }
+        for item in items[:limit]
+        if isinstance(item, dict)
+    ]
+    return {
+        "count": count,
+        "shown": len(sample),
+        "truncated": len(items) > limit,
+        key: sample,
+    }
 
 
 async def async_setup_entry(

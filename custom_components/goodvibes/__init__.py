@@ -1349,11 +1349,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if runtime.home_graph_enabled:
         if getattr(hass, "is_running", False):
-            hass.async_create_task(_async_auto_sync_home_graph(runtime))
+            hass.create_task(_async_auto_sync_home_graph(runtime))
         else:
             runtime.unsubscribe_auto_sync = hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_STARTED,
-                lambda _event: hass.async_create_task(_async_auto_sync_home_graph(runtime)),
+                lambda _event: hass.create_task(_async_auto_sync_home_graph(runtime)),
             )
     return True
 

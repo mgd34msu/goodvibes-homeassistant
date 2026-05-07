@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import selector
 
 from .client import GoodVibesClient, GoodVibesClientError, normalize_daemon_url
 from .const import (
@@ -30,6 +31,9 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     """Return the user step schema."""
 
     defaults = defaults or {}
+    password_selector = selector.TextSelector(
+        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+    )
     return vol.Schema(
         {
             vol.Required(
@@ -39,11 +43,11 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_DAEMON_TOKEN,
                 default=defaults.get(CONF_DAEMON_TOKEN, ""),
-            ): str,
+            ): password_selector,
             vol.Required(
                 CONF_WEBHOOK_SECRET,
                 default=defaults.get(CONF_WEBHOOK_SECRET, ""),
-            ): str,
+            ): password_selector,
             vol.Optional(
                 CONF_EVENT_TYPE,
                 default=defaults.get(CONF_EVENT_TYPE, DEFAULT_EVENT_TYPE),

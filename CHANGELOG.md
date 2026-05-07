@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.67
+
+- Mask daemon bearer token and Home Assistant webhook secret fields in the config flow with Home Assistant password selectors.
+- Document credential handling more explicitly: this integration does not store daemon credentials in `/tmp`; the daemon token is currently stored by Home Assistant in the config entry, GoodVibes `goodvibes://` secret references remain daemon-side config values, and the current GoodVibes-native token source is the daemon companion/operator pairing token until the SDK exposes a first-class Home Assistant scoped-token exchange.
+- Use Home Assistant's thread-safe task scheduling for the startup Home Graph auto-sync callback.
+- Keep Home Graph issues/sources sensor attributes recorder-safe by exposing counts plus a compact sample instead of storing the full daemon payload in entity state.
+
 ## 0.5.66
 
 - Target `@pellux/goodvibes-sdk@0.33.4`.
