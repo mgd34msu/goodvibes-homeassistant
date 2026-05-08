@@ -94,12 +94,7 @@ Config fields:
 
 The integration exposes a Home Assistant `update` entity named `GoodVibes Integration update`. Home Assistant can show available GitHub releases in Settings > Updates, and `update.install` can install the latest release archive into `custom_components/goodvibes`.
 
-The GitHub repository is currently a placeholder. Before publishing, replace these values:
-
-- `custom_components/goodvibes/const.py`: `UPDATE_REPOSITORY = "OWNER/goodvibes-homeassistant"`
-- `custom_components/goodvibes/manifest.json`: `documentation` and `issue_tracker`
-
-Release archives can either be GitHub zipballs containing `custom_components/goodvibes/` or explicit `.zip` release assets. After an update is installed, restart Home Assistant so the new Python and frontend files are loaded.
+Releases are published from tags in the form `v0.5.67`. The release workflow uploads `goodvibes.zip`, which contains `custom_components/goodvibes/` for Home Assistant and HACS installs. After an update is installed, restart Home Assistant so the new Python and frontend files are loaded.
 
 ## GoodVibes Home Sidebar
 

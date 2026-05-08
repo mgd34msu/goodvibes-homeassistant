@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "goodvibes"
 INTEGRATION_VERSION = "0.5.67"
-UPDATE_REPOSITORY = "OWNER/goodvibes-homeassistant"
+UPDATE_REPOSITORY = "mgd34msu/goodvibes-homeassistant"
 UPDATE_RELEASES_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
 UPDATE_RELEASES_URL = f"https://github.com/{UPDATE_REPOSITORY}/releases"
 

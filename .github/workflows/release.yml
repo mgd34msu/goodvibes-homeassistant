@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, for example v0.5.67"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Validate tag matches manifest version
+        run: |
+          python <<'PY'
+          import json
+          import os
+          import pathlib
+
+          manifest = json.loads(
+              pathlib.Path("custom_components/goodvibes/manifest.json").read_text()
+          )
+          event_name = os.environ["GITHUB_EVENT_NAME"]
+          tag = (
+              os.environ["RELEASE_TAG"]
+              if event_name == "workflow_dispatch"
+              else os.environ["GITHUB_REF_NAME"]
+          )
+          expected = f"v{manifest['version']}"
+
+          if tag != expected:
+              raise SystemExit(f"Release tag {tag} does not match manifest version {expected}")
+          PY
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag }}
+
+      - name: Build release archive
+        run: |
+          mkdir -p dist
+          zip -r dist/goodvibes.zip custom_components/goodvibes \
+            -x '*/__pycache__/*' '*.pyc'
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/goodvibes.zip
