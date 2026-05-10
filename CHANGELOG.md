@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.68
+
+- Target `@pellux/goodvibes-sdk@0.33.24`.
+- Document the `0.33.24` validation focus: companion-chat tool-loop exhaustion now finalizes Assist turns instead of returning a daemon HTTP 500 when repeated tool calls do not produce a final answer.
+
 ## 0.5.67
 
 - Mask daemon bearer token and Home Assistant webhook secret fields in the config flow with Home Assistant password selectors.
