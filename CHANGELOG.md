@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.69
+
+- Target `@pellux/goodvibes-sdk@0.33.26`.
+- Document the `0.33.26` validation focus: latest daemon/runtime compatibility, including WRFC compound-chain and auto-commit fixes, with no expected Home Assistant panel contract change.
+
 ## 0.5.68
 
 - Target `@pellux/goodvibes-sdk@0.33.24`.
