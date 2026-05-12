@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.70
+
+- Target `@pellux/goodvibes-sdk@0.33.30`.
+- Document the `0.33.30` validation focus: latest daemon/runtime compatibility, including runtime MCP config, auto-compaction and exec alias fixes, project-mode prompt classification fixes, QEMU JavaScript-family REPL command fixes, and no expected Home Assistant panel contract change.
+
 ## 0.5.69
 
 - Target `@pellux/goodvibes-sdk@0.33.26`.
