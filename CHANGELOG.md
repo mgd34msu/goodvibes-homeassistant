@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Split the README into a shorter setup guide plus focused Home Graph, service, troubleshooting, and SDK compatibility documentation under `docs/`.
+
 ## 0.5.70
 
 - Target `@pellux/goodvibes-sdk@0.33.30`.
