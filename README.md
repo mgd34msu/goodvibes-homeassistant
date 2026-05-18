@@ -67,6 +67,8 @@ GoodVibes `goodvibes://...` secret references are daemon-side config values. The
 
 The integration does not store daemon credentials in `/tmp`. Browser uploads use a temporary file only for uploaded bytes, then unlink it after the daemon ingest call finishes.
 
+See [docs/security.md](docs/security.md) for credential roles, storage expectations, and rotation guidance.
+
 ## Installation
 
 Copy `custom_components/goodvibes` into your Home Assistant `custom_components` directory, restart Home Assistant, then add the integration from Settings > Devices & services.
@@ -224,7 +226,10 @@ The integration listens for `goodvibes_message` by default. If you configure a c
 - [Home Graph reference](docs/home-graph.md)
 - [Service reference](docs/services.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Known limits](docs/known-limits.md)
+- [Security and credentials](docs/security.md)
 - [SDK compatibility](docs/sdk-compatibility.md)
+- [Development and release](docs/development.md)
 - [Documentation index](docs/README.md)
 
 ## Boundaries

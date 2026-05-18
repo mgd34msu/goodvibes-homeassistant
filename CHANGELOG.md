@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Split the README into a shorter setup guide plus focused Home Graph, service, troubleshooting, and SDK compatibility documentation under `docs/`.
+- Add development/release, security/credentials, and known-limits documentation.
 
 ## 0.5.70
 
