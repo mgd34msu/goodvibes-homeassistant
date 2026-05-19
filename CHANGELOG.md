@@ -4,6 +4,7 @@
 
 - Split the README into a shorter setup guide plus focused Home Graph, service, troubleshooting, and SDK compatibility documentation under `docs/`.
 - Add development/release, security/credentials, and known-limits documentation.
+- Bump first-party GitHub Actions to Node 24-compatible major versions and declare the integration as config-entry-only for Hassfest.
 
 ## 0.5.70
 

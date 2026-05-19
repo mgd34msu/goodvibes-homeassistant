@@ -92,6 +92,8 @@ from .frontend import async_setup_frontend, async_unload_frontend_panel
 
 _LOGGER = logging.getLogger(__name__)
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 SERVICE_PROMPT = "prompt"
 SERVICE_RUN_AGENT = "run_agent"
 SERVICE_STATUS = "status"
