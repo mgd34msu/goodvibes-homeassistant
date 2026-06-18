@@ -1,12 +1,12 @@
 # SDK Compatibility
 
-This integration currently targets `@pellux/goodvibes-sdk@0.33.30`.
+This integration currently targets `@pellux/goodvibes-sdk@0.33.38`.
 
 The Home Assistant integration is intentionally a thin client over daemon-owned APIs. SDK upgrades usually require validation against daemon routes and response shapes, not local Home Assistant graph logic.
 
 ## Current Target
 
-`@pellux/goodvibes-sdk@0.33.30` is the current daemon/runtime compatibility target for integration version `0.5.70`.
+`@pellux/goodvibes-sdk@0.33.38` is the current daemon/runtime compatibility target for integration version `0.5.71`.
 
 Validation focus:
 
@@ -16,6 +16,7 @@ Validation focus:
 - Auto-compaction and exec alias fixes from `0.33.28`.
 - Project-mode prompt classification fixes from `0.33.29`.
 - QEMU JavaScript-family REPL command fixes from `0.33.30`.
+- Daemon/runtime fixes across `0.33.31` through `0.33.38`.
 - No expected Home Assistant panel contract change from the SDK update.
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant after the daemon reports healthy.
@@ -39,7 +40,8 @@ Home Graph uses the daemon routes listed in [home-graph.md](home-graph.md#daemon
 
 | SDK version | Integration concern |
 | --- | --- |
-| `0.33.30` | Current target. Runtime compatibility validation for QEMU JavaScript-family REPL command fixes. No Home Assistant panel contract change expected. |
+| `0.33.31` through `0.33.38` | Current target (`0.33.38`). Daemon/runtime compatibility validation. No Home Assistant panel contract change expected. |
+| `0.33.30` | Runtime compatibility validation for QEMU JavaScript-family REPL command fixes. No Home Assistant panel contract change expected. |
 | `0.33.29` | Project-mode prompt classification fixes. No Home Assistant panel contract change expected. |
 | `0.33.28` | Auto-compaction and exec alias fixes. No Home Assistant panel contract change expected. |
 | `0.33.27` | Runtime MCP config support. No Home Assistant panel contract change expected. |
