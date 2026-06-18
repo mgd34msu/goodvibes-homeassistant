@@ -6,6 +6,11 @@
 - Add development/release, security/credentials, and known-limits documentation.
 - Bump first-party GitHub Actions to Node 24-compatible major versions and declare the integration as config-entry-only for Hassfest.
 
+## 0.5.71
+
+- Target `@pellux/goodvibes-sdk@0.33.38`.
+- Document the `0.33.38` validation focus: latest daemon/runtime compatibility across the `0.33.31` through `0.33.38` releases, with no expected Home Assistant panel contract change.
+
 ## 0.5.70
 
 - Target `@pellux/goodvibes-sdk@0.33.30`.

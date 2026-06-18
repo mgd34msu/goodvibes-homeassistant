@@ -10,7 +10,7 @@ homeassistant:<installationId>
 
 ## Daemon Routes
 
-The integration targets these SDK `0.33.30` Home Graph routes:
+The integration targets these SDK `0.33.38` Home Graph routes:
 
 - `POST /api/artifacts`
 - `POST /api/knowledge/ingest/artifact`
@@ -109,7 +109,7 @@ data:
 
 Use the sidebar for normal browser file uploads. Do not base64 large PDFs, manuals, receipts, or photos into JSON. The upload bridge accepts multipart browser uploads, writes a temporary file inside Home Assistant, forwards it to the daemon, and removes the temporary file after the daemon call finishes.
 
-Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.33.30` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
+Daemon artifact size is controlled by `storage.artifacts.maxBytes`; SDK `0.33.38` defaults to `512 MiB`. Home Assistant and reverse proxies in front of it may need matching upload size and timeout settings for large browser uploads.
 
 URL, note, artifact, import, reindex, and refinement calls allow up to one hour for daemon extraction/indexing. Sync-generated pages, packets, and exports allow up to ten minutes.
 
@@ -173,7 +173,7 @@ Ask responses are rendered directly from SDK fields. The panel shows the synthes
 
 Fact cards preserve daemon-provided linkage fields such as `subject`, `subjectIds`, `linkedObjectIds`, and `targetHints` when present. The integration does not infer graph linkage locally.
 
-SDK `0.33.30` also supports `knowledgeSpaceId: "homeassistant"` as a namespace alias for base knowledge Ask calls.
+SDK `0.33.38` also supports `knowledgeSpaceId: "homeassistant"` as a namespace alias for base knowledge Ask calls.
 
 ## Pages
 
@@ -238,11 +238,11 @@ action: goodvibes.home_graph_reindex
 data: {}
 ```
 
-If older manuals were uploaded before searchable extraction or old PDF parsing was available, run `goodvibes.home_graph_reindex` once after updating the daemon to SDK `0.33.30` or newer, then retry Home Graph Ask. No reupload is required. If older manuals were not linked to the right object, re-link them from Review/Link or reingest them.
+If older manuals were uploaded before searchable extraction or old PDF parsing was available, run `goodvibes.home_graph_reindex` once after updating the daemon to SDK `0.33.38` or newer, then retry Home Graph Ask. No reupload is required. If older manuals were not linked to the right object, re-link them from Review/Link or reingest them.
 
 The reindex response includes `ok`, `spaceId`, `scanned`, `reparsed`, `skipped`, `failed`, `sources`, `failures`, `changedSourceCount`, `forcedSourceCount`, `skippedGeneratedPageArtifactCount`, `refreshedGeneratedPageCount`, `generatedPagePolicyVersion`, optional `coalesced`, optional auto-link results, optional generated page summary, optional `qualityIssues`, and optional semantic counts.
 
-SDK `0.33.30` may also return `semantic.selfImprovement`, refinement task IDs, `truncated`, and `budgetExhausted`. Broad repair work may be queued or coalesced for asynchronous refinement instead of completed inside the reindex request.
+SDK `0.33.38` may also return `semantic.selfImprovement`, refinement task IDs, `truncated`, and `budgetExhausted`. Broad repair work may be queued or coalesced for asynchronous refinement instead of completed inside the reindex request.
 
 The Refine tab lists daemon-owned task records from `/api/homeassistant/home-graph/refinement/tasks`, including lifecycle state, trigger, priority, blocked reason, trace, retry timing such as `nextRepairAttemptAt`, and metadata. It can call `/api/homeassistant/home-graph/refinement/run` for broad or targeted gap/source refinement and `/api/homeassistant/home-graph/refinement/tasks/{id}/cancel` for active task cancellation.
 
