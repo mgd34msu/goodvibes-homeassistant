@@ -1,12 +1,12 @@
 # SDK Compatibility
 
-This integration currently targets `@pellux/goodvibes-sdk@0.33.38`.
+This integration currently targets `@pellux/goodvibes-sdk@0.34.0`.
 
 The Home Assistant integration is intentionally a thin client over daemon-owned APIs. SDK upgrades usually require validation against daemon routes and response shapes, not local Home Assistant graph logic.
 
 ## Current Target
 
-`@pellux/goodvibes-sdk@0.33.38` is the current daemon/runtime compatibility target for integration version `0.5.71`.
+`@pellux/goodvibes-sdk@0.34.0` is the current daemon/runtime compatibility target for integration version `0.5.72`.
 
 Validation focus:
 
@@ -17,6 +17,7 @@ Validation focus:
 - Project-mode prompt classification fixes from `0.33.29`.
 - QEMU JavaScript-family REPL command fixes from `0.33.30`.
 - Daemon/runtime fixes across `0.33.31` through `0.33.38`.
+- Additive operator method contracts from `0.34.0` (new `channels.*` inbox/routing/drafts methods plus new `email.*` and `calendar.*` namespaces) and transitive build/test dependency security advisory cleanup, with no breaking changes to existing methods.
 - No expected Home Assistant panel contract change from the SDK update.
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant after the daemon reports healthy.
@@ -40,7 +41,8 @@ Home Graph uses the daemon routes listed in [home-graph.md](home-graph.md#daemon
 
 | SDK version | Integration concern |
 | --- | --- |
-| `0.33.31` through `0.33.38` | Current target (`0.33.38`). Daemon/runtime compatibility validation. No Home Assistant panel contract change expected. |
+| `0.34.0` | Current target (`0.34.0`). Additive `channels.*` / `email.*` / `calendar.*` operator method contracts and transitive dependency security cleanup. No breaking changes to existing methods and no Home Assistant panel contract change expected. |
+| `0.33.31` through `0.33.38` | Daemon/runtime compatibility validation. No Home Assistant panel contract change expected. |
 | `0.33.30` | Runtime compatibility validation for QEMU JavaScript-family REPL command fixes. No Home Assistant panel contract change expected. |
 | `0.33.29` | Project-mode prompt classification fixes. No Home Assistant panel contract change expected. |
 | `0.33.28` | Auto-compaction and exec alias fixes. No Home Assistant panel contract change expected. |
