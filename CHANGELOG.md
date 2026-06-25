@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.72
+
+- Target `@pellux/goodvibes-sdk@0.34.0`.
+- Document the `0.34.0` validation focus: additive operator method contracts (new `channels.*` inbox/routing/drafts methods plus new `email.*` and `calendar.*` namespaces) and transitive build/test dependency security advisory cleanup, with no breaking changes to existing methods and no expected Home Assistant panel contract change.
 - Split the README into a shorter setup guide plus focused Home Graph, service, troubleshooting, and SDK compatibility documentation under `docs/`.
 - Add development/release, security/credentials, and known-limits documentation.
 - Bump first-party GitHub Actions to Node 24-compatible major versions and declare the integration as config-entry-only for Hassfest.
