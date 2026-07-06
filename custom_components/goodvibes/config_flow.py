@@ -9,7 +9,13 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import selector
 
-from .client import GoodVibesClient, GoodVibesClientError, normalize_daemon_url
+from .client import (
+    GoodVibesClient,
+    GoodVibesClientError,
+    GoodVibesSurfaceMissingError,
+    GoodVibesUnauthorizedError,
+    normalize_daemon_url,
+)
 from .const import (
     CONF_DAEMON_TOKEN,
     CONF_DAEMON_URL,
@@ -84,18 +90,13 @@ class GoodVibesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 validated = await _validate_input(self.hass, user_input)
-            except GoodVibesClientError as err:
-                message = str(err).lower()
-                if "401" in message or "403" in message or "unauthorized" in message:
-                    errors["base"] = "invalid_auth"
-                elif (
-                    "unknown channel action" in message
-                    or "home assistant surface is disabled" in message
-                    or "404" in message
-                ):
-                    errors["base"] = "surface_missing"
-                else:
-                    errors["base"] = "cannot_connect"
+            except GoodVibesUnauthorizedError:
+                errors["base"] = "invalid_auth"
+            except GoodVibesSurfaceMissingError:
+                errors["base"] = "surface_missing"
+            except GoodVibesClientError:
+                # Unreachable daemon, timeout, or any other daemon-side error.
+                errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(validated["daemon_url"])
                 self._abort_if_unique_id_configured()
@@ -137,7 +138,7 @@ async def _validate_input(
     await client.status()
     health = await client.health()
     if health.get("ok") is False:
-        raise GoodVibesClientError("Home Assistant surface is disabled")
+        raise GoodVibesSurfaceMissingError("Home Assistant surface is disabled")
     if home_graph_enabled:
         await client.home_graph_status(
             build_home_graph_base_payload(

@@ -72,6 +72,12 @@ DEFAULT_DISPLAY_NAME = "Home Assistant"
 DEFAULT_CONVERSATION_TIMEOUT_MS = 120000
 DEFAULT_HOME_GRAPH_ENABLED = True
 
+# Largest browser upload the panel proxy will buffer to local disk before
+# forwarding it to the daemon. This matches the daemon's own default artifact
+# cap (storage.artifacts.maxBytes, 512 MiB) so the integration refuses an
+# oversized file up front instead of filling the temp filesystem first.
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
+
 PLATFORMS = ["sensor", "conversation", "update"]
 
 SIGNAL_UPDATE = "goodvibes_update"

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add the integration's first test suite (pytest with pytest-homeassistant-custom-component) covering the config flow, the daemon client and its error taxonomy, the panel upload reader, and the config-entry lifecycle, plus a CI job that runs it on Python 3.13.
+- Move the panel upload's temp-file writes and the client's upload read-back off the event loop so a large upload no longer blocks Home Assistant on disk I/O.
+- Refuse a panel upload larger than 512 MiB before buffering it to local disk, with an HTTP 413 response that names the limit.
+- Replace substring-based daemon-error classification with a typed client exception hierarchy (unavailable, unauthorized, surface-missing, daemon-error); the config flow now selects its error by type.
+- Scope the Home Graph startup auto-sync task to the config entry so unload and reload cancel it instead of leaving it running.
+- Collapse the panel asset version knob onto `INTEGRATION_VERSION` so there is a single integration version.
+- Record the response-shape validation against the current SDK daemon router in `docs/sdk-compatibility.md`.
+
 ## 0.5.72
 
 - Target `@pellux/goodvibes-sdk@0.34.0`.

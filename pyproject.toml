@@ -1,0 +1,9 @@
+# Test configuration only. This repository is a Home Assistant custom
+# integration installed by copying custom_components/goodvibes into a Home
+# Assistant config directory; it is not a distributed Python package. This file
+# exists to configure pytest for the test suite.
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
