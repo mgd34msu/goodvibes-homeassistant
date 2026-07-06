@@ -1,0 +1,13 @@
+# Test-only dependencies for the GoodVibes Home Assistant integration.
+#
+# The Home Assistant test harness is pinned so CI runs against a known
+# daemon-facing baseline. pytest-homeassistant-custom-component pulls in a
+# matching homeassistant release (2026.2.3) and pytest, and provides the
+# `hass` and `aioclient_mock` fixtures the suite relies on. It runs on the
+# same Python 3.13 the rest of CI uses.
+pytest-homeassistant-custom-component==0.13.316
+
+# The integration declares `frontend` as a manifest dependency, so loading it in
+# a test sets up the frontend component, which imports the built frontend
+# package. Pin it to the version homeassistant 2026.2.3 expects.
+home-assistant-frontend==20260128.6

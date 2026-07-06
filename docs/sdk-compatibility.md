@@ -22,6 +22,20 @@ Validation focus:
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant after the daemon reports healthy.
 
+## Response-shape Validation
+
+The five daemon response shapes the integration reads most directly were checked against the current GoodVibes SDK daemon router source and confirmed intact:
+
+- `GET /status` returns `status` and `version`, and returns HTTP `401` when the bearer token is rejected. The daemon status sensor and the config flow read both fields.
+- `GET /api/homeassistant/home-graph/status` returns `ok` plus the graph counts (`sourceCount`, `nodeCount`, `edgeCount`, `issueCount`) and a `readiness` block. The Home Graph status sensor treats `ok: true` as ready; the endpoint has no top-level `status` field, so the sensor's `status` lookup falls back to the `ok` check, which is the intended behavior.
+- `GET /api/homeassistant/home-graph/issues` returns `ok`, `spaceId`, and an `issues` list. The issues sensor counts the list length.
+- `POST /api/homeassistant/conversation` returns `status`, `mode`, `sessionId`, `messageId`, and, on a completed turn, an `assistant` object with `speechText` and `text`. The Assist agent reads all of these. The response has no `agentId` field; the integration treats that as optional and skips it when absent.
+- `POST /api/channels/actions/homeassistant/homeassistant-manifest` wraps its result as `{ actionId, surface, result: { device: { identifiers, manufacturer, model, name }, ... } }`. The integration unwraps `result` and reads the `device` fields. The device object has no `swVersion`; the integration falls back to the daemon status `version`, which is the intended behavior.
+
+No response-shape drift that breaks the integration was found. These are also encoded as assertions in the test suite so a future SDK change that renames one of these fields is caught in CI.
+
+Version-label note: this validation read the GoodVibes SDK router source directly, and that source's package manifest reported version `1.2.0`, while this integration tracks its daemon target as `0.34.0`. The routes and response shapes matched regardless of the label, but the two version schemes should be reconciled so the "current target" number is unambiguous.
+
 ## Minimum Expected Daemon Surface
 
 The config flow validates:

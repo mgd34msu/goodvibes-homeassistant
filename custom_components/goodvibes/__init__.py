@@ -1350,12 +1350,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if runtime.home_graph_enabled:
+        # Scope the auto-sync task to the config entry so Home Assistant cancels
+        # it when the entry is unloaded or reloaded; a bare hass.create_task
+        # would leak a running sync past the entry's lifetime.
+        task_name = f"{DOMAIN}_auto_sync_{entry.entry_id}"
         if getattr(hass, "is_running", False):
-            hass.create_task(_async_auto_sync_home_graph(runtime))
+            entry.async_create_background_task(
+                hass, _async_auto_sync_home_graph(runtime), name=task_name
+            )
         else:
             runtime.unsubscribe_auto_sync = hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_STARTED,
-                lambda _event: hass.create_task(_async_auto_sync_home_graph(runtime)),
+                lambda _event: entry.async_create_background_task(
+                    hass, _async_auto_sync_home_graph(runtime), name=task_name
+                ),
             )
     return True
 

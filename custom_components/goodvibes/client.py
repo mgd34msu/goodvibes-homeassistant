@@ -56,7 +56,39 @@ HOME_GRAPH_ASK_TIMEOUT = 180
 
 
 class GoodVibesClientError(Exception):
-    """Raised when the GoodVibes daemon returns an error."""
+    """Raised when the GoodVibes daemon returns an error.
+
+    This is the base class for every daemon-facing failure. Callers can catch
+    it to handle "the daemon call did not succeed" without caring why, or catch
+    one of the specific subclasses below to react to a particular cause by type
+    instead of by scanning the message text.
+    """
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        """Store the message and the HTTP status when one is known."""
+
+        super().__init__(message)
+        self.status = status
+
+
+class GoodVibesUnavailableError(GoodVibesClientError):
+    """The daemon could not be reached (connection failure or timeout)."""
+
+
+class GoodVibesUnauthorizedError(GoodVibesClientError):
+    """The daemon rejected the request credentials (HTTP 401 or 403)."""
+
+
+class GoodVibesSurfaceMissingError(GoodVibesClientError):
+    """The requested daemon route or Home Assistant surface is not available.
+
+    Covers a missing route (HTTP 404), an unknown channel action, and a daemon
+    that reports its Home Assistant surface as disabled.
+    """
+
+
+class GoodVibesDaemonError(GoodVibesClientError):
+    """The daemon returned an error response that is none of the above."""
 
 
 def normalize_daemon_url(value: str) -> str:
@@ -82,6 +114,7 @@ class GoodVibesClient:
     ) -> None:
         """Initialize the client."""
 
+        self._hass = hass
         self._session = async_get_clientsession(hass)
         self._daemon_url = normalize_daemon_url(daemon_url)
         self._daemon_token = daemon_token.strip() if daemon_token else None
@@ -278,7 +311,12 @@ class GoodVibesClient:
             else:
                 form.add_field(key, str(value))
 
-        with Path(file_path).open("rb") as upload_file:
+        # Open the file on an executor thread so the blocking open() syscall
+        # never runs on the event loop. aiohttp then reads the file object in
+        # its own executor as it streams the multipart body, so the whole
+        # upload stays off the loop thread.
+        upload_file = await self._hass.async_add_executor_job(_open_binary, file_path)
+        try:
             form.add_field(
                 "file",
                 upload_file,
@@ -291,6 +329,8 @@ class GoodVibesClient:
                 data=form,
                 timeout=timeout,
             )
+        finally:
+            await self._hass.async_add_executor_job(upload_file.close)
 
     async def home_graph_link(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Link a Home Graph source or node to a Home Assistant object."""
@@ -525,9 +565,8 @@ class GoodVibesClient:
                 text = await response.text()
                 if response.status >= 400:
                     detail = text[:500] if text else response.reason
-                    raise GoodVibesClientError(
-                        f"GoodVibes HTTP {response.status}: {detail}"
-                    )
+                    message = f"GoodVibes HTTP {response.status}: {detail}"
+                    raise _error_for_status(response.status, message, detail)
                 if not text.strip():
                     return {}
                 try:
@@ -536,9 +575,39 @@ class GoodVibesClient:
                     return {"result": text}
                 return parsed if isinstance(parsed, dict) else {"result": parsed}
         except TimeoutError as err:
-            raise GoodVibesClientError("GoodVibes daemon request timed out") from err
+            raise GoodVibesUnavailableError(
+                "GoodVibes daemon request timed out"
+            ) from err
         except aiohttp.ClientError as err:
-            raise GoodVibesClientError(str(err)) from err
+            raise GoodVibesUnavailableError(str(err)) from err
+
+
+def _open_binary(file_path: str):
+    """Open a file for binary reading (runs on an executor thread)."""
+
+    return Path(file_path).open("rb")
+
+
+def _error_for_status(
+    status: int, message: str, detail: Any
+) -> GoodVibesClientError:
+    """Map an HTTP error status to a typed client exception.
+
+    The status is the primary signal. A 404 can also arrive from the daemon as
+    an "unknown channel action" body, and a disabled surface can be reported in
+    the body text, so those phrases are treated as a missing surface too.
+    """
+
+    detail_text = str(detail or "").lower()
+    if status in (401, 403):
+        return GoodVibesUnauthorizedError(message, status=status)
+    if (
+        status == 404
+        or "unknown channel action" in detail_text
+        or "home assistant surface is disabled" in detail_text
+    ):
+        return GoodVibesSurfaceMissingError(message, status=status)
+    return GoodVibesDaemonError(message, status=status)
 
 
 def _query_path(path: str, payload: Mapping[str, Any]) -> str:

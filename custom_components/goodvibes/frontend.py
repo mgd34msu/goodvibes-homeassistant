@@ -53,13 +53,18 @@ from .const import (
     CONF_CODE,
     DEFAULT_CONVERSATION_TIMEOUT_MS,
     DOMAIN,
+    INTEGRATION_VERSION,
+    MAX_UPLOAD_BYTES,
 )
 from .home_graph import async_build_home_graph_snapshot
 
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
 STATIC_CACHE_HEADERS = False
-FRONTEND_ASSET_VERSION = "0.5.66"
+# The panel asset is cache-busted with the integration version so there is a
+# single version knob for the whole integration instead of a second one that
+# can drift out of step with const.INTEGRATION_VERSION.
+FRONTEND_ASSET_VERSION = INTEGRATION_VERSION
 PANEL_COMPONENT = "goodvibes-home-panel"
 PANEL_URL_PATH = "goodvibes-home"
 PANEL_MODULE_URL = (
@@ -68,6 +73,7 @@ PANEL_MODULE_URL = (
 ICON_MODULE_URL = f"{STATIC_URL}/goodvibes-icons.js?v={FRONTEND_ASSET_VERSION}"
 PANEL_ICON = "goodvibes:home"
 UPLOAD_URL = "/api/goodvibes/home-graph/upload"
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
 TRIAGE_CHUNK_SIZE = 25
 TRIAGE_CONFIDENCE_THRESHOLD = 0.85
@@ -129,6 +135,10 @@ SUPPORTED_ACTIONS = {
     "triage_issues",
     "unlink",
 }
+
+
+class UploadTooLargeError(HomeAssistantError):
+    """Raised when a browser upload exceeds the configured size cap."""
 
 
 async def async_setup_frontend(hass: HomeAssistant) -> None:
@@ -238,9 +248,9 @@ class GoodVibesHomeGraphUploadView(HomeAssistantView):
             return self.json({"ok": False, "error": "Admin required"}, status_code=403)
 
         temp_path: str | None = None
+        hass: HomeAssistant = request.app[KEY_HASS]
         try:
-            hass: HomeAssistant = request.app[KEY_HASS]
-            fields, file_info = await _read_multipart_upload(request)
+            fields, file_info = await _read_multipart_upload(hass, request)
             temp_path = file_info["path"]
             runtime = _runtime_from_data(hass, fields)
             _ensure_home_graph_enabled(runtime)
@@ -262,14 +272,13 @@ class GoodVibesHomeGraphUploadView(HomeAssistantView):
             runtime.async_apply_home_graph_response(response)
             await runtime.async_refresh_home_graph()
             return self.json(response)
+        except UploadTooLargeError as err:
+            return self.json({"ok": False, "error": str(err)}, status_code=413)
         except (GoodVibesClientError, HomeAssistantError, ValueError) as err:
             return self.json({"ok": False, "error": str(err)}, status_code=400)
         finally:
             if temp_path:
-                try:
-                    os.unlink(temp_path)
-                except OSError:
-                    pass
+                await hass.async_add_executor_job(_remove_file, temp_path)
 
 
 async def _handle_home_graph_action(
@@ -1328,9 +1337,17 @@ def _coerce_query_value(
 
 
 async def _read_multipart_upload(
+    hass: HomeAssistant,
     request: web.Request,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Read a multipart browser upload into a temporary file."""
+    """Read a multipart browser upload into a temporary file.
+
+    The multipart chunks are read on the event loop (``read_chunk`` is async),
+    but every disk operation — creating the temp file, writing each chunk, and
+    cleaning up on error — is handed to an executor thread so the loop is never
+    blocked on I/O. An oversized upload is refused as soon as it crosses the cap
+    instead of being buffered to disk in full first.
+    """
 
     if not request.content_type.startswith("multipart/"):
         raise HomeAssistantError("Upload must use multipart/form-data")
@@ -1347,15 +1364,20 @@ async def _read_multipart_upload(
             content_type = (
                 part.headers.get("Content-Type") or "application/octet-stream"
             )
-            fd, temp_path = tempfile.mkstemp(prefix="goodvibes-home-graph-")
+            fd, temp_path = await hass.async_add_executor_job(_create_upload_tempfile)
             size = 0
             try:
-                with os.fdopen(fd, "wb") as temp_file:
-                    while chunk := await part.read_chunk(1024 * 1024):
+                temp_file = await hass.async_add_executor_job(os.fdopen, fd, "wb")
+                try:
+                    while chunk := await part.read_chunk(UPLOAD_CHUNK_SIZE):
                         size += len(chunk)
-                        temp_file.write(chunk)
-            except Exception:
-                os.unlink(temp_path)
+                        if size > MAX_UPLOAD_BYTES:
+                            raise UploadTooLargeError(_upload_too_large_message())
+                        await hass.async_add_executor_job(temp_file.write, chunk)
+                finally:
+                    await hass.async_add_executor_job(temp_file.close)
+            except BaseException:
+                await hass.async_add_executor_job(_remove_file, temp_path)
                 raise
             file_info = {
                 "path": temp_path,
@@ -1370,6 +1392,28 @@ async def _read_multipart_upload(
         raise HomeAssistantError("Upload requires a file field")
     fields["uploadedAt"] = dt_util.utcnow().isoformat()
     return fields, file_info
+
+
+def _create_upload_tempfile() -> tuple[int, str]:
+    """Create the upload temp file (runs on an executor thread)."""
+
+    return tempfile.mkstemp(prefix="goodvibes-home-graph-")
+
+
+def _remove_file(path: str) -> None:
+    """Delete a temp file, ignoring a missing one (runs on an executor thread)."""
+
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _upload_too_large_message() -> str:
+    """Return an honest refusal message naming the upload size limit."""
+
+    limit_mib = MAX_UPLOAD_BYTES // (1024 * 1024)
+    return f"Upload exceeds the {limit_mib} MiB limit"
 
 
 def _safe_filename(filename: str | None) -> str:

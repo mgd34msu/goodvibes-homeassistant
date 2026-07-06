@@ -21,7 +21,7 @@ If Home Graph answers, pages, issues, or map output look wrong, fix or reset the
 
 ## Upload Size and Timeouts
 
-SDK `0.34.0` defaults daemon artifact storage to `512 MiB` through `storage.artifacts.maxBytes`.
+SDK `0.34.0` defaults daemon artifact storage to `512 MiB` through `storage.artifacts.maxBytes`. This integration also refuses a panel upload larger than `512 MiB` before buffering it to local disk, so an oversized file is rejected up front instead of filling the temporary filesystem.
 
 Large uploads can still fail before they reach the daemon because of:
 
