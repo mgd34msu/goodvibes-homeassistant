@@ -13,11 +13,11 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.3.1` (`const.SDK_VALIDATED_VERSION`).
+- **Last validated against:** `1.3.2` (`const.SDK_VALIDATED_VERSION`).
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
-every route the integration calls is intact at `1.3.1`. A pin-forward to a newer SDK is therefore
+every route the integration calls is intact at `1.3.2`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
 
