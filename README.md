@@ -1,6 +1,6 @@
 # GoodVibes Home Assistant Integration
 
-Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from the latest `@pellux/goodvibes-sdk` (validated against `1.2.0`).
+Custom Home Assistant integration for the GoodVibes daemon Home Assistant surface from the latest `@pellux/goodvibes-sdk` (validated against `1.3.1`).
 
 GoodVibes owns routing, model/provider selection, remote-chat sessions, knowledge storage, Home Graph search, generated pages, packets, artifacts, and visual map rendering. This integration keeps the Home Assistant side thin: setup, Assist plumbing, services, sensors, repairs, event handling, upload proxying, Home Graph snapshot collection, and the `GoodVibes Home` sidebar panel.
 
@@ -100,7 +100,7 @@ The integration registers an admin-only sidebar panel named `GoodVibes Home`. Th
 
 The browser never receives the daemon token.
 
-The panel supports Home Graph status, sync, source/node/edge/issue browsing, visual map, URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, reindex, refinement task browsing/runs/cancellation, LLM triage of open review issues, generated page browsing, direct page refresh tools, export/import, reset, and packets.
+The panel supports Home Graph status, sync, source/node/edge/issue browsing, visual map, URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, reindex, refinement task browsing/runs/cancellation, server-side LLM triage of open review issues (runs in the daemon; the panel just requests it), generated page browsing, direct page refresh tools, export/import, reset, and packets.
 
 ## Assist
 

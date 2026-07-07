@@ -10,6 +10,15 @@
 - Collapse the panel asset version knob onto `INTEGRATION_VERSION` so there is a single integration version.
 - Record the response-shape validation against the current SDK daemon router in `docs/sdk-compatibility.md`.
 
+## 0.6.0
+
+- Assist conversations stream incrementally: the daemon now emits partial responses as they are generated, and the integration renders them as they arrive instead of blocking on the full reply.
+- Issue triage now runs server-side in the GoodVibes daemon (model-routed, confidence-gated, decision-cached); the integration's local triage engine is removed. Older daemons without server-side triage get an honest "not supported" outcome.
+- Startup and refresh are faster: daemon reads now run concurrently through a coordinator instead of one at a time.
+- Internal restructure: payload building unified into one module, the 26 services extracted from the setup file into a services module, and a test suite (92 tests) with a CI test job now guards the integration.
+- Fixed: uploads no longer block Home Assistant's event loop; oversized uploads are refused with the limit stated; daemon errors carry typed reasons (unreachable / unauthorized / surface missing); the background sync task is scoped to the config entry across reloads.
+- The integration targets the latest GoodVibes SDK, validated against 1.3.1; the MIT license file is included (required by the current HACS validation).
+
 ## 0.5.72
 
 - Target `@pellux/goodvibes-sdk@0.34.0`.

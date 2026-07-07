@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "goodvibes"
-INTEGRATION_VERSION = "0.5.72"
+INTEGRATION_VERSION = "0.6.0"
 
 # The integration always targets the LATEST published @pellux/goodvibes-sdk; it
 # is a thin client over stable daemon HTTP routes, not a pinned SDK build. This
