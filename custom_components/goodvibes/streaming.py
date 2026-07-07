@@ -9,10 +9,14 @@ Kept free of any ``homeassistant.components.conversation`` import (the delta is
 just a plain dict) so the conversion logic is unit-testable without the full
 conversation component and its intent dependencies.
 
-The daemon at SDK 1.2.0 emits a single terminal ``final`` (or ``error``) frame
-after the whole turn completes, so today one full-text delta is produced. If the
-daemon later streams incremental ``delta`` frames, they pass through here in
-order as successive content deltas with no change to the entity.
+As of SDK 1.3.0 the daemon streams incremental ``event: delta`` frames shaped
+``{"ok": true, "delta": "...", "text": "<accumulated so far>", "turnId": "...",
+"conversationId": "...", "messageId": "..."}`` as the model produces text,
+followed by the unchanged terminal ``final``/``error`` frame. This module reads
+the ``delta`` field (the incremental chunk, not the running ``text``
+accumulation) from each frame and yields it as a content delta in order. A
+daemon that predates streaming and only emits the terminal frame still works
+unchanged: the whole answer is emitted as one delta.
 """
 
 from __future__ import annotations

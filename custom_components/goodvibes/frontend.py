@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from aiohttp import web
 import voluptuous as vol
@@ -18,10 +17,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .client import GoodVibesClientError
+from .client import GoodVibesClientError, GoodVibesSurfaceMissingError
 from .const import (
     CONF_ALLOW_PRIVATE_HOSTS,
     CONF_AREA_ID,
@@ -41,7 +39,6 @@ from .const import (
     CONF_TITLE,
     CONF_URL,
     CONF_CODE,
-    DEFAULT_CONVERSATION_TIMEOUT_MS,
     DOMAIN,
     INTEGRATION_VERSION,
     MAX_UPLOAD_BYTES,
@@ -58,17 +55,17 @@ from .daemon_payloads import (
     link_payload as _link_payload,
     map_payload as _map_payload,
     parse_jsonish as _parse_jsonish,
-    parse_jsonish_or_text as _parse_jsonish_or_text,
     parse_tags as _parse_tags,
     query_payload as _query_payload,
     required_object as _required_object,
     required_text as _required_text,
     review_payload as _review_payload,
     string_list as _string_list,
-    string_set as _string_set,
     truthy as _truthy,
 )
 from .home_graph import async_build_home_graph_snapshot
+
+_LOGGER = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).with_name("frontend")
 STATIC_URL = "/goodvibes_static"
@@ -87,12 +84,16 @@ PANEL_ICON = "goodvibes:home"
 UPLOAD_URL = "/api/goodvibes/home-graph/upload"
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
-TRIAGE_CHUNK_SIZE = 25
-TRIAGE_CONFIDENCE_THRESHOLD = 0.85
+# Home Graph issue triage is now a server-side mode of the daemon's
+# `refinement/run` verb (SDK decision record
+# 2026-07-07-home-graph-issue-triage.md) — these are just the request
+# defaults this integration sends; the daemon owns the actual triage loop,
+# confidence gate, and decision cache.
 TRIAGE_DEFAULT_LIMIT = 25
-TRIAGE_CACHE_VERSION = 1
-TRIAGE_CACHE_KEY = f"{DOMAIN}_home_graph_triage"
-TRIAGE_CACHE_MAX_ISSUES = 5000
+TRIAGE_CHUNK_SIZE = 25
+TRIAGE_DEFAULT_MIN_CONFIDENCE = 85
+TRIAGE_REVIEWER = "homeassistant:auto-triage"
+TRIAGE_UNSUPPORTED_REASON = "daemon-triage-not-supported"
 
 SUPPORTED_ACTIONS = {
     "ask",
@@ -548,45 +549,6 @@ def _status_payload(runtime: Any) -> dict[str, Any]:
     }
 
 
-def _items_from_payload(payload: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
-    """Extract a list of dict items from common daemon response envelopes."""
-
-    if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, dict)]
-    if not isinstance(payload, dict):
-        return []
-    for key in keys:
-        value = payload.get(key)
-        if isinstance(value, list):
-            return [item for item in value if isinstance(item, dict)]
-    result = payload.get("result")
-    if isinstance(result, list):
-        return [item for item in result if isinstance(item, dict)]
-    if isinstance(result, dict):
-        return _items_from_payload(result, keys)
-    return []
-
-
-def _count_from_payload(payload: Any, keys: tuple[str, ...]) -> int:
-    """Extract a count from common daemon response envelopes."""
-
-    if isinstance(payload, dict):
-        for key in ("count", "total", "issueCount"):
-            value = payload.get(key)
-            if value not in (None, ""):
-                return _int_value(value, 0)
-        status = payload.get("status")
-        if isinstance(status, dict):
-            for key in ("count", "total", "issueCount"):
-                value = status.get(key)
-                if value not in (None, ""):
-                    return _int_value(value, 0)
-        result = payload.get("result")
-        if isinstance(result, (dict, list)):
-            return _count_from_payload(result, keys)
-    return len(_items_from_payload(payload, keys))
-
-
 def _int_value(value: Any, default: int) -> int:
     """Coerce a positive integer with a safe default."""
 
@@ -596,495 +558,89 @@ def _int_value(value: Any, default: int) -> int:
         return default
 
 
-def _float_value(value: Any, default: float) -> float:
-    """Coerce a float with a safe default."""
-
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _triage_issue_record(
-    issue: dict[str, Any],
-    node: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """Build a compact issue record for daemon-side LLM review triage."""
-
-    metadata = node.get("metadata") if isinstance(node, dict) else {}
-    if not isinstance(metadata, dict):
-        metadata = {}
-    ha_metadata = metadata.get("homeAssistant")
-    if not isinstance(ha_metadata, dict):
-        ha_metadata = {}
-    record: dict[str, Any] = {
-        "issueId": _triage_issue_key(issue),
-        "code": issue.get("code"),
-        "severity": issue.get("severity"),
-        "status": issue.get("status"),
-        "message": issue.get("message") or issue.get("title"),
-        "nodeId": issue.get("nodeId"),
-        "sourceId": issue.get("sourceId"),
-    }
-    if isinstance(node, dict):
-        record["node"] = {
-            "id": node.get("id"),
-            "kind": node.get("kind"),
-            "title": node.get("title") or node.get("name"),
-            "summary": node.get("summary"),
-            "aliases": (node.get("aliases") or [])[:8],
-            "confidence": node.get("confidence"),
-            "manufacturer": metadata.get("manufacturer"),
-            "model": metadata.get("model"),
-            "homeAssistant": {
-                "objectKind": ha_metadata.get("objectKind"),
-                "objectId": ha_metadata.get("objectId"),
-                "entityId": ha_metadata.get("entityId"),
-                "deviceId": ha_metadata.get("deviceId"),
-                "areaId": ha_metadata.get("areaId"),
-                "integrationId": ha_metadata.get("integrationId"),
-            },
-        }
-    return _clean_jsonish(record)
-
-
-def _triage_issue_key(issue: dict[str, Any]) -> str:
-    """Return a stable key the model can echo for a review item."""
-
-    value = (
-        issue.get("id")
-        or issue.get("issueId")
-        or issue.get("nodeId")
-        or issue.get("sourceId")
-        or issue.get("message")
-        or json.dumps(issue, sort_keys=True)
-    )
-    return str(value)
-
-
-def _clean_jsonish(value: Any) -> Any:
-    """Remove empty values from compact JSON sent to the triage prompt."""
-
-    if isinstance(value, dict):
-        return {
-            key: cleaned
-            for key, item in value.items()
-            if (cleaned := _clean_jsonish(item)) not in (None, "", [], {})
-        }
-    if isinstance(value, list):
-        return [
-            cleaned
-            for item in value
-            if (cleaned := _clean_jsonish(item)) not in (None, "", [], {})
-        ]
-    return value
-
-
-def _triage_prompt(records: list[dict[str, Any]]) -> str:
-    """Build the LLM instruction for automated Home Graph issue triage."""
-
-    payload = json.dumps({"issues": records}, separators=(",", ":"))
-    return (
-        "You are GoodVibes Home Graph review triage for Home Assistant.\n"
-        "Classify issues so people only review uncertain cases.\n"
-        "Return only strict JSON with this shape: "
-        '{"decisions":[{"issueId":"...","action":"reject|review",'
-        '"category":"...","confidence":0.0,"reason":"...",'
-        '"fact":{}}]}.\n'
-        "Use action reject only when the issue is clearly not applicable or "
-        "incorrect and can be safely dismissed. Use action review for anything "
-        "uncertain, anything that may require household knowledge, or any "
-        "physical device that could plausibly be battery powered.\n"
-        "For unknown battery type issues: reject software objects, integrations, "
-        "automations, scripts, scenes, areas, helpers, the sun, weather, Home "
-        "Assistant host/core/supervisor objects, servers, adapters, hubs, "
-        "coordinators, bridges, and mains-powered media devices or appliances. "
-        'Include fact {"batteryPowered":false,"batteryType":"none"} for those '
-        "not-applicable rejects. "
-        "For missing manual issues that are not applicable to software, helpers, "
-        'or generated Home Assistant objects, include fact {"manualRequired":false}. '
-        "Review sensors, locks, remotes, buttons, keypads, contact sensors, "
-        "motion sensors, leak sensors, smoke detectors, thermostats, shades, "
-        "blinds, and ambiguous physical devices.\n"
-        "Do not invent battery types. Do not choose accept, resolve, edit, or "
-        "forget.\n"
-        f"Issues JSON:\n{payload}"
-    )
-
-
-def _assistant_text(response: Any) -> str:
-    """Extract assistant text from common daemon conversation responses."""
-
-    if not isinstance(response, dict):
-        return str(response or "")
-    assistant = response.get("assistant")
-    if isinstance(assistant, dict):
-        return str(
-            assistant.get("speechText")
-            or assistant.get("text")
-            or assistant.get("message")
-            or ""
-        )
-    result = response.get("result")
-    if isinstance(result, dict):
-        return _assistant_text(result)
-    return str(response.get("text") or response.get("message") or result or "")
-
-
-def _parse_triage_decisions(text: str) -> list[dict[str, Any]]:
-    """Parse daemon LLM triage JSON into normalized decision records."""
-
-    payload = _extract_json_payload(text)
-    decisions = payload.get("decisions") if isinstance(payload, dict) else payload
-    if not isinstance(decisions, list):
-        raise HomeAssistantError("Home Graph triage response did not include decisions")
-
-    normalized: list[dict[str, Any]] = []
-    for decision in decisions:
-        if not isinstance(decision, dict):
-            continue
-        issue_id = str(decision.get("issueId") or decision.get("id") or "").strip()
-        if not issue_id:
-            continue
-        action = str(decision.get("action") or "review").strip().lower()
-        if action not in {"reject", "review"}:
-            action = "review"
-        normalized.append(
-            {
-                "issueId": issue_id,
-                "action": action,
-                "category": str(decision.get("category") or "").strip(),
-                "confidence": _float_value(decision.get("confidence"), 0.0),
-                "reason": str(decision.get("reason") or "").strip(),
-                "fact": decision.get("fact")
-                if isinstance(decision.get("fact"), dict)
-                else None,
-            }
-        )
-    return normalized
-
-
-def _extract_json_payload(text: str) -> dict[str, Any] | list[Any]:
-    """Parse JSON, accepting fenced or lightly wrapped model output."""
-
-    stripped = text.strip()
-    if not stripped:
-        raise HomeAssistantError("Home Graph triage returned an empty response")
-    try:
-        parsed = json.loads(stripped)
-    except ValueError:
-        start = stripped.find("{")
-        end = stripped.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            raise HomeAssistantError("Home Graph triage returned non-JSON output")
-        parsed = json.loads(stripped[start : end + 1])
-    if not isinstance(parsed, (dict, list)):
-        raise HomeAssistantError("Home Graph triage returned a non-object response")
-    return parsed
-
-
-async def _async_load_triage_cache(hass: HomeAssistant) -> dict[str, Any]:
-    """Load persisted Home Graph triage fingerprints."""
-
-    store = Store(hass, TRIAGE_CACHE_VERSION, TRIAGE_CACHE_KEY)
-    data = await store.async_load()
-    if not isinstance(data, dict):
-        data = {}
-    if not isinstance(data.get("entries"), dict):
-        data["entries"] = {}
-    return data
-
-
-async def _async_save_triage_cache(
-    hass: HomeAssistant,
-    data: dict[str, Any],
-) -> None:
-    """Persist Home Graph triage fingerprints."""
-
-    _trim_triage_cache(data)
-    store = Store(hass, TRIAGE_CACHE_VERSION, TRIAGE_CACHE_KEY)
-    await store.async_save(data)
-
-
-def _triage_entry_cache(data: dict[str, Any], entry_id: str) -> dict[str, Any]:
-    """Return mutable triage cache data for a config entry."""
-
-    entries = data.setdefault("entries", {})
-    entry = entries.setdefault(str(entry_id), {})
-    if not isinstance(entry.get("issues"), dict):
-        entry["issues"] = {}
-    return entry
-
-
-def _triage_cache_matches(entry_cache: dict[str, Any], issue: dict[str, Any]) -> bool:
-    """Return true if this exact open issue has already been triaged."""
-
-    issues = entry_cache.get("issues")
-    if not isinstance(issues, dict):
-        return False
-    record = issues.get(_triage_issue_key(issue))
-    return (
-        isinstance(record, dict)
-        and record.get("fingerprint") == _triage_issue_fingerprint(issue)
-    )
-
-
-def _remember_triage_decisions(
-    entry_cache: dict[str, Any],
-    issues: list[dict[str, Any]],
-    decisions: dict[str, dict[str, Any]],
-) -> None:
-    """Remember triage decisions so unchanged manual-review items are not re-run."""
-
-    issue_records = entry_cache.setdefault("issues", {})
-    now = dt_util.utcnow().isoformat()
-    for issue in issues:
-        key = _triage_issue_key(issue)
-        decision = decisions.get(key)
-        if not decision:
-            continue
-        issue_records[key] = {
-            "fingerprint": _triage_issue_fingerprint(issue),
-            "updatedAt": now,
-            "decision": _compact_triage_cache_decision(decision),
-        }
-
-
-def _trim_triage_cache(data: dict[str, Any]) -> None:
-    """Keep the persisted triage cache bounded."""
-
-    entries = data.get("entries")
-    if not isinstance(entries, dict):
-        return
-    for entry in entries.values():
-        if not isinstance(entry, dict) or not isinstance(entry.get("issues"), dict):
-            continue
-        issues = entry["issues"]
-        if len(issues) <= TRIAGE_CACHE_MAX_ISSUES:
-            continue
-        keep = {
-            key
-            for key, _record in sorted(
-                issues.items(),
-                key=lambda item: str(item[1].get("updatedAt", ""))
-                if isinstance(item[1], dict)
-                else "",
-                reverse=True,
-            )[:TRIAGE_CACHE_MAX_ISSUES]
-        }
-        for key in list(issues):
-            if key not in keep:
-                issues.pop(key, None)
-
-
-def _triage_issue_fingerprint(issue: dict[str, Any]) -> str:
-    """Return a stable fingerprint for the issue state being triaged."""
-
-    value = {
-        "key": _triage_issue_key(issue),
-        "id": issue.get("id"),
-        "issueId": issue.get("issueId"),
-        "nodeId": issue.get("nodeId"),
-        "sourceId": issue.get("sourceId"),
-        "code": issue.get("code"),
-        "severity": issue.get("severity"),
-        "status": issue.get("status"),
-        "title": issue.get("title"),
-        "message": issue.get("message"),
-    }
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
-
-
-def _compact_triage_cache_decision(decision: dict[str, Any]) -> dict[str, Any]:
-    """Return only useful scalar triage decision fields for storage."""
-
-    return {
-        key: value
-        for key, value in {
-            "action": decision.get("action"),
-            "category": decision.get("category"),
-            "confidence": decision.get("confidence"),
-            "reason": decision.get("reason"),
-        }.items()
-        if value not in (None, "")
-    }
-
-
 async def _async_triage_home_graph_issues(
     runtime: Any,
     data: dict[str, Any],
 ) -> dict[str, Any]:
-    """Use the daemon LLM to automatically classify obvious review issues."""
+    """Ask the daemon to triage open Home Graph issues with its own LLM loop.
+
+    This is a thin proxy onto ``POST /home-graph/refinement/run`` with a
+    ``triage`` body (SDK decision record
+    ``2026-07-07-home-graph-issue-triage.md``): the daemon now owns the triage
+    prompt, the confidence gate, and the per-issue decision cache, so there is
+    no local classification logic left in this integration. An older daemon
+    that does not recognize the ``triage`` input (HTTP 404) or that reports no
+    configured triage LLM (``configured: false``) is not papered over with a
+    local fallback engine — it is reported honestly as unsupported so the
+    panel can say so and the run is skipped.
+    """
 
     base_payload = _base_payload(runtime, data)
     limit = _int_value(_first_value(data, CONF_LIMIT, "limit"), TRIAGE_DEFAULT_LIMIT)
     force = _truthy(_first_value(data, "force", "manual", default=False))
-    skip_issue_ids = _string_set(
-        _parse_jsonish_or_text(
-            _first_value(data, "skipIssueIds", "excludeIssueIds", default=[])
-        )
+    skip_issue_ids = _string_list(
+        _first_value(data, "skipIssueIds", "excludeIssueIds", default=[])
     )
-    triage_cache = await _async_load_triage_cache(runtime.hass)
-    entry_cache = _triage_entry_cache(triage_cache, runtime.entry.entry_id)
-    issue_limit = 1000
-    issue_payload = await runtime.client.home_graph_issues(
-        {**base_payload, "status": "open", "limit": issue_limit}
-    )
-    browse_payload = await runtime.client.home_graph_browse(
-        {**base_payload, "limit": max(250, limit * 3)}
-    )
-    all_issues = _items_from_payload(issue_payload, ("issues",))
-    cached_issue_ids = {
-        _triage_issue_key(issue)
-        for issue in all_issues
-        if not force and _triage_cache_matches(entry_cache, issue)
+    payload = {
+        **base_payload,
+        "triage": {
+            "minConfidence": TRIAGE_DEFAULT_MIN_CONFIDENCE,
+            "limit": limit,
+            "chunkSize": TRIAGE_CHUNK_SIZE,
+            "force": force,
+            "skipIssueIds": skip_issue_ids,
+            "reviewer": TRIAGE_REVIEWER,
+        },
+        "skipGapRefinement": True,
     }
-    issues = [
-        issue
-        for issue in all_issues
-        if _triage_issue_key(issue) not in skip_issue_ids
-        and _triage_issue_key(issue) not in cached_issue_ids
-    ][:limit]
-    nodes = _items_from_payload(browse_payload, ("nodes",))
-    node_by_id = {
-        str(node.get("id")): node
-        for node in nodes
-        if isinstance(node, dict) and node.get("id")
-    }
-    records = [
-        _triage_issue_record(issue, node_by_id.get(str(issue.get("nodeId"))))
-        for issue in issues
-        if isinstance(issue, dict)
-    ]
-    if not records:
-        remaining = _count_from_payload(issue_payload, ("issues",))
-        return {
-            "ok": True,
-            "reviewed": 0,
-            "decisions": [],
-            "processed": 0,
-            "skipped": len(cached_issue_ids),
-            "remaining": remaining,
-            "reason": (
-                "no-untriaged-open-issues"
-                if cached_issue_ids
-                else "no-open-issues"
-            ),
-        }
 
-    decisions: list[dict[str, Any]] = []
-    for index in range(0, len(records), TRIAGE_CHUNK_SIZE):
-        chunk = records[index : index + TRIAGE_CHUNK_SIZE]
-        chunk_id = uuid4()
-        result = await runtime.client.conversation(
-            {
-                "message": _triage_prompt(chunk),
-                "conversationId": (
-                    f"home-graph-triage-{runtime.entry.entry_id}-{chunk_id}"
-                ),
-                "messageId": f"ha-home-graph-triage-{chunk_id}",
-                "displayName": "GoodVibes Home Graph Triage",
-                "context": {
-                    "source": "home_graph_review_triage",
-                    "installationId": base_payload.get("installationId"),
-                    "knowledgeSpaceId": base_payload.get("knowledgeSpaceId"),
-                },
-                "timeoutMs": DEFAULT_CONVERSATION_TIMEOUT_MS,
-            },
-            timeout_ms=DEFAULT_CONVERSATION_TIMEOUT_MS,
+    try:
+        response = await runtime.client.home_graph_refinement_run(payload)
+    except GoodVibesSurfaceMissingError:
+        _LOGGER.info(
+            "GoodVibes daemon does not support server-side Home Graph triage "
+            "yet; skipping automatic triage this run."
         )
-        decisions.extend(_parse_triage_decisions(_assistant_text(result)))
+        return _triage_unsupported_result(TRIAGE_UNSUPPORTED_REASON)
 
-    issue_by_id = {
-        _triage_issue_key(issue): issue for issue in issues if isinstance(issue, dict)
-    }
-    decision_by_id = {
-        str(decision.get("issueId") or ""): decision
-        for decision in decisions
-        if isinstance(decision, dict) and decision.get("issueId")
-    }
-    applied: list[dict[str, Any]] = []
-    for decision in decisions:
-        issue_id = str(decision.get("issueId") or "")
-        action = str(decision.get("action") or "").strip().lower()
-        confidence = _float_value(decision.get("confidence"), 0.0)
-        if action != "reject" or confidence < TRIAGE_CONFIDENCE_THRESHOLD:
-            continue
-        issue = issue_by_id.get(issue_id)
-        if not issue:
-            continue
-        payload = {
-            **base_payload,
-            "action": "reject",
-            "reviewer": "homeassistant:auto-triage",
-            "value": _semantic_review_value(issue, decision, confidence),
-        }
-        if issue.get("id") or issue.get("issueId"):
-            payload["issueId"] = str(issue.get("id") or issue.get("issueId"))
-        elif issue.get("nodeId"):
-            payload["nodeId"] = str(issue["nodeId"])
-        elif issue.get("sourceId"):
-            payload["sourceId"] = str(issue["sourceId"])
-        else:
-            continue
-        await runtime.client.home_graph_review_fact(payload)
-        applied.append(
-            {
-                "issueId": issue_id,
-                "action": "reject",
-                "confidence": confidence,
-                "reason": payload["value"]["reason"],
-            }
+    triage = response.get("triage") if isinstance(response, dict) else None
+    if not isinstance(triage, dict) or triage.get("configured") is False:
+        reason = (
+            str(triage.get("reason"))
+            if isinstance(triage, dict) and triage.get("reason")
+            else TRIAGE_UNSUPPORTED_REASON
         )
+        _LOGGER.info(
+            "GoodVibes daemon Home Graph triage is not available (%s); "
+            "skipping automatic triage this run.",
+            reason,
+        )
+        return _triage_unsupported_result(reason)
 
-    _remember_triage_decisions(entry_cache, issues, decision_by_id)
-    await _async_save_triage_cache(runtime.hass, triage_cache)
-
+    runtime.async_apply_home_graph_response(response)
     await runtime.async_refresh_home_graph()
-    remaining = _count_from_payload(runtime.home_graph_issues, ("issues",))
+    return dict(triage)
+
+
+def _triage_unsupported_result(reason: str) -> dict[str, Any]:
+    """Return an honest "server-side triage unavailable" outcome.
+
+    No local re-implementation of the retired Python triage engine — just a
+    plain result the panel can present, with every count at zero so it reads
+    the same as a batch that found nothing to do.
+    """
+
     return {
         "ok": True,
-        "processed": len(issues),
-        "processedIssueIds": [_triage_issue_key(issue) for issue in issues],
-        "skipped": len(cached_issue_ids),
-        "reviewed": len(applied),
-        "applied": applied,
-        "decisions": decisions,
-        "remaining": remaining,
-    }
-
-
-def _semantic_review_value(
-    issue: dict[str, Any],
-    decision: dict[str, Any],
-    confidence: float,
-) -> dict[str, Any]:
-    """Build a semantic review value understood by SDK 0.26.8+."""
-
-    category = str(decision.get("category") or "not_applicable").strip()
-    reason = str(
-        decision.get("reason") or "LLM classified this issue as not applicable."
-    ).strip()
-    fact = decision.get("fact") if isinstance(decision.get("fact"), dict) else {}
-    fact = dict(fact)
-    code = str(issue.get("code") or "")
-
-    if category in {"not_applicable", "false_positive", "not_applicable_or_incorrect"}:
-        if code.endswith("unknown_battery"):
-            fact.setdefault("batteryPowered", False)
-            fact.setdefault("batteryType", "none")
-        elif code.endswith("missing_manual"):
-            fact.setdefault("manualRequired", False)
-
-    value: dict[str, Any] = {
-        "category": category,
-        "confidence": confidence,
+        "configured": False,
         "reason": reason,
-        "source": "goodvibes_home_graph_triage",
+        "processed": 0,
+        "skipped": 0,
+        "applied": 0,
+        "reviewed": 0,
+        "decisions": [],
+        "remaining": None,
     }
-    if fact:
-        value["fact"] = fact
-    return value
 
 
 async def _async_sync_home_graph_context(

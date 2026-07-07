@@ -1,6 +1,14 @@
 # Home Graph triage engine — capability comparison
 
-This document compares the LLM triage engine that currently lives in this integration
+**Status: the port scoped below has landed.** The SDK now owns the triage loop as a mode of
+`refinement/run` (decision record `2026-07-07-home-graph-issue-triage.md` in the SDK repo, `1.3.0`).
+`_async_triage_home_graph_issues` in `frontend.py` is now a thin proxy onto that call; every piece
+listed in "genuine delta" below (the LLM loop, the confidence threshold, the decision cache) has
+been deleted from this integration and lives in the daemon instead. This document is kept for the
+historical comparison it recorded, not as a description of current behavior — see
+`docs/home-graph.md` (Review section) and `docs/sdk-compatibility.md` for the current contract.
+
+This document compares the LLM triage engine that used to live in this integration
 (`custom_components/goodvibes/frontend.py`) against the Home Graph machinery the GoodVibes SDK
 already ships (validated against `@pellux/goodvibes-sdk@1.2.0`). Its purpose is to scope a separate
 follow-up: moving the genuinely SDK-owned behavior into the SDK's own Home Graph refinement, where

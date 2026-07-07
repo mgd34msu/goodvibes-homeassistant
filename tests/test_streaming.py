@@ -64,6 +64,57 @@ async def test_incremental_delta_frames_stream_in_order():
     assert holder["result"]["assistant"]["speechText"] == "Lights are on."
 
 
+async def test_real_sdk_delta_frame_shape_is_parsed():
+    """The actual SDK 1.3.0 delta frame carries ok/delta/text/turnId/ids.
+
+    Extra fields beyond ``delta`` (the accumulated ``text``, ``turnId``,
+    ``conversationId``, ``messageId``) must not change the extracted content:
+    only the incremental ``delta`` field is emitted per frame, never the
+    running ``text`` accumulation.
+    """
+
+    items = [
+        {
+            "event": "delta",
+            "data": {
+                "ok": True,
+                "delta": "Lights ",
+                "text": "Lights ",
+                "turnId": "t1",
+                "conversationId": "c1",
+                "messageId": "m1",
+            },
+        },
+        {
+            "event": "delta",
+            "data": {
+                "ok": True,
+                "delta": "are on.",
+                "text": "Lights are on.",
+                "turnId": "t1",
+                "conversationId": "c1",
+                "messageId": "m1",
+            },
+        },
+        {
+            "event": "final",
+            "data": {
+                "ok": True,
+                "status": "completed",
+                "assistant": {"speechText": "Lights are on."},
+            },
+        },
+    ]
+    deltas, holder = await _collect(items)
+
+    assert deltas == [
+        {"role": "assistant"},
+        {"content": "Lights "},
+        {"content": "are on."},
+    ]
+    assert holder["result"]["assistant"]["speechText"] == "Lights are on."
+
+
 async def test_error_frame_raises_client_error():
     """An error frame raises so the entity can surface an honest failure."""
 

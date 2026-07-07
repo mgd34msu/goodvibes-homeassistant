@@ -13,11 +13,11 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.2.0` (`const.SDK_VALIDATED_VERSION`).
+- **Last validated against:** `1.3.0` (`const.SDK_VALIDATED_VERSION`).
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
-every route the integration calls is intact at `1.2.0`. A pin-forward to a newer SDK is therefore
+every route the integration calls is intact at `1.3.0`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
 
@@ -40,10 +40,18 @@ the test suite, so a future SDK change that renames one of these fields is caugh
 - `POST /api/homeassistant/conversation` returns `status`, `mode`, `sessionId`, `messageId`, and,
   on a completed turn, an `assistant` object with `speechText` and `text`. The Assist agent reads
   all of these.
-- `POST /api/homeassistant/conversation/stream` streams the same completed turn as Server-Sent
-  Events, emitting a terminal `final` (or `error`) frame. The Assist agent consumes this stream and
-  renders it through Home Assistant's conversation delta-stream API; incremental daemon `delta`
-  frames, if the daemon adds them, stream through with no integration change.
+- `POST /api/homeassistant/conversation/stream` streams incremental `event: delta` frames shaped
+  `{ ok, delta, text, turnId, conversationId?, messageId? }` as the model produces text, followed by
+  the unchanged terminal `final` (or `error`) frame. The Assist agent consumes this stream and
+  renders it through Home Assistant's conversation delta-stream API, reading each frame's `delta`
+  field (the incremental chunk, not the running `text` accumulation).
+- `POST /api/homeassistant/home-graph/refinement/run` accepts an optional `triage` input
+  (`{ minConfidence, limit, chunkSize, force, skipIssueIds, reviewer }`) and returns a `triage`
+  object (`{ ok, spaceId, configured, processed, skipped, applied, reviewed, decisions[],
+  remaining, minConfidence, reason? }`). The GoodVibes Home panel's automatic issue triage calls
+  this instead of running its own local classification: `configured: false` (or an HTTP `404` on
+  the `triage` input, from a daemon that predates it) means the daemon has no server-side triage
+  available, and the integration reports that honestly instead of falling back to a local engine.
 - `POST /api/channels/actions/homeassistant/homeassistant-manifest` wraps its result as
   `{ actionId, surface, result: { device: { identifiers, manufacturer, model, name }, ... } }`.
   The integration unwraps `result` and reads the `device` fields, falling back to the daemon status

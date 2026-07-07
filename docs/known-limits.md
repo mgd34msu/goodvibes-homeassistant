@@ -21,7 +21,7 @@ If Home Graph answers, pages, issues, or map output look wrong, fix or reset the
 
 ## Upload Size and Timeouts
 
-The GoodVibes SDK (validated against `1.2.0`) defaults daemon artifact storage to `512 MiB` through `storage.artifacts.maxBytes`. This integration also refuses a panel upload larger than `512 MiB` before buffering it to local disk, so an oversized file is rejected up front instead of filling the temporary filesystem.
+The GoodVibes SDK (validated against `1.3.0`) defaults daemon artifact storage to `512 MiB` through `storage.artifacts.maxBytes`. This integration also refuses a panel upload larger than `512 MiB` before buffering it to local disk, so an oversized file is rejected up front instead of filling the temporary filesystem.
 
 Large uploads can still fail before they reach the daemon because of:
 

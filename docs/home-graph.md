@@ -10,7 +10,7 @@ homeassistant:<installationId>
 
 ## Daemon Routes
 
-The integration targets these daemon Home Graph routes (latest SDK, validated against `1.2.0`):
+The integration targets these daemon Home Graph routes (latest SDK, validated against `1.3.0`):
 
 - `POST /api/artifacts`
 - `POST /api/knowledge/ingest/artifact`
@@ -223,11 +223,11 @@ data:
   action: resolve
 ```
 
-When the Review tab or panel refresh loads open issues, the bridge asks the daemon conversation endpoint to classify them in small background batches. Only high-confidence `reject` decisions are applied automatically through `/api/homeassistant/home-graph/facts/review`; uncertain cases remain visible for manual review.
+When the Review tab or panel refresh loads open issues, it calls `/api/homeassistant/home-graph/refinement/run` with a `triage` body in small background batches; the daemon's own LLM triage loop classifies each issue and, above its confidence threshold, applies `reject` decisions automatically through `facts/review`. Uncertain cases remain visible for manual review.
 
-Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision.
+Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision — derived daemon-side, not by the integration.
 
-The integration persists fingerprints for open issues the LLM has already classified as still requiring manual review, so unchanged issues are not reclassified after a page refresh or Home Assistant restart. Use `Re-run triage` to force a fresh classification.
+The daemon persists a per-issue decision cache so unchanged open issues are not reclassified after a page refresh or Home Assistant restart. Use `Re-run triage` to force a fresh classification. A daemon with no configured triage LLM, or one that predates server-side triage, reports that honestly instead of running a local fallback engine.
 
 ## Reindex and Refinement
 
