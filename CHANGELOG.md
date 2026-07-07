@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.6.1 - 2026-07-07
+
+- Validate against `@pellux/goodvibes-sdk` 1.4.0. With a daemon at 1.4.0+
+  (GoodVibes TUI 1.11.0+), cancelling an in-flight Assist reply now stops just
+  that reply — the conversation session stays open, so the next utterance
+  keeps its context. (Older daemons closed the whole session on cancel; the
+  integration's own code is unchanged either way.)
+
 - Add the integration's first test suite (pytest with pytest-homeassistant-custom-component) covering the config flow, the daemon client and its error taxonomy, the panel upload reader, and the config-entry lifecycle, plus a CI job that runs it on Python 3.13.
 - Move the panel upload's temp-file writes and the client's upload read-back off the event loop so a large upload no longer blocks Home Assistant on disk I/O.
 - Refuse a panel upload larger than 512 MiB before buffering it to local disk, with an HTTP 413 response that names the limit.
