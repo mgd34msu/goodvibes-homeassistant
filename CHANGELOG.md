@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.6.2 - 2026-07-07
+
+- Fix the 0.6.1 release metadata: `INTEGRATION_VERSION` (which also versions
+  the panel assets) was left at 0.6.0 while the manifest said 0.6.1, so the
+  0.6.1 zip shipped with a version skew inside. No functional changes beyond
+  0.6.1 — install this one instead.
+
 ## 0.6.1 - 2026-07-07
 
 - Validate against `@pellux/goodvibes-sdk` 1.4.0. With a daemon at 1.4.0+
