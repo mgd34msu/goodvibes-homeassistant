@@ -30,6 +30,7 @@ from .const import (
     DOMAIN,
     PLATFORMS,
 )
+from .coordinator import GoodVibesDataUpdateCoordinator
 from .data import GoodVibesRuntimeData
 from .home_graph import async_build_home_graph_snapshot, derive_installation_id
 from .services import async_setup_services
@@ -73,11 +74,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         knowledge_space_id=entry.data.get(CONF_KNOWLEDGE_SPACE_ID) or None,
     )
 
+    coordinator = GoodVibesDataUpdateCoordinator(hass, entry, runtime)
+    runtime.coordinator = coordinator
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = runtime
 
     await async_setup_frontend(hass)
-    await runtime.async_initial_refresh()
+    # Device info comes from the manifest; fetch it, then let the coordinator own
+    # the first batched daemon refresh. The refresh never raises (it records the
+    # error into runtime state), so a briefly unreachable daemon does not block
+    # setup.
+    await runtime.async_fetch_manifest()
+    await coordinator.async_config_entry_first_refresh()
     runtime.unsubscribe_event = hass.bus.async_listen(
         runtime.event_type, runtime.async_handle_event
     )

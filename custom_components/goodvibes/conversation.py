@@ -26,6 +26,7 @@ from .const import (
     DEFAULT_DISPLAY_NAME,
     DOMAIN,
 )
+from .streaming import assistant_delta_stream, assistant_speech_from_result
 
 
 async def async_setup_entry(
@@ -77,7 +78,14 @@ class GoodVibesConversationEntity(ConversationEntity):
         user_input: ConversationInput,
         chat_log: ChatLog,
     ) -> ConversationResult:
-        """Handle one Assist message through the daemon conversation endpoint."""
+        """Handle one Assist message, streaming the daemon response.
+
+        The turn is streamed through the daemon ``/conversation/stream`` endpoint
+        and fed to Home Assistant's ``ChatLog`` delta-stream API, so partial
+        responses render as they arrive. The daemon currently emits one terminal
+        frame, so today the full answer arrives as a single delta; incremental
+        daemon deltas would stream here with no further change.
+        """
 
         conversation_id = (
             user_input.conversation_id
@@ -87,36 +95,49 @@ class GoodVibesConversationEntity(ConversationEntity):
         payload = self._build_payload(user_input, conversation_id, message_id)
         self._runtime.async_start_conversation_turn(message_id)
 
-        try:
-            result = await self._runtime.client.conversation(
-                payload,
-                timeout_ms=DEFAULT_CONVERSATION_TIMEOUT_MS,
+        final_holder: dict[str, Any] = {}
+        speech_parts: list[str] = []
+
+        async def _tracked_deltas():
+            frames = self._runtime.client.conversation_stream(
+                payload, timeout_ms=DEFAULT_CONVERSATION_TIMEOUT_MS
             )
+            async for delta in assistant_delta_stream(frames, final_holder):
+                if content := delta.get("content"):
+                    speech_parts.append(content)
+                yield delta
+
+        try:
+            async for _content in chat_log.async_add_delta_content_stream(
+                self.entity_id, _tracked_deltas()
+            ):
+                pass
         except GoodVibesClientError as err:
             speech = f"GoodVibes is unavailable: {err}"
-            result_conversation_id = conversation_id
             self._runtime.async_apply_conversation_error(message_id, str(err))
+            chat_log.async_add_assistant_content_without_tools(
+                AssistantContent(agent_id=user_input.agent_id, content=speech)
+            )
+            result_conversation_id = conversation_id
         else:
+            result = final_holder.get("result") or {}
             self._runtime.async_apply_conversation_response(result)
-            assistant = result.get("assistant")
-            if isinstance(assistant, dict):
-                speech = str(
-                    assistant.get("speechText")
-                    or assistant.get("text")
-                    or result.get("error")
-                    or "GoodVibes did not return a response."
-                )
-            else:
-                speech = str(
-                    result.get("error") or "GoodVibes did not return a response."
+            speech = (
+                "".join(speech_parts)
+                or assistant_speech_from_result(result)
+                or str(result.get("error") or "GoodVibes did not return a response.")
+            )
+            # If the stream yielded no content delta, the chat log has no
+            # assistant message yet; add the resolved speech so the turn is
+            # never empty.
+            if not speech_parts:
+                chat_log.async_add_assistant_content_without_tools(
+                    AssistantContent(agent_id=user_input.agent_id, content=speech)
                 )
             result_conversation_id = str(
                 result.get("conversationId") or conversation_id
             )
 
-        chat_log.async_add_assistant_content_without_tools(
-            AssistantContent(agent_id=user_input.agent_id, content=speech)
-        )
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(speech)
         return ConversationResult(

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json as json_lib
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -15,6 +16,7 @@ from .const import (
     ENDPOINT_AGENT_TOOLS,
     ENDPOINT_CONVERSATION,
     ENDPOINT_CONVERSATION_CANCEL,
+    ENDPOINT_CONVERSATION_STREAM,
     ENDPOINT_HEALTH,
     ENDPOINT_HOMEASSISTANT_STATUS,
     ENDPOINT_HOME_GRAPH_ASK,
@@ -149,8 +151,12 @@ class GoodVibesClient:
     async def tool_catalog(self) -> dict[str, Any]:
         """Return tool and agent-tool catalogs for the Home Assistant surface."""
 
-        tools = await self._request("GET", ENDPOINT_TOOLS)
-        agent_tools = await self._request("GET", ENDPOINT_AGENT_TOOLS)
+        # The two catalog endpoints are independent, so fetch them concurrently
+        # rather than serially.
+        tools, agent_tools = await asyncio.gather(
+            self._request("GET", ENDPOINT_TOOLS),
+            self._request("GET", ENDPOINT_AGENT_TOOLS),
+        )
         return {
             "tools": tools.get("tools", []),
             "agent_tools": agent_tools.get("tools", []),
@@ -181,6 +187,46 @@ class GoodVibesClient:
             json=dict(payload),
             timeout=request_timeout,
         )
+
+    async def conversation_stream(
+        self,
+        payload: Mapping[str, Any],
+        timeout_ms: int = DEFAULT_CONVERSATION_TIMEOUT_MS,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream an Assist conversation turn as Server-Sent Events.
+
+        Yields one ``{"event": name, "data": <parsed json>}`` per SSE frame from
+        the daemon's ``/conversation/stream`` route. The daemon currently emits a
+        single terminal ``final`` (or ``error``) frame after the turn completes;
+        if it later emits incremental ``delta`` frames, they surface here in
+        order with no change to this method or its callers.
+        """
+
+        request_timeout = max(5, int(timeout_ms / 1000) + 10)
+        headers = {"Accept": "text/event-stream"}
+        if self._daemon_token:
+            headers["Authorization"] = f"Bearer {self._daemon_token}"
+        url = f"{self._daemon_url}{ENDPOINT_CONVERSATION_STREAM}"
+        try:
+            async with self._session.post(
+                url,
+                json=dict(payload),
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=request_timeout),
+            ) as response:
+                if response.status >= 400:
+                    text = await response.text()
+                    detail = text[:500] if text else response.reason
+                    message = f"GoodVibes HTTP {response.status}: {detail}"
+                    raise _error_for_status(response.status, message, detail)
+                async for frame in _iter_sse_frames(response.content):
+                    yield frame
+        except TimeoutError as err:
+            raise GoodVibesUnavailableError(
+                "GoodVibes daemon request timed out"
+            ) from err
+        except aiohttp.ClientError as err:
+            raise GoodVibesUnavailableError(str(err)) from err
 
     async def cancel_conversation(
         self,
@@ -580,6 +626,60 @@ class GoodVibesClient:
             ) from err
         except aiohttp.ClientError as err:
             raise GoodVibesUnavailableError(str(err)) from err
+
+
+async def _iter_sse_frames(
+    content: AsyncIterator[bytes],
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield parsed Server-Sent Events frames from a streaming response body.
+
+    Each frame is ``{"event": name, "data": <parsed>}``. ``data`` is JSON when it
+    parses, otherwise the raw text. Multi-line ``data:`` fields are joined with
+    newlines per the SSE spec; comment lines (``:`` prefix) are ignored.
+    """
+
+    event: str | None = None
+    data_lines: list[str] = []
+    buffer = b""
+    seen_field = False
+
+    def _parse(raw: str) -> Any:
+        try:
+            return json_lib.loads(raw) if raw else {}
+        except ValueError:
+            return raw
+
+    async for chunk in content:
+        buffer += chunk
+        while b"\n" in buffer:
+            raw_line, buffer = buffer.split(b"\n", 1)
+            line = raw_line.decode("utf-8", "replace").rstrip("\r")
+            if line == "":
+                if seen_field:
+                    yield {
+                        "event": event or "message",
+                        "data": _parse("\n".join(data_lines)),
+                    }
+                event, data_lines, seen_field = None, [], False
+            elif line.startswith(":"):
+                continue
+            elif line.startswith("event:"):
+                event = line[len("event:") :].strip()
+                seen_field = True
+            elif line.startswith("data:"):
+                data_lines.append(line[len("data:") :].lstrip())
+                seen_field = True
+
+    # Flush a trailing frame that was not terminated by a blank line.
+    tail = buffer.decode("utf-8", "replace").rstrip("\r")
+    if tail.startswith("event:"):
+        event = tail[len("event:") :].strip()
+        seen_field = True
+    elif tail.startswith("data:"):
+        data_lines.append(tail[len("data:") :].lstrip())
+        seen_field = True
+    if seen_field:
+        yield {"event": event or "message", "data": _parse("\n".join(data_lines))}
 
 
 def _open_binary(file_path: str):

@@ -167,3 +167,46 @@ def test_query_path_with_no_usable_params_returns_bare_path():
     """A payload with nothing usable leaves the path unchanged."""
 
     assert _query_path("/x", {"blank": "", "none": None}) == "/x"
+
+
+async def test_conversation_stream_parses_sse_frames(hass, aioclient_mock):
+    """The streaming endpoint is consumed as ordered SSE frames."""
+
+    body = (
+        "event: delta\n"
+        'data: {"delta": "Lights "}\n'
+        "\n"
+        "event: final\n"
+        'data: {"status": "completed", "assistant": {"speechText": "Lights on."}}\n'
+        "\n"
+    )
+    aioclient_mock.post(
+        f"{DAEMON}/api/homeassistant/conversation/stream",
+        text=body,
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    frames = [
+        frame
+        async for frame in _client(hass).conversation_stream({"message": "hi"})
+    ]
+
+    assert frames[0] == {"event": "delta", "data": {"delta": "Lights "}}
+    assert frames[1]["event"] == "final"
+    assert frames[1]["data"]["assistant"]["speechText"] == "Lights on."
+    # The stream carries the bearer token, since it is a daemon-native route.
+    _method, _url, _data, headers = aioclient_mock.mock_calls[0]
+    assert headers["Authorization"] == "Bearer tok-abc"
+
+
+async def test_conversation_stream_error_status_raises_typed(hass, aioclient_mock):
+    """A non-200 stream response raises the matching typed client error."""
+
+    aioclient_mock.post(
+        f"{DAEMON}/api/homeassistant/conversation/stream",
+        status=404,
+        text="not found",
+    )
+    with pytest.raises(GoodVibesSurfaceMissingError):
+        async for _frame in _client(hass).conversation_stream({"message": "hi"}):
+            pass
