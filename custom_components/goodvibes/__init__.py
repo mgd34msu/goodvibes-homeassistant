@@ -88,6 +88,18 @@ from .home_graph import (
     default_knowledge_space_id,
     derive_installation_id,
 )
+from .daemon_payloads import (
+    MAP_GENERIC_FIELDS,
+    MAP_HA_FIELDS,
+    copy_optional as _copy_optional,
+    copy_optional_list as _copy_optional_list,
+    copy_tags_and_private_hosts as _copy_tags_and_private_hosts,
+    ensure_home_graph_enabled as _ensure_home_graph_enabled,
+    home_graph_payload as _home_graph_payload,
+    link_payload as _knowledge_link_payload,
+    map_payload as _map_payload,
+    prompt_payload as _prompt_payload,
+)
 from .frontend import async_setup_frontend, async_unload_frontend_panel
 
 _LOGGER = logging.getLogger(__name__)
@@ -131,31 +143,11 @@ def _map_list_field(value: Any) -> str | list[str]:
 
 
 MAP_LIST_FIELD = _map_list_field
-MAP_GENERIC_SERVICE_FIELDS = {
-    "record_kinds": "recordKinds",
-    "ids": "ids",
-    "linked_to_ids": "linkedToIds",
-    "node_kinds": "nodeKinds",
-    "source_types": "sourceTypes",
-    "source_statuses": "sourceStatuses",
-    "node_statuses": "nodeStatuses",
-    "issue_codes": "issueCodes",
-    "issue_statuses": "issueStatuses",
-    "issue_severities": "issueSeverities",
-    "edge_relations": "edgeRelations",
-    CONF_TAGS: "tags",
-}
-MAP_HA_SERVICE_FIELDS = {
-    "object_kinds": "objectKinds",
-    "entity_ids": "entityIds",
-    "device_ids": "deviceIds",
-    "area_ids": "areaIds",
-    "integration_ids": "integrationIds",
-    "integration_domains": "integrationDomains",
-    "domains": "domains",
-    "device_classes": "deviceClasses",
-    "labels": "labels",
-}
+# The map filter field lists (snake_case service key -> camelCase daemon key)
+# are owned by daemon_payloads so the service schema and the panel share one
+# source of truth. The schema iterates these keys; the payload builder maps them.
+MAP_GENERIC_SERVICE_FIELDS = MAP_GENERIC_FIELDS
+MAP_HA_SERVICE_FIELDS = MAP_HA_FIELDS
 
 
 def _optional_context_schema() -> dict[Any, Any]:
@@ -1063,24 +1055,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def async_home_graph_map(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime_from_service_call(hass, call)
-        payload = runtime.home_graph_base_payload(call.data)
-        _copy_optional(call.data, payload, CONF_LIMIT, "limit")
-        _copy_optional(call.data, payload, CONF_QUERY, "query")
-        if "min_confidence" in call.data:
-            payload["minConfidence"] = call.data["min_confidence"]
-        if CONF_INCLUDE_SOURCES in call.data:
-            payload["includeSources"] = call.data[CONF_INCLUDE_SOURCES]
-        if "include_issues" in call.data:
-            payload["includeIssues"] = call.data["include_issues"]
-        if "include_generated" in call.data:
-            payload["includeGenerated"] = call.data["include_generated"]
-        for source_key, target_key in MAP_GENERIC_SERVICE_FIELDS.items():
-            _copy_optional_list(call.data, payload, source_key, target_key)
-        ha_payload: dict[str, Any] = {}
-        for source_key, target_key in MAP_HA_SERVICE_FIELDS.items():
-            _copy_optional_list(call.data, ha_payload, source_key, target_key)
-        if ha_payload:
-            payload["ha"] = ha_payload
+        payload = _map_payload(runtime, call.data)
         return await _call_client(runtime.client.home_graph_map(payload))
 
     async def async_home_graph_export(call: ServiceCall) -> dict[str, Any]:
@@ -1429,49 +1404,6 @@ def _runtime_from_service_call(
     raise HomeAssistantError("config_entry_id is required when multiple entries exist")
 
 
-def _prompt_payload(
-    data: dict[str, Any], *, message_key: str, body_type: str
-) -> dict[str, Any]:
-    """Build the canonical daemon webhook prompt payload."""
-
-    payload: dict[str, Any] = {
-        "type": body_type,
-        "message": data[message_key],
-        "conversationId": data.get(CONF_CONVERSATION_ID, DEFAULT_CONVERSATION_ID),
-        "deviceId": data.get(CONF_DEVICE_ID, DEFAULT_DEVICE_ID),
-        "displayName": data.get(CONF_DISPLAY_NAME, DEFAULT_DISPLAY_NAME),
-    }
-    optional_fields = {
-        "entityId": CONF_ENTITY_ID,
-        "areaId": CONF_AREA_ID,
-        "userId": CONF_USER_ID,
-        "messageId": CONF_MESSAGE_ID,
-        "providerId": CONF_PROVIDER_ID,
-        "modelId": CONF_MODEL_ID,
-    }
-    for payload_key, config_key in optional_fields.items():
-        if value := data.get(config_key):
-            payload[payload_key] = value
-    if tools := data.get(CONF_TOOLS):
-        payload["tools"] = list(tools)
-    return payload
-
-
-def _home_graph_payload(
-    runtime: GoodVibesRuntimeData,
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """Build a Home Graph payload with optional target and metadata."""
-
-    _ensure_home_graph_enabled(runtime)
-    payload = runtime.home_graph_base_payload(data)
-    if metadata := data.get("metadata"):
-        payload["metadata"] = metadata
-    if target := _target_payload(data):
-        payload["target"] = target
-    return payload
-
-
 def _log_home_graph_sync(
     snapshot: dict[str, Any],
     response: dict[str, Any],
@@ -1532,98 +1464,6 @@ def _first_number(payload: dict[str, Any], *keys: str) -> int | None:
             if isinstance(count, int | float):
                 return int(count)
     return None
-
-
-def _knowledge_link_payload(
-    runtime: GoodVibesRuntimeData,
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """Build a Home Graph link or unlink payload."""
-
-    _ensure_home_graph_enabled(runtime)
-    if not data.get(CONF_SOURCE_ID) and not data.get(CONF_NODE_ID):
-        raise HomeAssistantError("linking requires source_id or node_id")
-    payload = runtime.home_graph_base_payload(data)
-    _copy_optional(data, payload, CONF_SOURCE_ID, "sourceId")
-    _copy_optional(data, payload, CONF_NODE_ID, "nodeId")
-    payload["target"] = {
-        "kind": data[CONF_TARGET_KIND],
-        "id": data[CONF_TARGET_ID],
-    }
-    if relation := data.get(CONF_RELATION):
-        payload["target"]["relation"] = relation
-    return payload
-
-
-def _target_payload(data: dict[str, Any]) -> dict[str, Any] | None:
-    """Return an optional Home Graph target payload."""
-
-    if not data.get(CONF_TARGET_KIND) and not data.get(CONF_TARGET_ID):
-        return None
-    if not data.get(CONF_TARGET_KIND) or not data.get(CONF_TARGET_ID):
-        raise HomeAssistantError("target_kind and target_id must be provided together")
-    target = {
-        "kind": data[CONF_TARGET_KIND],
-        "id": data[CONF_TARGET_ID],
-    }
-    if relation := data.get(CONF_RELATION):
-        target["relation"] = relation
-    return target
-
-
-def _copy_optional(
-    source: dict[str, Any],
-    target: dict[str, Any],
-    source_key: str,
-    target_key: str,
-) -> None:
-    """Copy a non-empty service field into a daemon payload."""
-
-    if value := source.get(source_key):
-        target[target_key] = value
-
-
-def _copy_optional_list(
-    source: dict[str, Any],
-    target: dict[str, Any],
-    source_key: str,
-    target_key: str,
-) -> None:
-    """Copy a non-empty list-like service field into a daemon payload."""
-
-    value = source.get(source_key)
-    if value in (None, ""):
-        return
-    if isinstance(value, str):
-        values = [item.strip() for item in value.split(",")]
-    elif isinstance(value, (list, tuple, set)):
-        values = [str(item).strip() for item in value]
-    else:
-        values = [str(value).strip()]
-    values = [item for item in values if item]
-    if values:
-        target[target_key] = values
-
-
-def _copy_tags_and_private_hosts(
-    source: dict[str, Any],
-    target: dict[str, Any],
-    *,
-    private_hosts: bool = True,
-) -> None:
-    """Copy Home Graph ingest tags and remote fetch policy."""
-
-    if tags := source.get(CONF_TAGS):
-        target["tags"] = list(tags)
-    if private_hosts and CONF_ALLOW_PRIVATE_HOSTS in source:
-        target["allowPrivateHosts"] = source[CONF_ALLOW_PRIVATE_HOSTS]
-
-
-def _ensure_home_graph_enabled(runtime: GoodVibesRuntimeData) -> None:
-    """Raise if Home Graph is disabled for this config entry."""
-
-    if not runtime.home_graph_enabled:
-        raise HomeAssistantError("Home Graph is disabled for this GoodVibes entry")
 
 
 def _async_create_home_graph_issue(

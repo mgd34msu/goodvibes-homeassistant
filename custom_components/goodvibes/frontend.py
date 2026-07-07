@@ -56,6 +56,29 @@ from .const import (
     INTEGRATION_VERSION,
     MAX_UPLOAD_BYTES,
 )
+from .daemon_payloads import (
+    artifact_payload as _artifact_payload,
+    base_payload as _base_payload,
+    camel_key as _camel_key,
+    copy_optional_any as _copy_optional_any,
+    copy_tags_and_private_hosts as _copy_tags_and_private_hosts,
+    ensure_home_graph_enabled as _ensure_home_graph_enabled,
+    first_value as _first_value,
+    home_graph_payload as _home_graph_payload,
+    link_payload as _link_payload,
+    map_payload as _map_payload,
+    parse_jsonish as _parse_jsonish,
+    parse_jsonish_or_text as _parse_jsonish_or_text,
+    parse_tags as _parse_tags,
+    query_payload as _query_payload,
+    required_object as _required_object,
+    required_text as _required_text,
+    review_payload as _review_payload,
+    string_list as _string_list,
+    string_set as _string_set,
+    target_payload as _target_payload,
+    truthy as _truthy,
+)
 from .home_graph import async_build_home_graph_snapshot
 
 FRONTEND_DIR = Path(__file__).with_name("frontend")
@@ -81,32 +104,6 @@ TRIAGE_DEFAULT_LIMIT = 25
 TRIAGE_CACHE_VERSION = 1
 TRIAGE_CACHE_KEY = f"{DOMAIN}_home_graph_triage"
 TRIAGE_CACHE_MAX_ISSUES = 5000
-
-MAP_GENERIC_LIST_FIELDS = {
-    "recordKinds",
-    "ids",
-    "linkedToIds",
-    "nodeKinds",
-    "sourceTypes",
-    "sourceStatuses",
-    "nodeStatuses",
-    "issueCodes",
-    "issueStatuses",
-    "issueSeverities",
-    "edgeRelations",
-    "tags",
-}
-MAP_HA_LIST_FIELDS = {
-    "objectKinds",
-    "entityIds",
-    "deviceIds",
-    "areaIds",
-    "integrationIds",
-    "integrationDomains",
-    "domains",
-    "deviceClasses",
-    "labels",
-}
 
 SUPPORTED_ACTIONS = {
     "ask",
@@ -1141,201 +1138,6 @@ def _runtime_from_data(hass: HomeAssistant, data: dict[str, Any]) -> Any:
     raise HomeAssistantError("config_entry_id is required when multiple entries exist")
 
 
-def _ensure_home_graph_enabled(runtime: Any) -> None:
-    """Raise if Home Graph is disabled."""
-
-    if not runtime.home_graph_enabled:
-        raise HomeAssistantError("Home Graph is disabled for this GoodVibes entry")
-
-
-def _home_graph_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Build a Home Graph payload from panel data."""
-
-    payload = _base_payload(runtime, data)
-    if target := _target_payload(data):
-        payload["target"] = target
-    if metadata := _parse_jsonish(data.get("metadata")):
-        payload["metadata"] = metadata
-    return payload
-
-
-def _base_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Build a Home Graph base payload from snake_case or camelCase fields."""
-
-    base_data = {
-        CONF_INSTALLATION_ID: _first_value(
-            data, CONF_INSTALLATION_ID, "installationId"
-        ),
-        CONF_KNOWLEDGE_SPACE_ID: _first_value(
-            data, CONF_KNOWLEDGE_SPACE_ID, "knowledgeSpaceId"
-        ),
-    }
-    return runtime.home_graph_base_payload(base_data)
-
-
-def _artifact_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Build a JSON artifact ingest payload."""
-
-    payload = _home_graph_payload(runtime, data)
-    _copy_optional_any(data, payload, (CONF_ARTIFACT_ID, "artifactId"), "artifactId")
-    _copy_optional_any(data, payload, (CONF_PATH, "path"), "path")
-    _copy_optional_any(data, payload, (CONF_URI, "uri", CONF_URL, "url"), "uri")
-    _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
-    _copy_tags_and_private_hosts(data, payload)
-    if not any(key in payload for key in ("artifactId", "path", "uri")):
-        raise HomeAssistantError("Artifact ingest requires artifactId, path, or uri")
-    return payload
-
-
-def _link_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Build a link or unlink payload."""
-
-    payload = _base_payload(runtime, data)
-    _copy_optional_any(data, payload, (CONF_SOURCE_ID, "sourceId"), "sourceId")
-    _copy_optional_any(data, payload, (CONF_NODE_ID, "nodeId"), "nodeId")
-    if "sourceId" not in payload and "nodeId" not in payload:
-        raise HomeAssistantError("Linking requires sourceId or nodeId")
-    target = _target_payload(data)
-    if target is None:
-        raise HomeAssistantError("Linking requires a target kind and id")
-    payload["target"] = target
-    if metadata := _parse_jsonish(data.get("metadata")):
-        payload["metadata"] = metadata
-    return payload
-
-
-def _review_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Build a Home Graph review payload."""
-
-    payload = {
-        **_base_payload(runtime, data),
-        "action": _required_text(data, "action", "decision"),
-    }
-    _copy_optional_any(data, payload, ("issueId", "issue_id", "fact_id"), "issueId")
-    _copy_optional_any(data, payload, (CONF_NODE_ID, "nodeId"), "nodeId")
-    _copy_optional_any(data, payload, (CONF_SOURCE_ID, "sourceId"), "sourceId")
-    _copy_optional_any(data, payload, ("reviewer",), "reviewer")
-    if (
-        "issueId" not in payload
-        and "nodeId" not in payload
-        and "sourceId" not in payload
-    ):
-        raise HomeAssistantError("Review requires issueId, nodeId, or sourceId")
-    value = _parse_jsonish_or_text(data.get("value"))
-    if value is not None:
-        payload["value"] = value
-    return payload
-
-
-def _target_payload(data: dict[str, Any]) -> dict[str, Any] | None:
-    """Return an optional Home Graph target object."""
-
-    explicit = _parse_jsonish(data.get("target"))
-    if isinstance(explicit, dict):
-        return explicit
-    target_kind = _first_value(data, CONF_TARGET_KIND, "targetKind", "kind")
-    target_id = _first_value(data, CONF_TARGET_ID, "targetId", "target_id", "id")
-    relation = _first_value(data, CONF_RELATION, "relation")
-    title = _first_value(data, CONF_TITLE, "targetTitle", "target_title")
-    if not target_kind and not target_id:
-        return None
-    if not target_kind or not target_id:
-        raise HomeAssistantError("Target kind and target id must be provided together")
-    target = {"kind": str(target_kind), "id": str(target_id)}
-    if relation:
-        target["relation"] = str(relation)
-    if title:
-        target["title"] = str(title)
-    return target
-
-
-def _query_payload(
-    runtime: Any,
-    data: dict[str, Any],
-    allowed: set[str],
-) -> dict[str, Any]:
-    """Build a query payload with allowed scalar filter fields."""
-
-    payload = _base_payload(runtime, data)
-    for key, value in data.items():
-        if (
-            key in allowed
-            and isinstance(value, (str, int, float, bool))
-            and value != ""
-        ):
-            payload[key] = _coerce_query_value(key, value)
-    return payload
-
-
-def _map_payload(runtime: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Build a daemon-side Home Graph map payload with SDK-owned filters."""
-
-    payload = _base_payload(runtime, data)
-    value = _first_value(data, CONF_LIMIT, "limit")
-    if value not in (None, ""):
-        try:
-            payload["limit"] = max(1, int(value))
-        except (TypeError, ValueError):
-            payload["limit"] = value
-    if query := _first_value(data, CONF_QUERY, "query"):
-        payload["query"] = str(query)
-    value = _first_value(data, "minConfidence", "min_confidence")
-    if value not in (None, ""):
-        try:
-            payload["minConfidence"] = float(value)
-        except (TypeError, ValueError):
-            payload["minConfidence"] = value
-    for source_key, target_key in (
-        (CONF_INCLUDE_SOURCES, "includeSources"),
-        ("includeSources", "includeSources"),
-        ("include_issues", "includeIssues"),
-        ("includeIssues", "includeIssues"),
-        ("include_generated", "includeGenerated"),
-        ("includeGenerated", "includeGenerated"),
-    ):
-        if source_key in data:
-            payload[target_key] = _truthy(data[source_key])
-
-    filters = data.get("filters")
-    if isinstance(filters, dict):
-        payload["filters"] = filters
-    for key in MAP_GENERIC_LIST_FIELDS:
-        if key in data:
-            values = _string_list(data[key])
-            if values:
-                payload[key] = values
-
-    ha_payload: dict[str, Any] = {}
-    ha = data.get("ha")
-    if isinstance(ha, dict):
-        for key in MAP_HA_LIST_FIELDS:
-            values = _string_list(ha.get(key))
-            if values:
-                ha_payload[key] = values
-    for key in MAP_HA_LIST_FIELDS:
-        if key in data:
-            values = _string_list(data[key])
-            if values:
-                ha_payload[key] = values
-    if ha_payload:
-        payload["ha"] = ha_payload
-    return payload
-
-
-def _coerce_query_value(
-    key: str,
-    value: str | int | float | bool,
-) -> str | int | float | bool:
-    """Coerce known query scalars to the daemon contract shape."""
-
-    if key in {CONF_LIMIT, "limit"}:
-        try:
-            return max(1, int(value))
-        except (TypeError, ValueError):
-            return value
-    return value
-
-
 async def _read_multipart_upload(
     hass: HomeAssistant,
     request: web.Request,
@@ -1421,151 +1223,3 @@ def _safe_filename(filename: str | None) -> str:
 
     cleaned = Path(filename or "upload").name.strip()
     return cleaned or "upload"
-
-
-def _copy_tags_and_private_hosts(
-    data: dict[str, Any],
-    payload: dict[str, Any],
-    *,
-    private_hosts: bool = True,
-) -> None:
-    """Copy common ingest flags."""
-
-    if tags := _parse_tags(_first_value(data, CONF_TAGS, "tags")):
-        payload["tags"] = tags
-    if private_hosts and (
-        CONF_ALLOW_PRIVATE_HOSTS in data or "allowPrivateHosts" in data
-    ):
-        payload["allowPrivateHosts"] = _truthy(
-            _first_value(data, CONF_ALLOW_PRIVATE_HOSTS, "allowPrivateHosts")
-        )
-
-
-def _required_text(data: dict[str, Any], *names: str) -> str:
-    """Return a required text field."""
-
-    value = _first_value(data, *names)
-    if value in (None, ""):
-        raise HomeAssistantError(f"Missing required field: {names[0]}")
-    return str(value)
-
-
-def _required_object(data: dict[str, Any], name: str) -> dict[str, Any]:
-    """Return a required object field."""
-
-    value = data.get(name)
-    if not isinstance(value, dict):
-        raise HomeAssistantError(f"Missing required object field: {name}")
-    return value
-
-
-def _copy_optional_any(
-    source: dict[str, Any],
-    target: dict[str, Any],
-    source_keys: tuple[str, ...],
-    target_key: str,
-) -> None:
-    """Copy the first non-empty source key into a payload."""
-
-    value = _first_value(source, *source_keys)
-    if value not in (None, ""):
-        target[target_key] = value
-
-
-def _first_value(
-    data: dict[str, Any],
-    *names: str,
-    default: Any = None,
-) -> Any:
-    """Return the first non-empty value from a dict."""
-
-    for name in names:
-        value = data.get(name)
-        if value not in (None, ""):
-            return value
-    return default
-
-
-def _parse_jsonish(value: Any) -> Any:
-    """Parse JSON fields supplied by forms while accepting native objects."""
-
-    if value in (None, ""):
-        return None
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, str):
-        return json.loads(value)
-    return value
-
-
-def _parse_jsonish_or_text(value: Any) -> Any:
-    """Parse JSON when possible, otherwise preserve text values."""
-
-    try:
-        return _parse_jsonish(value)
-    except ValueError:
-        return value
-
-
-def _string_set(value: Any) -> set[str]:
-    """Parse list-like values into a set of non-empty strings."""
-
-    if value in (None, ""):
-        return set()
-    if isinstance(value, str):
-        value = [item.strip() for item in value.split(",")]
-    if isinstance(value, (list, tuple, set)):
-        return {str(item) for item in value if item not in (None, "") and str(item)}
-    return {str(value)}
-
-
-def _string_list(value: Any) -> list[str]:
-    """Parse list-like values into a stable list of non-empty strings."""
-
-    if value in (None, ""):
-        return []
-    parsed = _parse_jsonish_or_text(value)
-    if isinstance(parsed, str):
-        items = parsed.split(",")
-    elif isinstance(parsed, (list, tuple, set)):
-        items = parsed
-    else:
-        items = [parsed]
-    result: list[str] = []
-    for item in items:
-        text = str(item).strip()
-        if text and text not in result:
-            result.append(text)
-    return result
-
-
-def _parse_tags(value: Any) -> list[str] | None:
-    """Parse tags from JSON arrays, lists, or comma-separated strings."""
-
-    if value in (None, ""):
-        return None
-    parsed = (
-        _parse_jsonish(value)
-        if isinstance(value, str) and value.strip().startswith("[")
-        else value
-    )
-    if isinstance(parsed, list):
-        tags = [str(item).strip() for item in parsed if str(item).strip()]
-    else:
-        tags = [item.strip() for item in str(parsed).split(",") if item.strip()]
-    return tags or None
-
-
-def _truthy(value: Any) -> bool:
-    """Return a form-friendly boolean."""
-
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _camel_key(value: str) -> str:
-    """Convert a small snake_case key to camelCase."""
-
-    parts = value.split("_")
-    return parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
