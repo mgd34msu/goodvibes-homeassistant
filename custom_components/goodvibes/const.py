@@ -11,7 +11,7 @@ INTEGRATION_VERSION = "0.5.72"
 # (see docs/sdk-compatibility.md). CI echoes the live npm version against this
 # label as an informational nudge when the two drift.
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
-SDK_VALIDATED_VERSION = "1.3.0"
+SDK_VALIDATED_VERSION = "1.3.1"
 
 UPDATE_REPOSITORY = "mgd34msu/goodvibes-homeassistant"
 UPDATE_RELEASES_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
