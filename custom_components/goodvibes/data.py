@@ -9,6 +9,7 @@ entity platforms can import the type without importing the service handlers.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -82,6 +83,9 @@ class GoodVibesRuntimeData:
     active_run_id: str | None = None
     unsubscribe_event: Any | None = None
     unsubscribe_auto_sync: Any | None = None
+    # The DataUpdateCoordinator that owns the batched refresh for this entry.
+    # Set in async_setup_entry after both objects exist.
+    coordinator: Any = None
 
     @property
     def signal(self) -> str:
@@ -141,8 +145,8 @@ class GoodVibesRuntimeData:
         value = device.get("swVersion") or self.daemon_status.get("version")
         return str(value) if value else None
 
-    async def async_initial_refresh(self) -> None:
-        """Refresh daemon state without failing integration setup."""
+    async def async_fetch_manifest(self) -> None:
+        """Fetch the daemon Home Assistant surface manifest for device info."""
 
         try:
             raw_manifest = await self.client.manifest()
@@ -150,23 +154,41 @@ class GoodVibesRuntimeData:
         except GoodVibesClientError as err:
             self.last_error = str(err)
 
+    async def async_initial_refresh(self) -> None:
+        """Refresh daemon state without failing integration setup."""
+
+        await self.async_fetch_manifest()
         await self.async_refresh()
 
     async def async_refresh(self) -> None:
-        """Refresh daemon status and tool catalog."""
+        """Refresh daemon status and tool catalog.
+
+        The four core daemon reads (health, status, HA-surface status, tool
+        catalog) are independent, so they are dispatched concurrently with
+        asyncio.gather instead of one serial round-trip after another. The Home
+        Graph reads run as a second concurrent batch inside
+        async_refresh_home_graph.
+        """
 
         try:
-            self.health = await self.client.health()
-            self.daemon_status = await self.client.status()
-            self.status = str(self.daemon_status.get("status") or "running")
-            raw_surface_status = await self.client.homeassistant_status()
+            health, daemon_status, raw_surface_status, tool_catalog = (
+                await asyncio.gather(
+                    self.client.health(),
+                    self.client.status(),
+                    self.client.homeassistant_status(),
+                    self.client.tool_catalog(),
+                )
+            )
+            self.health = health
+            self.daemon_status = daemon_status
+            self.status = str(daemon_status.get("status") or "running")
             self.homeassistant_status = _result_payload(raw_surface_status)
             if self.homeassistant_status.get("ok") is False:
                 self.status = "homeassistant_error"
                 self.last_error = str(
                     self.homeassistant_status.get("error") or "Home Assistant surface error"
                 )
-            self.tool_catalog = await self.client.tool_catalog()
+            self.tool_catalog = tool_catalog
             if self.status != "homeassistant_error":
                 self.last_error = None
         except GoodVibesClientError as err:
@@ -188,9 +210,10 @@ class GoodVibesRuntimeData:
             return
         try:
             base_payload = self.home_graph_base_payload()
-            self.home_graph_status = await self.client.home_graph_status(base_payload)
-            self.home_graph_issues = await self.client.home_graph_issues(
-                {**base_payload, CONF_STATUS: "open"}
+            # Status and open-issues are independent reads; fetch concurrently.
+            self.home_graph_status, self.home_graph_issues = await asyncio.gather(
+                self.client.home_graph_status(base_payload),
+                self.client.home_graph_issues({**base_payload, CONF_STATUS: "open"}),
             )
             self.home_graph_last_error = None
             _async_clear_home_graph_issue(self.hass, "home_graph_unavailable")

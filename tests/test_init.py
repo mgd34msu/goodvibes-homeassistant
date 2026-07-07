@@ -36,8 +36,13 @@ def _enter_isolation(hass, stack: ExitStack) -> None:
 
     stack.enter_context(patch.object(gv, "async_setup_frontend", AsyncMock()))
     stack.enter_context(patch.object(gv, "_async_auto_sync_home_graph", AsyncMock()))
+    # The coordinator's first refresh runs runtime.async_refresh; stub the manifest
+    # fetch and the refresh so setup exercises only lifecycle, not the daemon.
     stack.enter_context(
-        patch.object(GoodVibesRuntimeData, "async_initial_refresh", AsyncMock())
+        patch.object(GoodVibesRuntimeData, "async_fetch_manifest", AsyncMock())
+    )
+    stack.enter_context(
+        patch.object(GoodVibesRuntimeData, "async_refresh", AsyncMock())
     )
     stack.enter_context(
         patch.object(
