@@ -104,6 +104,24 @@ jobs:
       - name: Run test suite
         run: python -m pytest
 
+      - name: SDK version nudge (informational)
+        continue-on-error: true
+        run: |
+          validated=$(python - <<'PY'
+          import pathlib
+          import re
+
+          text = pathlib.Path("custom_components/goodvibes/const.py").read_text()
+          match = re.search(r'^SDK_VALIDATED_VERSION = "([^"]+)"$', text, re.MULTILINE)
+          print(match.group(1) if match else "unknown")
+          PY
+          )
+          latest=$(npm view @pellux/goodvibes-sdk version 2>/dev/null || echo "unknown")
+          echo "GoodVibes SDK — validated against: ${validated} ; latest on npm: ${latest}"
+          if [ "${latest}" != "unknown" ] && [ "${validated}" != "${latest}" ]; then
+            echo "::notice::@pellux/goodvibes-sdk latest is ${latest}, but the integration is validated against ${validated}. Re-validate the daemon contract and bump const.SDK_VALIDATED_VERSION."
+          fi
+
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest
