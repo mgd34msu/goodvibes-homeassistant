@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.6.3 - 2026-07-07
+
+- Validate against `@pellux/goodvibes-sdk` 1.4.1. On a 1.4.1+ daemon,
+  conversation commands that manage processes or containers (kill, docker,
+  etc.) follow the daemon's permission settings instead of being denied
+  unconditionally by the exec layer. No integration code changes.
+
 ## 0.6.2 - 2026-07-07
 
 - Fix the 0.6.1 release metadata: `INTEGRATION_VERSION` (which also versions
