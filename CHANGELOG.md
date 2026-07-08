@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.6.4 - 2026-07-08
+
+- Validate against `@pellux/goodvibes-sdk` 1.5.0. On a 1.5.0+ daemon,
+  sessions compact immediately when the model itself reports its context
+  window filled up, and custom per-model context windows persist across
+  daemon restarts. No integration code changes.
+
 ## 0.6.3 - 2026-07-07
 
 - Validate against `@pellux/goodvibes-sdk` 1.4.1. On a 1.4.1+ daemon,
