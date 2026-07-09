@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.6.5 - 2026-07-09
+
+- Validate against `@pellux/goodvibes-sdk` 1.6.1. On a 1.6.1+ daemon,
+  sessions compact and retry immediately when a provider rejects a request
+  as exceeding the context window, per-model context ceilings are learned
+  from those rejections, agent-completion notices deliver exactly once, and
+  finished agent/swarm subtrees can be archived out of the live fleet view.
+  No integration code changes.
+
 ## 0.6.4 - 2026-07-08
 
 - Validate against `@pellux/goodvibes-sdk` 1.5.0. On a 1.5.0+ daemon,
