@@ -159,6 +159,8 @@ def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:
             "labels": _jsonable(getattr(entity, "labels", None)),
             "aliases": _jsonable(getattr(entity, "aliases", None)),
             "state": state.state if state else None,
+            "lastChanged": _state_timestamp(state, "last_changed"),
+            "lastUpdated": _state_timestamp(state, "last_updated"),
             "attributes": _state_attributes(state),
             "metadata": {
                 "source": "entity_registry",
@@ -436,6 +438,26 @@ def _unique_texts(values: Iterable[Any]) -> list[str]:
 
 def _domain_snapshots(entities: list[dict[str, Any]], domain: str) -> list[dict[str, Any]]:
     return [entity for entity in entities if entity.get("domain") == domain]
+
+
+def _state_timestamp(state: Any, attr: str) -> str | None:
+    """Return an entity state timestamp (last_changed/last_updated) as ISO text.
+
+    These per-entity timestamps travel with the snapshot so any answer built from
+    a snapshotted state can cite when that state was observed, not just its value.
+    The snapshot-level observation time is recorded separately as
+    ``metadata.generatedAt``.
+    """
+
+    if state is None:
+        return None
+    value = getattr(state, attr, None)
+    if value is None:
+        return None
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        return str(isoformat())
+    return str(value)
 
 
 def _state_attributes(state: Any) -> dict[str, Any]:
