@@ -11,8 +11,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from homeassistant.core import ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.core import Context, ServiceCall
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.goodvibes import services as svc
@@ -73,6 +73,15 @@ def runtime(hass):
 async def _call(hass, name: str, data: dict) -> dict:
     handler = getattr(svc, name)
     return await handler(ServiceCall(hass, DOMAIN, name, dict(data)))
+
+
+async def _call_as(hass, name: str, data: dict, user_id: str) -> dict:
+    """Invoke a handler as a specific user (a call carrying a user context)."""
+
+    handler = getattr(svc, name)
+    return await handler(
+        ServiceCall(hass, DOMAIN, name, dict(data), context=Context(user_id=user_id))
+    )
 
 
 # (handler name, minimal valid data, expected daemon client method)
@@ -155,6 +164,85 @@ async def test_cancel_without_target_raises(hass, runtime):
 
     with pytest.raises(HomeAssistantError):
         await _call(hass, "async_cancel", {})
+
+
+async def test_mutating_service_rejects_non_admin(hass, runtime, hass_read_only_user):
+    """A mutating service called on behalf of a non-admin user is refused."""
+
+    with pytest.raises(Unauthorized):
+        await _call_as(hass, "async_prompt", {"message": "hi"}, hass_read_only_user.id)
+    assert "prompt" not in runtime.client.calls
+
+
+async def test_mutating_service_allows_admin(hass, runtime, hass_admin_user):
+    """A mutating service called on behalf of an admin user runs normally."""
+
+    result = await _call_as(hass, "async_prompt", {"message": "hi"}, hass_admin_user.id)
+    assert isinstance(result, dict)
+    assert "prompt" in runtime.client.calls
+
+
+async def test_mutating_service_allows_no_user_context(hass, runtime):
+    """A call with no user context (automation/script) is allowed through."""
+
+    await _call(hass, "async_prompt", {"message": "hi"})
+    assert "prompt" in runtime.client.calls
+
+
+async def test_destructive_reset_rejects_non_admin(hass, runtime, hass_read_only_user):
+    """Even a dry-run Home Graph reset is admin-only."""
+
+    with pytest.raises(Unauthorized):
+        await _call_as(
+            hass, "async_home_graph_reset", {"dry_run": True}, hass_read_only_user.id
+        )
+    assert "home_graph_reset" not in runtime.client.calls
+
+
+async def test_read_only_service_allows_non_admin(hass, runtime, hass_read_only_user):
+    """Read-only status stays open to a non-admin user."""
+
+    result = await _call_as(
+        hass, "async_home_graph_status", {}, hass_read_only_user.id
+    )
+    assert "status" in result
+
+
+async def test_entity_control_check_blocks_non_admin_without_permission(
+    hass, hass_read_only_user
+):
+    """The entity guard refuses an entity the calling user cannot control."""
+
+    call = ServiceCall(
+        hass,
+        DOMAIN,
+        "home_graph_packet",
+        {},
+        context=Context(user_id=hass_read_only_user.id),
+    )
+    with pytest.raises(Unauthorized):
+        await svc._async_verify_entity_control(call, ["light.kitchen"])
+
+
+async def test_entity_control_check_allows_admin(hass, hass_admin_user):
+    """An admin passes the entity guard for any entity."""
+
+    call = ServiceCall(
+        hass,
+        DOMAIN,
+        "home_graph_packet",
+        {},
+        context=Context(user_id=hass_admin_user.id),
+    )
+    # No exception: administrators hold control over every entity.
+    await svc._async_verify_entity_control(call, ["light.kitchen"])
+
+
+async def test_entity_control_check_allows_no_user_context(hass):
+    """With no user context the entity guard allows the call (trusted caller)."""
+
+    call = ServiceCall(hass, DOMAIN, "home_graph_packet", {})
+    await svc._async_verify_entity_control(call, ["light.kitchen"])
 
 
 async def test_setup_services_registers_all_and_is_idempotent(hass):
