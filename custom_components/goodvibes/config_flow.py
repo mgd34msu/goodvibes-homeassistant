@@ -6,8 +6,9 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import selector
+from homeassistant.const import CONF_LLM_HASS_API
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import llm, selector
 
 from .client import (
     GoodVibesClient,
@@ -24,6 +25,7 @@ from .const import (
     CONF_INCLUDE_UNEXPOSED_ENTITIES,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
+    CONF_PROMPT,
     CONF_WEBHOOK_SECRET,
     DEFAULT_DAEMON_URL,
     DEFAULT_EVENT_TYPE,
@@ -90,6 +92,15 @@ class GoodVibesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Return the options flow for the conversation agent settings."""
+
+        return GoodVibesOptionsFlow()
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -119,6 +130,64 @@ class GoodVibesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=_schema(user_input),
             errors=errors,
         )
+
+
+class GoodVibesOptionsFlow(config_entries.OptionsFlow):
+    """Conversation-agent options: the Assist LLM API and a custom prompt.
+
+    These mirror the settings a first-class Home Assistant conversation agent
+    exposes. They are read by the conversation entity, which routes them through
+    ``homeassistant.helpers.llm`` to assemble the system prompt (see
+    ``conversation.py``).
+    """
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Manage the conversation options."""
+
+        if user_input is not None:
+            # An empty selection means "no HA LLM API"; drop the key so the
+            # conversation entity treats it as unset rather than an empty list.
+            options = {CONF_PROMPT: user_input.get(CONF_PROMPT, "").strip()}
+            if not options[CONF_PROMPT]:
+                options.pop(CONF_PROMPT)
+            if llm_apis := user_input.get(CONF_LLM_HASS_API):
+                options[CONF_LLM_HASS_API] = llm_apis
+            return self.async_create_entry(title="", data=options)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_options_schema(self.hass, self.config_entry.options),
+        )
+
+
+def _options_schema(
+    hass: HomeAssistant, options: dict[str, Any]
+) -> vol.Schema:
+    """Return the conversation options schema seeded with current values."""
+
+    hass_apis = [
+        selector.SelectOptionDict(label=api.name, value=api.id)
+        for api in llm.async_get_apis(hass)
+    ]
+    prompt_default = options.get(CONF_PROMPT, llm.DEFAULT_INSTRUCTIONS_PROMPT)
+    schema: dict[Any, Any] = {
+        vol.Optional(
+            CONF_PROMPT,
+            description={"suggested_value": prompt_default},
+        ): selector.TemplateSelector(),
+    }
+    if hass_apis:
+        schema[
+            vol.Optional(
+                CONF_LLM_HASS_API,
+                default=options.get(CONF_LLM_HASS_API, []),
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(options=hass_apis, multiple=True)
+        )
+    return vol.Schema(schema)
 
 
 async def _validate_input(

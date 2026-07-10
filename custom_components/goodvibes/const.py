@@ -41,6 +41,10 @@ CONF_TOOL = "tool"
 CONF_INPUT = "input"
 CONF_HOME_GRAPH_ENABLED = "home_graph_enabled"
 CONF_INCLUDE_UNEXPOSED_ENTITIES = "include_unexposed_entities"
+# Conversation options (options flow). CONF_LLM_HASS_API reuses Home Assistant's
+# own option key ("llm_hass_api") so the selected Assist LLM API is stored the
+# same way first-class conversation agents store it.
+CONF_PROMPT = "prompt"
 CONF_INSTALLATION_ID = "installation_id"
 CONF_KNOWLEDGE_SPACE_ID = "knowledge_space_id"
 CONF_URL = "url"
