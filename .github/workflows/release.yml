@@ -53,6 +53,20 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.inputs.tag }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Build sidebar panel assets
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          # The committed artifacts must already equal a fresh build, so a
+          # rebuild at release time must not change the working tree.
+          git diff --exit-code -- ../custom_components/goodvibes/frontend
+
       - name: Build release archive
         run: |
           mkdir -p dist

@@ -41,6 +41,12 @@ jobs:
           find custom_components/goodvibes/frontend -name '*.js' -print0 \
             | xargs -0 -r -n1 node --check
 
+      - name: Verify built frontend assets match source
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check
+
       - name: Check release metadata
         run: |
           python <<'PY'

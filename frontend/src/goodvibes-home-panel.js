@@ -1,22 +1,17 @@
-/*! GoodVibes Home Assistant goodvibes-home-panel.js v0.6.5
- * Built from frontend/src/goodvibes-home-panel.js by frontend/build.mjs — do not edit the
- * served artifact directly; edit the source and rebuild. */
-
-
-// src/goodvibes-home-panel.js
-var DEFAULT_WS_TYPE = "goodvibes/home_graph/call";
-var DEFAULT_UPLOAD_URL = "/api/goodvibes/home-graph/upload";
-var AUTO_TRIAGE_BATCH_LIMIT = 25;
-var OPEN_ISSUES_PAYLOAD = { status: "open" };
-var ACTIVE_REFINEMENT_STATES = /* @__PURE__ */ new Set([
+const DEFAULT_WS_TYPE = "goodvibes/home_graph/call";
+const DEFAULT_UPLOAD_URL = "/api/goodvibes/home-graph/upload";
+const AUTO_TRIAGE_BATCH_LIMIT = 25;
+const OPEN_ISSUES_PAYLOAD = { status: "open" };
+const ACTIVE_REFINEMENT_STATES = new Set([
   "queued",
   "searching",
   "evaluating",
   "extracting",
   "applying",
-  "verifying"
+  "verifying",
 ]);
-var TARGET_KIND_OPTIONS = [
+
+const TARGET_KIND_OPTIONS = [
   "",
   "ha_entity",
   "ha_device",
@@ -33,9 +28,10 @@ var TARGET_KIND_OPTIONS = [
   "ha_purchase",
   "ha_network_node",
   "source",
-  "node"
+  "node",
 ];
-var RELATION_OPTIONS = [
+
+const RELATION_OPTIONS = [
   "",
   "source_for",
   "has_manual",
@@ -49,9 +45,10 @@ var RELATION_OPTIONS = [
   "belongs_to_device",
   "connected_via",
   "part_of_network",
-  "mentioned_by"
+  "mentioned_by",
 ];
-var MAP_HA_FILTERS = [
+
+const MAP_HA_FILTERS = [
   ["objectKinds", "Objects"],
   ["automations", "Automations"],
   ["areaIds", "Areas"],
@@ -61,9 +58,9 @@ var MAP_HA_FILTERS = [
   ["labels", "Labels"],
   ["entityIds", "Entities"],
   ["deviceIds", "Devices"],
-  ["integrationIds", "Integration IDs"]
+  ["integrationIds", "Integration IDs"],
 ];
-var MAP_FILTER_GROUPS = [
+const MAP_FILTER_GROUPS = [
   { key: "entityIds", alias: "automations", label: "Automations", match: (value) => String(value || "").startsWith("automation."), defaultOpen: true },
   { key: "areaIds", label: "Areas", defaultOpen: true },
   { key: "integrationDomains", label: "Integrations", defaultOpen: true },
@@ -73,19 +70,20 @@ var MAP_FILTER_GROUPS = [
   { key: "deviceIds", label: "Devices", technical: true },
   { key: "deviceClasses", label: "Device Classes" },
   { key: "labels", label: "Labels", noisy: true },
-  { key: "integrationIds", label: "Integration IDs", technical: true }
+  { key: "integrationIds", label: "Integration IDs", technical: true },
 ];
-var MAP_DEFAULT_LIMIT = 150;
-var MAP_VISIBLE_FACET_LIMIT = 14;
-var MAP_DEFAULT_OPEN_FILTERS = /* @__PURE__ */ new Set([
+const MAP_DEFAULT_LIMIT = 150;
+const MAP_VISIBLE_FACET_LIMIT = 14;
+const MAP_DEFAULT_OPEN_FILTERS = new Set([
   "objectKinds",
   "automations",
   "areaIds",
   "integrationDomains",
-  "domains"
+  "domains",
 ]);
-var MAP_TECHNICAL_FILTERS = /* @__PURE__ */ new Set(["entityIds", "deviceIds", "integrationIds"]);
-var GoodVibesHomePanel = class extends HTMLElement {
+const MAP_TECHNICAL_FILTERS = new Set(["entityIds", "deviceIds", "integrationIds"]);
+
+class GoodVibesHomePanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -114,7 +112,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._mapFilters = {};
     this._loaded = false;
     this._pendingBackgroundRender = false;
-    this._selectedReviewIds = /* @__PURE__ */ new Set();
+    this._selectedReviewIds = new Set();
     this._reviewAction = "reject";
     this._reviewNote = "";
     this._lastTriageSignature = "";
@@ -122,11 +120,12 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._triageQueued = false;
     this._triageSummary = null;
     this._triageProgress = null;
-    this._triageSeenIssueIds = /* @__PURE__ */ new Set();
+    this._triageSeenIssueIds = new Set();
     this.shadowRoot.addEventListener("focusout", () => {
       queueMicrotask(() => this._flushPendingBackgroundRender());
     });
   }
+
   set hass(hass) {
     const hadHass = Boolean(this._hass);
     this._hass = hass;
@@ -138,31 +137,38 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._render();
     }
   }
+
   get hass() {
     return this._hass;
   }
+
   set panel(panel) {
     this._panel = panel;
   }
+
   get _wsType() {
     return this._panel?.config?.wsType || DEFAULT_WS_TYPE;
   }
+
   get _uploadUrl() {
     return this._panel?.config?.uploadUrl || DEFAULT_UPLOAD_URL;
   }
+
   get _configEntryId() {
     return this._panel?.config?.configEntryId || "";
   }
+
   connectedCallback() {
     this._render();
   }
+
   async _refreshAll(options = {}) {
     await this._call("status", {}, { quiet: true });
     await Promise.all([
       this._call("sources", {}, { quiet: true }),
       this._call("browse", {}, { quiet: true }),
       this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true }),
-      this._call("refinement_tasks", { limit: this._refinementLimit }, { quiet: true })
+      this._call("refinement_tasks", { limit: this._refinementLimit }, { quiet: true }),
     ]);
     if (this._tab === "map") {
       await this._call("map", this._mapPayload(), { quiet: true });
@@ -179,6 +185,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._queueAutoTriage(options);
     }
   }
+
   async _call(action, payload = {}, options = {}) {
     if (!this._hass) {
       return {};
@@ -192,8 +199,8 @@ var GoodVibesHomePanel = class extends HTMLElement {
       const result = await this._hass.callWS({
         type: this._wsType,
         action,
-        config_entry_id: this._configEntryId || void 0,
-        payload
+        config_entry_id: this._configEntryId || undefined,
+        payload,
       });
       if (!options.quiet || options.recordResult) {
         this._lastResult = result || {};
@@ -232,6 +239,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       }
     }
   }
+
   async _upload(form, options = {}) {
     const fields = this._formValues(form);
     const input = form.querySelector('input[name="file"]');
@@ -240,6 +248,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._showError(new Error("Choose a file to upload."));
       return;
     }
+
     const data = new FormData();
     data.append("file", file, file.name);
     this._appendFormField(data, "config_entry_id", this._configEntryId);
@@ -250,6 +259,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     if (fields.allowPrivateHosts) {
       data.append("allowPrivateHosts", "true");
     }
+
     this._busy = "upload";
     this._error = "";
     this._render();
@@ -268,23 +278,27 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._render();
     }
   }
+
   async _postUpload(data) {
     const options = {
       method: "POST",
       body: data,
-      credentials: "same-origin"
+      credentials: "same-origin",
     };
     const token = this._hass?.auth?.data?.access_token;
     if (token && !this._hass?.fetchWithAuth) {
       options.headers = { Authorization: `Bearer ${token}` };
     }
-    const response = this._hass?.fetchWithAuth ? await this._hass.fetchWithAuth(this._uploadUrl, options) : await fetch(this._uploadUrl, options);
+    const response = this._hass?.fetchWithAuth
+      ? await this._hass.fetchWithAuth(this._uploadUrl, options)
+      : await fetch(this._uploadUrl, options);
     const payload = await response.json();
     if (!response.ok || payload?.ok === false) {
       throw new Error(payload?.error || `Upload failed: ${response.status}`);
     }
     return payload;
   }
+
   _wireEvents() {
     const root = this.shadowRoot;
     root.querySelectorAll("[data-tab]").forEach((button) => {
@@ -295,8 +309,8 @@ var GoodVibesHomePanel = class extends HTMLElement {
           this._call("map", this._mapPayload()).catch((err) => this._showError(err));
         }
         if (this._tab === "pages") {
-          this._call("pages", { limit: 250, includeMarkdown: true }).catch(
-            (err) => this._showError(err)
+          this._call("pages", { limit: 250, includeMarkdown: true }).catch((err) =>
+            this._showError(err)
           );
         }
         if (this._tab === "refine") {
@@ -333,6 +347,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       });
     });
   }
+
   async _handleAction(action, element) {
     if (action === "refresh") {
       await this._refreshAll();
@@ -416,6 +431,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._render();
     }
   }
+
   async _syncAndRefresh() {
     const result = await this._call("sync", {}, { quiet: true, recordResult: true });
     if (this._error || result?.ok === false) {
@@ -425,6 +441,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     await this._refreshAll();
   }
+
   async _handleForm(form) {
     const name = form.dataset.form;
     const fields = this._formValues(form);
@@ -435,7 +452,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
         mode: fields.mode,
         includeSources: fields.includeSources,
         includeConfidence: fields.includeConfidence,
-        includeLinkedObjects: fields.includeLinkedObjects
+        includeLinkedObjects: fields.includeLinkedObjects,
       }));
       return;
     }
@@ -474,7 +491,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
           limit: fields.limit,
           force: fields.force,
           gapIds: this._tagsFromText(fields.gapIds),
-          sourceIds: this._tagsFromText(fields.sourceIds)
+          sourceIds: this._tagsFromText(fields.sourceIds),
         })
       );
       await this._refreshAll({ triage: false });
@@ -491,7 +508,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       await this._call(
         "ingest_note",
         this._ingestPayload(fields, {
-          body: fields.body
+          body: fields.body,
         })
       );
       if (!this._error) {
@@ -505,7 +522,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
         this._ingestPayload(fields, {
           artifactId: fields.artifactId,
           path: fields.path,
-          uri: fields.uri
+          uri: fields.uri,
         })
       );
       if (!this._error) {
@@ -538,7 +555,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       const result = await this._call("link", {
         sourceId: fields.sourceId,
         target: this._targetFromFields(fields),
-        metadata: this._jsonFromText(fields.metadata)
+        metadata: this._jsonFromText(fields.metadata),
       });
       if (!this._error) {
         await this._resolveReviewIssueWithSource(fields, result);
@@ -564,7 +581,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     if (name === "review_bulk_existing_source") {
       await this._resolveBulkReviewIssuesWithSource(fields, {
-        sourceId: fields.sourceId
+        sourceId: fields.sourceId,
       });
       return;
     }
@@ -573,7 +590,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
         sourceId: fields.sourceId,
         nodeId: fields.nodeId,
         target: this._targetFromFields(fields),
-        metadata: this._jsonFromText(fields.metadata)
+        metadata: this._jsonFromText(fields.metadata),
       });
       if (!this._error) {
         await this._syncAndRefresh();
@@ -591,7 +608,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
         roomId: fields.roomId,
         packetKind: fields.packetKind,
         title: fields.title,
-        sharingProfile: fields.sharingProfile
+        sharingProfile: fields.sharingProfile,
       });
       return;
     }
@@ -601,7 +618,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     if (name === "import") {
       await this._call("import", {
-        data: this._jsonFromText(fields.data)
+        data: this._jsonFromText(fields.data),
       });
       return;
     }
@@ -612,13 +629,14 @@ var GoodVibesHomePanel = class extends HTMLElement {
       }
       await this._call("reset", {
         confirm: fields.confirm,
-        dryRun: fields.dryRun
+        dryRun: fields.dryRun,
       });
       if (!this._error && !fields.dryRun) {
         await this._syncAndRefresh();
       }
     }
   }
+
   _ingestPayload(fields, extra) {
     return this._compact({
       ...extra,
@@ -626,18 +644,20 @@ var GoodVibesHomePanel = class extends HTMLElement {
       tags: this._tagsFromText(fields.tags),
       target: this._targetFromFields(fields),
       metadata: this._jsonFromText(fields.metadata),
-      allowPrivateHosts: fields.allowPrivateHosts ? true : void 0
+      allowPrivateHosts: fields.allowPrivateHosts ? true : undefined,
     });
   }
+
   _reviewSourcePayload(fields, extra) {
     return this._ingestPayload(
       {
         ...fields,
-        relation: fields.relation || "has_manual"
+        relation: fields.relation || "has_manual",
       },
       extra
     );
   }
+
   async _resolveReviewIssueWithSource(fields, sourceResult) {
     const issueId = fields.issueId || "";
     if (!issueId) {
@@ -652,7 +672,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
         issueId,
         action: "resolve",
         value: sourceLinkedReviewValue(sourceId, relation),
-        reviewer: "homeassistant"
+        reviewer: "homeassistant",
       }),
       { quiet: true }
     );
@@ -660,7 +680,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._lastResult = {
       ok: !error,
       linkedSource: sourceResult,
-      review
+      review,
     };
     if (!error) {
       this._selectedReviewIds.clear();
@@ -669,9 +689,10 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._render();
     }
   }
+
   async _resolveBulkReviewIssuesWithSource(fields, sourceResult) {
-    const issues = this._selectedIssues(this._visibleIssues()).filter(
-      (issue) => isSourceResolvableIssue(issue)
+    const issues = this._selectedIssues(this._visibleIssues()).filter((issue) =>
+      isSourceResolvableIssue(issue)
     );
     if (!issues.length) {
       this._showError(new Error("Select one or more missing manual/source issues first."));
@@ -682,10 +703,12 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._showError(new Error("The daemon did not return a source id to link."));
       return;
     }
+
     const relation = fields.relation || "has_manual";
     this._busy = "review";
     this._error = "";
     this._render();
+
     const results = [];
     for (const issue of issues) {
       const link = await this._call(
@@ -695,8 +718,8 @@ var GoodVibesHomePanel = class extends HTMLElement {
           target: {
             kind: "node",
             id: issue.nodeId,
-            relation
-          }
+            relation,
+          },
         },
         { quiet: true }
       );
@@ -710,7 +733,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
           nodeId: issue.nodeId,
           action: "resolve",
           value: sourceLinkedReviewValue(sourceId, relation),
-          reviewer: "homeassistant"
+          reviewer: "homeassistant",
         }),
         { quiet: true }
       );
@@ -718,19 +741,20 @@ var GoodVibesHomePanel = class extends HTMLElement {
         issueId: issue.id || issue.issueId,
         nodeId: issue.nodeId,
         link,
-        review
+        review,
       });
       if (this._error) {
         break;
       }
     }
+
     const error = this._error;
     this._lastResult = {
       ok: !error,
       sourceId,
       linked: results.length,
       results,
-      source: sourceResult
+      source: sourceResult,
     };
     this._busy = "";
     if (!error) {
@@ -740,6 +764,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._render();
     }
   }
+
   _formValues(form) {
     const values = {};
     new FormData(form).forEach((value, key) => {
@@ -753,13 +778,14 @@ var GoodVibesHomePanel = class extends HTMLElement {
     });
     return values;
   }
+
   _targetFromFields(fields) {
     if (!fields.targetKind && !fields.targetId) {
-      return void 0;
+      return undefined;
     }
     const target = {
       kind: fields.targetKind,
-      id: fields.targetId
+      id: fields.targetId,
     };
     if (fields.relation) {
       target.relation = fields.relation;
@@ -769,21 +795,24 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     return target;
   }
+
   _appendFormField(formData, key, value) {
-    if (value === void 0 || value === null || value === "") {
+    if (value === undefined || value === null || value === "") {
       return;
     }
     formData.append(key, typeof value === "string" ? value : JSON.stringify(value));
   }
+
   _jsonFromText(value) {
     if (!value) {
-      return void 0;
+      return undefined;
     }
     return JSON.parse(value);
   }
+
   _jsonOrText(value) {
     if (!value) {
-      return void 0;
+      return undefined;
     }
     try {
       return JSON.parse(value);
@@ -791,16 +820,21 @@ var GoodVibesHomePanel = class extends HTMLElement {
       return value;
     }
   }
+
   _tagsFromText(value) {
     if (!value) {
-      return void 0;
+      return undefined;
     }
-    return value.split(",").map((tag) => tag.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
   }
+
   _compact(value) {
     return Object.fromEntries(
       Object.entries(value).filter(([, item]) => {
-        if (item === void 0 || item === null || item === "") {
+        if (item === undefined || item === null || item === "") {
           return false;
         }
         if (Array.isArray(item) && item.length === 0) {
@@ -810,9 +844,12 @@ var GoodVibesHomePanel = class extends HTMLElement {
       })
     );
   }
+
   _mapPayload() {
     const ha = Object.fromEntries(
-      Object.entries(this._mapFilters || {}).map(([key, values]) => [key, Array.from(values || []).filter(Boolean)]).filter(([, values]) => values.length)
+      Object.entries(this._mapFilters || {})
+        .map(([key, values]) => [key, Array.from(values || []).filter(Boolean)])
+        .filter(([, values]) => values.length)
     );
     return this._compact({
       limit: this._mapLimit,
@@ -820,9 +857,10 @@ var GoodVibesHomePanel = class extends HTMLElement {
       includeSources: this._mapIncludeSources,
       includeIssues: this._mapIncludeIssues,
       includeGenerated: this._mapIncludeGenerated,
-      ha: Object.keys(ha).length ? ha : void 0
+      ha: Object.keys(ha).length ? ha : undefined,
     });
   }
+
   async _toggleMapFilter(key, value) {
     if (!key || !value) {
       return;
@@ -839,11 +877,13 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     await this._call("map", this._mapPayload());
   }
+
   _showError(err) {
     this._busy = "";
     this._error = err?.message || String(err);
     this._render();
   }
+
   _renderAfterBackgroundUpdate() {
     if (this._hasActiveOrDirtyForm()) {
       this._pendingBackgroundRender = true;
@@ -851,12 +891,14 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     this._render();
   }
+
   _flushPendingBackgroundRender() {
     if (!this._pendingBackgroundRender || this._hasActiveOrDirtyForm()) {
       return;
     }
     this._render();
   }
+
   _hasActiveOrDirtyForm() {
     const root = this.shadowRoot;
     if (!root) {
@@ -866,20 +908,22 @@ var GoodVibesHomePanel = class extends HTMLElement {
     if (isFormControl(active)) {
       return true;
     }
-    return Array.from(root.querySelectorAll("input, select, textarea")).some(
-      (field) => isDirtyField(field)
+    return Array.from(root.querySelectorAll("input, select, textarea")).some((field) =>
+      isDirtyField(field)
     );
   }
+
   _captureScrollState() {
-    const state = /* @__PURE__ */ new Map();
+    const state = new Map();
     this.shadowRoot?.querySelectorAll("[data-scroll-region]").forEach((element) => {
       state.set(element.dataset.scrollRegion, {
         left: element.scrollLeft,
-        top: element.scrollTop
+        top: element.scrollTop,
       });
     });
     return state;
   }
+
   _restoreScrollState(state) {
     if (!state?.size) {
       return;
@@ -899,6 +943,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       window.requestAnimationFrame(restore);
     }
   }
+
   _render() {
     if (!this.shadowRoot) {
       return;
@@ -947,7 +992,11 @@ var GoodVibesHomePanel = class extends HTMLElement {
         </nav>
         ${this._error ? `<div class="notice error">${escapeHtml(this._error)}</div>` : ""}
         ${this._busy ? this._workingNotice(busyLabel(this._busy)) : ""}
-        ${this._tab !== "review" && (this._triageInFlight || this._triageQueued) ? this._triageProgressNotice("GoodVibes is classifying review issues.") : ""}
+        ${
+          this._tab !== "review" && (this._triageInFlight || this._triageQueued)
+            ? this._triageProgressNotice("GoodVibes is classifying review issues.")
+            : ""
+        }
         <main>
           ${this._renderTab()}
         </main>
@@ -956,6 +1005,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._wireEvents();
     this._restoreScrollState(scrollState);
   }
+
   _workingNotice(label) {
     return `
       <div class="notice working">
@@ -967,6 +1017,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </div>
     `;
   }
+
   _tabButton(tab, icon, label) {
     return `
       <button type="button" data-tab="${tab}" class="${this._tab === tab ? "active" : ""}">
@@ -975,6 +1026,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </button>
     `;
   }
+
   _renderTab() {
     if (this._tab === "ingest") {
       return this._renderIngest();
@@ -999,6 +1051,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     return this._renderBrowse();
   }
+
   _renderBrowse() {
     const sourceItems = this._filtered(itemsFromPayload(this._sources, ["sources"]));
     const nodes = this._filtered(itemsFromPayload(this._browse, ["nodes"]));
@@ -1046,6 +1099,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       ${this._resultPanel()}
     `;
   }
+
   _renderMap() {
     const map = this._map?.result || this._map || {};
     const nodes = itemsFromPayload(map, ["nodes"]);
@@ -1109,7 +1163,11 @@ var GoodVibesHomePanel = class extends HTMLElement {
               <div class="map-stats">
                 <span>${escapeHtml(String(map.nodeCount ?? nodes.length))} nodes</span>
                 <span>${escapeHtml(String(map.edgeCount ?? edges.length))} edges</span>
-                ${map.totalNodeCount !== void 0 ? `<span>${escapeHtml(String(map.totalNodeCount))} matching records</span>` : ""}
+                ${
+                  map.totalNodeCount !== undefined
+                    ? `<span>${escapeHtml(String(map.totalNodeCount))} matching records</span>`
+                    : ""
+                }
                 ${map.spaceId ? `<span>${escapeHtml(map.spaceId)}</span>` : ""}
               </div>
             </div>
@@ -1119,43 +1177,61 @@ var GoodVibesHomePanel = class extends HTMLElement {
       ${this._resultPanel()}
     `;
   }
+
   _mapFacetGroups(facets, map, labelIndex) {
-    const groups = MAP_FILTER_GROUPS.map((group) => this._mapFacetGroup(group, facets?.[group.key], map, labelIndex)).filter(Boolean);
+    const groups = MAP_FILTER_GROUPS
+      .map((group) => this._mapFacetGroup(group, facets?.[group.key], map, labelIndex))
+      .filter(Boolean);
     return groups.length ? groups.join("") : `<p class="empty">No map filters available</p>`;
   }
+
   _mapFacetGroup(group, values, map, labelIndex) {
     const key = group.key;
     const label = group.label;
     const groupId = group.alias || key;
     const localQuery = this._mapFacetQuery.trim().toLowerCase();
     const selected = this._mapFilters?.[key] || [];
-    const baseItems = facetItems(values, key, labelIndex).filter((item) => !group.match || group.match(item.value, item));
+    const baseItems = facetItems(values, key, labelIndex)
+      .filter((item) => !group.match || group.match(item.value, item));
     const known = new Set(baseItems.map((item) => item.value));
-    const selectedItems = selected.filter((value) => !known.has(value) && (!group.match || group.match(value))).map((value) => enrichFacetItem({ value, label: friendlyFacetLabel(value), count: 0 }, key, labelIndex));
+    const selectedItems = selected
+      .filter((value) => !known.has(value) && (!group.match || group.match(value)))
+      .map((value) => enrichFacetItem({ value, label: friendlyFacetLabel(value), count: 0 }, key, labelIndex));
     const selectedKnownItems = baseItems.filter((item) => selected.includes(item.value));
     const selectedValues = new Set(
       [...selectedItems, ...selectedKnownItems].map((item) => item.value)
     );
-    const visibleBaseItems = baseItems.filter((item) => shouldShowFacetItem(key, item, group)).filter((item) => !localQuery || facetSearchText(item, key).includes(localQuery));
+    const visibleBaseItems = baseItems
+      .filter((item) => shouldShowFacetItem(key, item, group))
+      .filter((item) => !localQuery || facetSearchText(item, key).includes(localQuery));
     const hiddenTechnicalCount = baseItems.length - visibleBaseItems.length;
-    const topItems = visibleBaseItems.filter((item) => !selectedValues.has(item.value)).slice(0, MAP_VISIBLE_FACET_LIMIT);
+    const topItems = visibleBaseItems
+      .filter((item) => !selectedValues.has(item.value))
+      .slice(0, MAP_VISIBLE_FACET_LIMIT);
     const items = [...selectedItems, ...selectedKnownItems, ...topItems];
     if (!items.length && (!baseItems.length || localQuery)) {
       return "";
     }
     const open = selected.length || MAP_DEFAULT_OPEN_FILTERS.has(groupId) || group.defaultOpen || localQuery;
-    const detail = selected.length ? `${selected.length} selected` : `${baseItems.length} available`;
+    const detail = selected.length
+      ? `${selected.length} selected`
+      : `${baseItems.length} available`;
     return `
       <details class="facet-group ${MAP_TECHNICAL_FILTERS.has(key) || group.technical ? "technical" : ""}" ${open ? "open" : ""}>
         <summary>
           <span>${escapeHtml(label)}</span>
           <small>${escapeHtml(detail)}</small>
         </summary>
-        ${items.length ? `<div class="facet-buttons">${items.map((item) => this._mapFacetChip(key, item)).join("")}</div>` : `<p class="facet-note">${escapeHtml(`${hiddenTechnicalCount || baseItems.length} unlabeled technical ID${(hiddenTechnicalCount || baseItems.length) === 1 ? "" : "s"} hidden`)}</p>`}
+        ${
+          items.length
+            ? `<div class="facet-buttons">${items.map((item) => this._mapFacetChip(key, item)).join("")}</div>`
+            : `<p class="facet-note">${escapeHtml(`${hiddenTechnicalCount || baseItems.length} unlabeled technical ID${(hiddenTechnicalCount || baseItems.length) === 1 ? "" : "s"} hidden`)}</p>`
+        }
         ${hiddenTechnicalCount && items.length ? `<p class="facet-note">${escapeHtml(`${hiddenTechnicalCount} unlabeled technical ID${hiddenTechnicalCount === 1 ? "" : "s"} hidden`)}</p>` : ""}
       </details>
     `;
   }
+
   _mapFacetChip(key, item) {
     const active = (this._mapFilters?.[key] || []).includes(item.value);
     return `
@@ -1167,21 +1243,23 @@ var GoodVibesHomePanel = class extends HTMLElement {
         title="${escapeAttr(item.value)}"
       >
         <span>${escapeHtml(item.label || friendlyFacetLabel(item.value))}</span>
-        ${item.count !== void 0 ? `<strong>${escapeHtml(String(item.count))}</strong>` : ""}
+        ${item.count !== undefined ? `<strong>${escapeHtml(String(item.count))}</strong>` : ""}
       </button>
     `;
   }
+
   _selectedMapFilters(labelIndex) {
-    const entries = Object.entries(this._mapFilters || {}).flatMap(
-      ([key, values]) => (Array.isArray(values) ? values : []).map((value) => ({ key, value }))
+    const entries = Object.entries(this._mapFilters || {}).flatMap(([key, values]) =>
+      (Array.isArray(values) ? values : []).map((value) => ({ key, value }))
     );
     if (!entries.length) {
       return "";
     }
     return `
       <div class="selected-filters">
-        ${entries.map(
-      ({ key, value }) => `
+        ${entries
+          .map(
+            ({ key, value }) => `
               <button
                 type="button"
                 class="facet-chip active"
@@ -1192,10 +1270,12 @@ var GoodVibesHomePanel = class extends HTMLElement {
                 <span>${escapeHtml(`${selectedMapFilterLabel(key, value)}: ${displayFacetValue(key, value, labelIndex)}`)}</span>
               </button>
             `
-    ).join("")}
+          )
+          .join("")}
       </div>
     `;
   }
+
   _mapVisual(map, nodes, edges) {
     if (typeof map?.svg === "string" && map.svg && edges.length) {
       return `<img class="map-image" alt="Home Graph knowledge map" src="${escapeAttr(svgDataUrl(map.svg))}">`;
@@ -1214,6 +1294,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     return `<p class="empty">The daemon did not return a rendered map.</p>`;
   }
+
   _queueAutoTriage(options = {}) {
     if (this._triageInFlight || this._triageQueued || !this._hass) {
       return;
@@ -1231,14 +1312,14 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._lastTriageSignature = signature;
     if (!options.continuation) {
       const total = this._issueTotal() || issues.length;
-      this._triageSeenIssueIds = /* @__PURE__ */ new Set();
+      this._triageSeenIssueIds = new Set();
       this._triageProgress = {
         total,
         processed: 0,
         reviewed: 0,
         remaining: total,
         batches: 0,
-        insight: ""
+        insight: "",
       };
     }
     this._triageQueued = true;
@@ -1250,6 +1331,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       });
     }, 0);
   }
+
   async _autoTriageReviewQueue(options = {}) {
     if (this._triageInFlight || !this._hass) {
       return;
@@ -1268,7 +1350,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       reviewed: 0,
       remaining: this._issueTotal() || issues.length,
       batches: 0,
-      insight: ""
+      insight: "",
     };
     progress.currentBatch = Math.min(AUTO_TRIAGE_BATCH_LIMIT, issues.length);
     this._triageProgress = progress;
@@ -1283,7 +1365,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
         {
           limit: AUTO_TRIAGE_BATCH_LIMIT,
           skipIssueIds: Array.from(this._triageSeenIssueIds),
-          force: options.force ? true : void 0
+          force: options.force ? true : undefined,
         },
         { quiet: true, recordResult: true, suppressError: true }
       );
@@ -1291,14 +1373,16 @@ var GoodVibesHomePanel = class extends HTMLElement {
       if (result?.ok === false) {
         this._triageProgress = {
           ...progress,
-          insight: result.error || "Automatic review triage failed."
+          insight: result.error || "Automatic review triage failed.",
         };
         return;
       }
       const processed = Number(result?.processed) || 0;
       const reviewed = Number(result?.reviewed) || 0;
       const remaining = Number(result?.remaining);
-      const processedIssueIds = Array.isArray(result?.processedIssueIds) ? result.processedIssueIds : [];
+      const processedIssueIds = Array.isArray(result?.processedIssueIds)
+        ? result.processedIssueIds
+        : [];
       processedIssueIds.forEach((id) => this._triageSeenIssueIds.add(String(id)));
       this._triageProgress = {
         ...progress,
@@ -1307,15 +1391,21 @@ var GoodVibesHomePanel = class extends HTMLElement {
         remaining: Number.isFinite(remaining) ? remaining : progress.remaining,
         batches: progress.batches + 1,
         currentBatch: 0,
-        insight: triageInsight(result)
+        insight: triageInsight(result),
       };
       if ((Number(result?.reviewed) || 0) > 0) {
         await this._call("issues", OPEN_ISSUES_PAYLOAD, { quiet: true });
         await this._call("browse", {}, { quiet: true });
         this._selectedReviewIds.clear();
-        this._lastTriageSignature = itemsFromPayload(this._issues, ["issues"]).map((issue) => issueKey(issue)).sort().join("|");
+        this._lastTriageSignature = itemsFromPayload(this._issues, ["issues"])
+          .map((issue) => issueKey(issue))
+          .sort()
+          .join("|");
       }
-      shouldContinue = processed > 0 && (this._triageProgress.remaining || itemsFromPayload(this._issues, ["issues"]).length) > 0 && this._triageSeenIssueIds.size < (this._triageProgress.total || 0);
+      shouldContinue =
+        processed > 0 &&
+        (this._triageProgress.remaining || itemsFromPayload(this._issues, ["issues"]).length) > 0 &&
+        this._triageSeenIssueIds.size < (this._triageProgress.total || 0);
     } finally {
       this._triageInFlight = false;
       if (shouldContinue) {
@@ -1325,6 +1415,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._renderAfterBackgroundUpdate();
     }
   }
+
   _renderIngest() {
     return `
       <section class="grid two">
@@ -1366,6 +1457,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       ${this._resultPanel()}
     `;
   }
+
   _renderAsk() {
     const asking = this._busy === "ask";
     return `
@@ -1403,6 +1495,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       ${this._resultPanel()}
     `;
   }
+
   _renderLink() {
     return `
       <section class="grid two">
@@ -1430,6 +1523,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       ${this._resultPanel()}
     `;
   }
+
   _renderRefinement() {
     const tasks = itemsFromPayload(this._refinement, ["tasks"]);
     const readiness = statusReadiness(this._status);
@@ -1486,12 +1580,17 @@ var GoodVibesHomePanel = class extends HTMLElement {
       <section class="grid">
         <article class="panel">
           <h2>Refinement Tasks</h2>
-          ${tasks.length ? `<div class="task-list" data-scroll-region="refinement-tasks">${tasks.map((task) => this._taskCard(task)).join("")}</div>` : `<p class="empty">No refinement tasks</p>`}
+          ${
+            tasks.length
+              ? `<div class="task-list" data-scroll-region="refinement-tasks">${tasks.map((task) => this._taskCard(task)).join("")}</div>`
+              : `<p class="empty">No refinement tasks</p>`
+          }
         </article>
       </section>
       ${this._resultPanel()}
     `;
   }
+
   _taskCard(task) {
     const id = task?.id || "";
     const state = task?.state || "unknown";
@@ -1501,8 +1600,10 @@ var GoodVibesHomePanel = class extends HTMLElement {
       task?.priority,
       task?.trigger,
       task?.subjectKind,
-      task?.blockedReason
-    ].filter(Boolean).join(" - ");
+      task?.blockedReason,
+    ]
+      .filter(Boolean)
+      .join(" - ");
     const canCancel = ACTIVE_REFINEMENT_STATES.has(String(state));
     return `
       <div class="task-card ${canCancel ? "active" : ""}">
@@ -1513,7 +1614,11 @@ var GoodVibesHomePanel = class extends HTMLElement {
           <small>${escapeHtml(String(id))}</small>
           ${task?.gapId ? `<small>Gap ${escapeHtml(String(task.gapId))}</small>` : ""}
         </div>
-        ${canCancel ? `<button type="button" data-action="refinement_cancel" data-task-id="${escapeAttr(String(id))}"><ha-icon icon="mdi:cancel"></ha-icon><span>Cancel</span></button>` : ""}
+        ${
+          canCancel
+            ? `<button type="button" data-action="refinement_cancel" data-task-id="${escapeAttr(String(id))}"><ha-icon icon="mdi:cancel"></ha-icon><span>Cancel</span></button>`
+            : ""
+        }
         <details>
           <summary>Trace and metadata</summary>
           <pre>${escapeHtml(JSON.stringify(task, null, 2))}</pre>
@@ -1521,6 +1626,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </div>
     `;
   }
+
   _renderReview() {
     const issues = this._visibleIssues();
     const selected = this._selectedIssues(issues);
@@ -1530,12 +1636,17 @@ var GoodVibesHomePanel = class extends HTMLElement {
         ${this._reviewIssueList(issues, selected)}
         <article class="panel">
           <h2>Review</h2>
-          ${selected.length ? this._reviewForm(selected) : `<p class="empty">No issue selected</p>`}
+          ${
+            selected.length
+              ? this._reviewForm(selected)
+              : `<p class="empty">No issue selected</p>`
+          }
         </article>
       </section>
       ${this._resultPanel()}
     `;
   }
+
   _renderPages() {
     const pages = this._generatedPages();
     const selected = this._selectedPage(pages);
@@ -1550,7 +1661,11 @@ var GoodVibesHomePanel = class extends HTMLElement {
               <button type="button" data-action="sync"><ha-icon icon="mdi:sync"></ha-icon><span>Sync</span></button>
             </div>
           </div>
-          ${pages.length ? `<div class="page-list" data-scroll-region="generated-pages">${pages.map((page) => this._pageCard(page, selectedKey)).join("")}</div>` : `<p class="empty">No generated pages yet</p>`}
+          ${
+            pages.length
+              ? `<div class="page-list" data-scroll-region="generated-pages">${pages.map((page) => this._pageCard(page, selectedKey)).join("")}</div>`
+              : `<p class="empty">No generated pages yet</p>`
+          }
         </aside>
         <article class="panel page-reader-panel">
           ${selected ? this._pageReader(selected, pages, pageIndex) : `<p class="empty">No page selected</p>`}
@@ -1567,25 +1682,29 @@ var GoodVibesHomePanel = class extends HTMLElement {
       ${this._resultPanel()}
     `;
   }
+
   _selectedPage(pages) {
     if (!pages.length) {
       this._selectedPageKey = "";
       return null;
     }
-    const selected = this._selectedPageKey ? pages.find((page2) => pageKey(page2) === this._selectedPageKey) : null;
+    const selected = this._selectedPageKey
+      ? pages.find((page) => pageKey(page) === this._selectedPageKey)
+      : null;
     const page = selected || pages.find((item) => pageMarkdown(item)) || pages[0];
     this._selectedPageKey = pageKey(page);
     return page;
   }
+
   _generatedPages() {
     const pages = itemsFromPayload(this._pages, ["pages"]);
     if (pages.length) {
       return pages.sort(compareGeneratedPages);
     }
-    const byId = /* @__PURE__ */ new Map();
+    const byId = new Map();
     for (const source of [
       ...itemsFromPayload(this._sources, ["sources"]),
-      ...itemsFromPayload(this._browse, ["sources"])
+      ...itemsFromPayload(this._browse, ["sources"]),
     ]) {
       if (!isGeneratedPageSource(source)) {
         continue;
@@ -1595,6 +1714,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     return Array.from(byId.values()).sort(compareGeneratedPages);
   }
+
   _pageCard(page, selectedKey) {
     const source = pageSource(page);
     const metadata = pageMetadata(page);
@@ -1616,6 +1736,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </button>
     `;
   }
+
   _pageReader(page, pages = [], pageIndex = buildPageNavigationIndex(pages)) {
     const source = pageSource(page);
     const metadata = pageMetadata(page);
@@ -1630,7 +1751,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     const meta = [
       projectionLabel(projection),
       metadata.regeneration || "",
-      generatedAt
+      generatedAt,
     ].filter(Boolean);
     return `
       <div class="wiki-page">
@@ -1647,14 +1768,19 @@ var GoodVibesHomePanel = class extends HTMLElement {
         <div class="wiki-body">
           ${markdown ? renderMarkdown(markdown, { pageIndex, currentKey: pageKey(page) }) : `<p class="empty">This page has no rendered markdown yet.</p>`}
         </div>
-        ${sourceUri || source?.id || page?.artifact?.id ? `<footer class="wiki-footer">
+        ${
+          sourceUri || source?.id || page?.artifact?.id
+            ? `<footer class="wiki-footer">
                 ${sourceUri ? `<span>${escapeHtml(String(sourceUri))}</span>` : ""}
                 ${source?.id ? `<span>Source ${escapeHtml(String(source.id))}</span>` : ""}
                 ${page?.artifact?.id ? `<span>Artifact ${escapeHtml(String(page.artifact.id))}</span>` : ""}
-              </footer>` : ""}
+              </footer>`
+            : ""
+        }
       </div>
     `;
   }
+
   _directPageTools() {
     return `
       <details class="advanced page-tools">
@@ -1679,6 +1805,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </details>
     `;
   }
+
   _dataPortabilityTools() {
     return `
       <details class="advanced page-tools">
@@ -1701,6 +1828,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </details>
     `;
   }
+
   _advancedIngestFields(options = {}) {
     return `
       <details class="advanced">
@@ -1715,6 +1843,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </details>
     `;
   }
+
   _targetFields() {
     return `
       <div class="target-grid">
@@ -1734,14 +1863,20 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </div>
     `;
   }
+
   _listPanel(title, items) {
     return `
       <article class="panel">
         <h2>${escapeHtml(title)}</h2>
-        ${items.length ? `<div class="list" data-scroll-region="${escapeAttr(`list:${title}`)}">${items.map((item) => this._listItem(item)).join("")}</div>` : `<p class="empty">No items</p>`}
+        ${
+          items.length
+            ? `<div class="list" data-scroll-region="${escapeAttr(`list:${title}`)}">${items.map((item) => this._listItem(item)).join("")}</div>`
+            : `<p class="empty">No items</p>`
+        }
       </article>
     `;
   }
+
   _reviewIssueList(issues, selected) {
     return `
       <article class="panel">
@@ -1753,10 +1888,15 @@ var GoodVibesHomePanel = class extends HTMLElement {
             <button type="button" data-action="review_clear">Clear</button>
           </div>
         </div>
-        ${issues.length ? `<div class="issue-list" data-scroll-region="review-issues">${issues.map((issue) => this._issueButton(issue, selected)).join("")}</div>` : `<p class="empty">No open issues</p>`}
+        ${
+          issues.length
+            ? `<div class="issue-list" data-scroll-region="review-issues">${issues.map((issue) => this._issueButton(issue, selected)).join("")}</div>`
+            : `<p class="empty">No open issues</p>`
+        }
       </article>
     `;
   }
+
   _triageNotice() {
     const progress = this._triageProgress;
     if (this._triageInFlight) {
@@ -1786,12 +1926,17 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     if (progress) {
       return this._triageProgressNotice(
-        reviewed ? `GoodVibes auto-reviewed ${reviewed} issue(s) in the last batch.` : "GoodVibes checked the last batch; those issues still need review."
+        reviewed
+          ? `GoodVibes auto-reviewed ${reviewed} issue(s) in the last batch.`
+          : "GoodVibes checked the last batch; those issues still need review."
       );
     }
-    const message = reviewed ? `GoodVibes auto-reviewed ${reviewed} issue(s); ${remaining} still need review.` : `GoodVibes checked the review queue; ${remaining} issue(s) still need review.`;
+    const message = reviewed
+      ? `GoodVibes auto-reviewed ${reviewed} issue(s); ${remaining} still need review.`
+      : `GoodVibes checked the review queue; ${remaining} issue(s) still need review.`;
     return `<div class="notice">${escapeHtml(message)}</div>`;
   }
+
   _triageProgressNotice(message) {
     const progress = this._triageProgress;
     if (!progress) {
@@ -1799,11 +1944,11 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     const total = Math.max(Number(progress.total) || 0, 1);
     const processed = Math.min(Number(progress.processed) || 0, total);
-    const percent = Math.max(0, Math.min(100, Math.round(processed / total * 100)));
+    const percent = Math.max(0, Math.min(100, Math.round((processed / total) * 100)));
     const detail = [
       `${processed}/${total} checked`,
       `${Number(progress.reviewed) || 0} auto-reviewed`,
-      `${Number(progress.remaining) || 0} still open`
+      `${Number(progress.remaining) || 0} still open`,
     ].join(" - ");
     return `
       <div class="notice">
@@ -1816,6 +1961,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </div>
     `;
   }
+
   _issueTotal() {
     const candidates = [
       this._status?.issueCount,
@@ -1825,7 +1971,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       this._issues?.total,
       this._issues?.result?.issueCount,
       this._issues?.result?.count,
-      this._issues?.result?.total
+      this._issues?.result?.total,
     ];
     for (const candidate of candidates) {
       const value = Number(candidate);
@@ -1835,11 +1981,14 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     return itemsFromPayload(this._issues, ["issues"]).length;
   }
+
   _issueButton(issue, selected) {
     const key = issueKey(issue);
     const selectedKeys = new Set(selected.map((entry) => issueKey(entry)));
     const active = selectedKeys.has(key);
-    const status = [issue.severity, issue.code, issue.status].filter(Boolean).join(" - ");
+    const status = [issue.severity, issue.code, issue.status]
+      .filter(Boolean)
+      .join(" - ");
     return `
       <button type="button" class="issue-card ${active ? "selected" : ""}" data-select-issue="${escapeAttr(key)}">
         <ha-icon icon="${active ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline"}"></ha-icon>
@@ -1849,6 +1998,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </button>
     `;
   }
+
   _toggleReviewSelection(key) {
     if (!key) {
       return;
@@ -1859,11 +2009,13 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     this._selectedReviewIds.add(key);
   }
+
   _visibleIssues() {
     return this._filtered(
       itemsFromPayload(this._issues, ["issues"]).filter((issue) => isOpenIssue(issue))
     );
   }
+
   _selectedIssues(issues) {
     const visibleKeys = new Set(issues.map((issue) => issueKey(issue)));
     for (const key of Array.from(this._selectedReviewIds)) {
@@ -1873,6 +2025,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     }
     return issues.filter((issue) => this._selectedReviewIds.has(issueKey(issue)));
   }
+
   _reviewForm(issues) {
     const first = issues[0];
     const count = issues.length;
@@ -1896,6 +2049,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </form>
     `;
   }
+
   _sourceResolutionForms(issues) {
     const selected = Array.isArray(issues) ? issues : [issues];
     if (!selected.length || selected.some((issue) => !issue?.nodeId)) {
@@ -1904,7 +2058,9 @@ var GoodVibesHomePanel = class extends HTMLElement {
     const bulk = selected.length > 1;
     const hidden = bulk ? reviewBulkSourceHiddenFields() : reviewSourceHiddenFields(selected[0]);
     const sourceField = this._sourcePicker();
-    const heading = bulk ? `Add the same manual or source to ${selected.length} selected issues` : "Add the missing manual or source";
+    const heading = bulk
+      ? `Add the same manual or source to ${selected.length} selected issues`
+      : "Add the missing manual or source";
     return `
       <section class="source-resolution">
         <h3>${escapeHtml(heading)}</h3>
@@ -1927,9 +2083,10 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </section>
     `;
   }
+
   _sourcePicker() {
-    const sources = itemsFromPayload(this._sources, ["sources"]).filter(
-      (source) => source?.id || source?.sourceId
+    const sources = itemsFromPayload(this._sources, ["sources"]).filter((source) =>
+      source?.id || source?.sourceId
     );
     if (!sources.length) {
       return textInput("sourceId", "Existing Source ID");
@@ -1943,18 +2100,20 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </label>
     `;
   }
+
   _reviewPayload(issue, fields) {
     const action = fields.action;
     const removeTarget = action === "forget" && (issue.nodeId || issue.sourceId);
     return this._compact({
-      issueId: removeTarget ? void 0 : issue.id || issue.issueId,
+      issueId: removeTarget ? undefined : issue.id || issue.issueId,
       sourceId: issue.sourceId,
       nodeId: issue.nodeId,
       action,
       value: semanticReviewValue(issue, fields),
-      reviewer: "homeassistant"
+      reviewer: "homeassistant",
     });
   }
+
   async _applyReview(fields) {
     this._reviewAction = fields.action || this._reviewAction;
     this._reviewNote = fields.note || "";
@@ -1969,7 +2128,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     const results = [];
     for (const issue of issues) {
       const result = await this._call("review", this._reviewPayload(issue, fields), {
-        quiet: true
+        quiet: true,
       });
       results.push({ issueId: issue.id || issue.issueId, result });
       if (this._error) {
@@ -1980,7 +2139,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._lastResult = {
       ok: !error,
       reviewed: results.length,
-      results
+      results,
     };
     if (!error) {
       this._selectedReviewIds.clear();
@@ -1991,6 +2150,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
     this._error = error;
     this._render();
   }
+
   _listItem(item) {
     const title = item.title || item.name || item.id || item.kind || "Item";
     const subtitle = item.id || item.sourceId || item.nodeId || item.kind || "";
@@ -2004,6 +2164,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </div>
     `;
   }
+
   _filtered(items) {
     if (!this._filter) {
       return items;
@@ -2011,12 +2172,15 @@ var GoodVibesHomePanel = class extends HTMLElement {
     const needle = this._filter.toLowerCase();
     return items.filter((item) => JSON.stringify(item).toLowerCase().includes(needle));
   }
+
   _answerText() {
     const answer = normalizeAnswerPayload(this._answer);
     const text = answer.text || "";
     const thinking = this._busy === "ask";
     if (!text) {
-      return thinking ? `<div class="thinking"><ha-icon class="spin" icon="mdi:loading"></ha-icon><span>Thinking through the Home Graph...</span></div>` : `<p class="empty">No answer</p>`;
+      return thinking
+        ? `<div class="thinking"><ha-icon class="spin" icon="mdi:loading"></ha-icon><span>Thinking through the Home Graph...</span></div>`
+        : `<p class="empty">No answer</p>`;
     }
     const confidence = formatConfidence(answer.confidence);
     const repairStatus = answer.refinement?.status || answer.refinement?.state || "";
@@ -2025,10 +2189,16 @@ var GoodVibesHomePanel = class extends HTMLElement {
       answer.mode ? `Mode: ${answer.mode}` : "",
       confidence ? `Confidence: ${confidence}` : "",
       repairStatus ? `Repair: ${repairStatus}` : "",
-      Array.isArray(answer.refinementTaskIds) && answer.refinementTaskIds.length ? `${answer.refinementTaskIds.length} refinement task(s)` : ""
+      Array.isArray(answer.refinementTaskIds) && answer.refinementTaskIds.length
+        ? `${answer.refinementTaskIds.length} refinement task(s)`
+        : "",
     ].filter(Boolean);
-    const refinementTasks = Array.isArray(answer.refinementTaskIds) ? answer.refinementTaskIds.map((id) => ({ id, title: `Refinement task ${id}` })) : [];
-    const refinementRecords = answer.refinement && typeof answer.refinement === "object" ? [{ ...answer.refinement, title: answer.refinement.title || "Answer refinement" }] : [];
+    const refinementTasks = Array.isArray(answer.refinementTaskIds)
+      ? answer.refinementTaskIds.map((id) => ({ id, title: `Refinement task ${id}` }))
+      : [];
+    const refinementRecords = answer.refinement && typeof answer.refinement === "object"
+      ? [{ ...answer.refinement, title: answer.refinement.title || "Answer refinement" }]
+      : [];
     return `
       <div class="answer answer-card">
         ${thinking ? `<div class="thinking inline"><ha-icon class="spin" icon="mdi:loading"></ha-icon><span>Updating answer...</span></div>` : ""}
@@ -2043,6 +2213,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </div>
     `;
   }
+
   _answerRecords(title, records, icon, options = {}) {
     if (!Array.isArray(records) || !records.length) {
       return "";
@@ -2070,6 +2241,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </section>
     `;
   }
+
   _answerRecord(record) {
     const title = answerRecordTitle(record);
     const subtitle = answerRecordSubtitle(record);
@@ -2085,14 +2257,18 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </details>
     `;
   }
+
   _markdownPreview() {
     const page = itemsFromPayload(this._pages, ["pages"]).find((item) => item?.markdown);
     if (page?.markdown) {
       return this._pageReader(page, this._generatedPages());
     }
     const result = this._lastResult.result || this._lastResult;
-    return result?.markdown ? `<div class="wiki-page compact"><div class="wiki-body">${renderMarkdown(result.markdown)}</div></div>` : `<p class="empty">No generated content</p>`;
+    return result?.markdown
+      ? `<div class="wiki-page compact"><div class="wiki-body">${renderMarkdown(result.markdown)}</div></div>`
+      : `<p class="empty">No generated content</p>`;
   }
+
   _resultPanel() {
     const summary = operationSummaryPanel(this._lastResult);
     return `
@@ -2103,6 +2279,7 @@ var GoodVibesHomePanel = class extends HTMLElement {
       </details>
     `;
   }
+
   _statusLine() {
     if (this._error) {
       return this._error;
@@ -2110,8 +2287,11 @@ var GoodVibesHomePanel = class extends HTMLElement {
     const status = statusValue(this._status.status);
     const readiness = statusReadiness(this._status).state || "";
     const issueCount = itemsFromPayload(this._issues, ["issues"]).length;
-    return [status, readiness, issueCount ? `${issueCount} issue(s)` : ""].filter(Boolean).join(" - ");
+    return [status, readiness, issueCount ? `${issueCount} issue(s)` : ""]
+      .filter(Boolean)
+      .join(" - ");
   }
+
   _styles() {
     return `
       :host {
@@ -3052,18 +3232,27 @@ var GoodVibesHomePanel = class extends HTMLElement {
       }
     `;
   }
-};
+}
+
 function textInput(name, label, type = "text") {
   return `<label><span>${label}</span><input name="${name}" type="${type}" autocomplete="off"></label>`;
 }
+
 function svgDataUrl(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svg))}`;
 }
+
 function isGeneratedPageSource(source) {
   const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
   const tags = Array.isArray(source?.tags) ? source.tags.map((tag) => String(tag)) : [];
-  return metadata.homeGraphGeneratedPage === true || metadata.homeGraphSourceKind === "generated-page" || Boolean(metadata.projectionKind) || tags.includes("generated-page");
+  return (
+    metadata.homeGraphGeneratedPage === true ||
+    metadata.homeGraphSourceKind === "generated-page" ||
+    Boolean(metadata.projectionKind) ||
+    tags.includes("generated-page")
+  );
 }
+
 function compareGeneratedPages(left, right) {
   const leftTime = generatedPageTime(left);
   const rightTime = generatedPageTime(right);
@@ -3076,6 +3265,7 @@ function compareGeneratedPages(left, right) {
     String(rightSource?.title || rightSource?.id || "")
   );
 }
+
 function generatedPageTime(page) {
   const source = page?.source || page;
   const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
@@ -3087,6 +3277,7 @@ function generatedPageTime(page) {
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
 function formatTimestamp(value) {
   const time = Number(value);
   if (Number.isFinite(time) && time > 0) {
@@ -3100,9 +3291,13 @@ function formatTimestamp(value) {
   }
   return "";
 }
+
 function projectionLabel(value) {
-  return String(value || "page").replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  return String(value || "page")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
+
 function pageIcon(value) {
   const kind = String(value || "").toLowerCase();
   if (kind.includes("device")) {
@@ -3116,49 +3311,77 @@ function pageIcon(value) {
   }
   return "mdi:file-document-outline";
 }
+
 function pageSource(page) {
   return page?.source && typeof page.source === "object" ? page.source : page || {};
 }
+
 function pageMetadata(page) {
   const source = pageSource(page);
-  const sourceMetadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
-  const artifactMetadata = page?.artifact?.metadata && typeof page.artifact.metadata === "object" ? page.artifact.metadata : {};
+  const sourceMetadata =
+    source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+  const artifactMetadata =
+    page?.artifact?.metadata && typeof page.artifact.metadata === "object"
+      ? page.artifact.metadata
+      : {};
   return { ...artifactMetadata, ...sourceMetadata };
 }
+
 function pageKey(page) {
   const source = pageSource(page);
   return String(
-    source?.id || source?.sourceId || page?.artifact?.id || source?.sourceUri || source?.canonicalUri || source?.title || page?.markdown || ""
+    source?.id ||
+      source?.sourceId ||
+      page?.artifact?.id ||
+      source?.sourceUri ||
+      source?.canonicalUri ||
+      source?.title ||
+      page?.markdown ||
+      ""
   );
 }
+
 function pageTitle(page) {
   const source = pageSource(page);
   const markdownTitle = String(pageMarkdown(page)).match(/^#\s+(.+)$/m)?.[1];
   return String(
-    markdownTitle || source?.title || source?.name || source?.sourceUri || source?.id || "Generated page"
+    markdownTitle ||
+      source?.title ||
+      source?.name ||
+      source?.sourceUri ||
+      source?.id ||
+      "Generated page"
   );
 }
+
 function pageProjection(page) {
   const source = pageSource(page);
   const metadata = pageMetadata(page);
   return metadata.projectionKind || metadata.kind || source?.sourceType || "page";
 }
+
 function pageMarkdown(page) {
   return String(
-    page?.markdown || page?.content || page?.text || page?.artifact?.markdown || page?.artifact?.content || ""
+    page?.markdown ||
+      page?.content ||
+      page?.text ||
+      page?.artifact?.markdown ||
+      page?.artifact?.content ||
+      ""
   );
 }
+
 function buildPageNavigationIndex(pages) {
   const profiles = pages.map((page) => pageProfile(page)).filter((profile) => profile.key);
   const index = {
     profiles,
-    byKey: /* @__PURE__ */ new Map(),
-    bySourceId: /* @__PURE__ */ new Map(),
-    byNodeId: /* @__PURE__ */ new Map(),
-    byObjectId: /* @__PURE__ */ new Map(),
-    byTitle: /* @__PURE__ */ new Map(),
-    byAreaId: /* @__PURE__ */ new Map(),
-    byDeviceId: /* @__PURE__ */ new Map()
+    byKey: new Map(),
+    bySourceId: new Map(),
+    byNodeId: new Map(),
+    byObjectId: new Map(),
+    byTitle: new Map(),
+    byAreaId: new Map(),
+    byDeviceId: new Map(),
   };
   profiles.forEach((profile) => {
     index.byKey.set(profile.key, profile);
@@ -3175,7 +3398,10 @@ function buildPageNavigationIndex(pages) {
         index.byTitle.set(normalized, profile);
       }
     });
-    if (profile.areaId && (!index.byAreaId.has(profile.areaId) || profile.projection === "room-page")) {
+    if (
+      profile.areaId &&
+      (!index.byAreaId.has(profile.areaId) || profile.projection === "room-page")
+    ) {
       index.byAreaId.set(profile.areaId, profile);
     }
     if (profile.deviceId && !index.byDeviceId.has(profile.deviceId)) {
@@ -3184,28 +3410,33 @@ function buildPageNavigationIndex(pages) {
   });
   return index;
 }
+
 function addIndexValue(index, value, profile) {
   if (!value || index.has(String(value))) {
     return;
   }
   index.set(String(value), profile);
 }
+
 function pageProfile(page) {
   const metadata = pageMetadata(page);
   const source = pageSource(page);
   const markdown = pageMarkdown(page);
-  const homeAssistant = metadata.homeAssistant && typeof metadata.homeAssistant === "object" ? metadata.homeAssistant : {};
+  const homeAssistant =
+    metadata.homeAssistant && typeof metadata.homeAssistant === "object"
+      ? metadata.homeAssistant
+      : {};
   const title = pageTitle(page);
   const entityIds = uniqueStrings([
     ...extractEntityIds(markdown),
     ...normalizeLabelValues(homeAssistant.entityId),
-    ...normalizeLabelValues(metadata.entityId)
+    ...normalizeLabelValues(metadata.entityId),
   ]);
   const integrationDomains = uniqueStrings([
     ...extractIntegrationDomains(markdown),
     ...normalizeLabelValues(homeAssistant.integrationId),
     ...normalizeLabelValues(metadata.integrationId),
-    ...normalizeLabelValues(metadata.integrationDomain)
+    ...normalizeLabelValues(metadata.integrationDomain),
   ]);
   const subject = objectRecord(page?.subject || metadata.subject || metadata.homeGraphSubject);
   const target = objectRecord(page?.target || metadata.target || metadata.homeGraphTarget);
@@ -3223,18 +3454,31 @@ function pageProfile(page) {
     target,
     neighbors,
     relatedPages,
-    areaId: subject?.areaId || metadata.areaId || homeAssistant.areaId || markdownField(markdown, "Area") || "",
-    deviceId: (subject?.objectKind === "device" ? subject?.objectId : "") || (target?.objectKind === "device" ? target?.objectId : "") || metadata.deviceId || homeAssistant.deviceId || firstDeviceIdFromMarkdown(markdown) || "",
+    areaId:
+      subject?.areaId ||
+      metadata.areaId ||
+      homeAssistant.areaId ||
+      markdownField(markdown, "Area") ||
+      "",
+    deviceId:
+      (subject?.objectKind === "device" ? subject?.objectId : "") ||
+      (target?.objectKind === "device" ? target?.objectId : "") ||
+      metadata.deviceId ||
+      homeAssistant.deviceId ||
+      firstDeviceIdFromMarkdown(markdown) ||
+      "",
     manufacturer: metadata.manufacturer || markdownField(markdown, "Manufacturer") || "",
     model: metadata.model || markdownField(markdown, "Model") || "",
     entityIds,
     integrationDomains,
-    markdown
+    markdown,
   };
 }
+
 function objectRecord(value) {
   return value && typeof value === "object" ? value : null;
 }
+
 function pageLookupTitles(page) {
   const source = pageSource(page);
   return uniqueStrings([
@@ -3242,41 +3486,53 @@ function pageLookupTitles(page) {
     source?.title,
     source?.name,
     stripPageSuffix(source?.title),
-    stripPageSuffix(pageTitle(page))
+    stripPageSuffix(pageTitle(page)),
   ]);
 }
+
 function stripPageSuffix(value) {
   return String(value || "").replace(/\s+(passport|page|wiki)$/i, "").trim();
 }
+
 function normalizePageLookup(value) {
-  return String(value || "").toLowerCase().replace(/\s+(passport|page|wiki)$/g, "").replace(/[\u2010-\u2015]/g, "-").replace(/[^a-z0-9]+/g, " ").trim();
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+(passport|page|wiki)$/g, "")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
+
 function markdownField(markdown, label) {
   const pattern = new RegExp(`^[-*]\\s+${escapeRegExp(label)}:\\s*(.+)$`, "im");
   const match = String(markdown || "").match(pattern);
   return match ? match[1].trim() : "";
 }
+
 function firstDeviceIdFromMarkdown(markdown) {
   const match = String(markdown || "").match(/\bdevice\s+([a-f0-9]{16,})\b/i);
   return match ? match[1] : "";
 }
+
 function extractEntityIds(markdown) {
   const matches = String(markdown || "").match(/\b[a-z_]+\.[a-z0-9_]+\b/gi) || [];
   return matches;
 }
+
 function extractIntegrationDomains(markdown) {
   const matches = [];
   const text = String(markdown || "");
   let match;
   const pattern = /\bintegration\s+([a-z0-9_]+)/gi;
-  while (match = pattern.exec(text)) {
+  while ((match = pattern.exec(text))) {
     matches.push(match[1]);
   }
   return matches;
 }
+
 function relatedPagesForPage(page, pages, pageIndex) {
   const current = pageProfile(page);
-  const related = /* @__PURE__ */ new Map();
+  const related = new Map();
   const add = (profile, reason, weight = 10) => {
     if (!profile?.key || profile.key === current.key) {
       return;
@@ -3323,14 +3579,25 @@ function relatedPagesForPage(page, pages, pageIndex) {
       add(profile, "Mentioned page", 6);
     }
   });
-  return Array.from(related.values()).sort((left, right) => left.weight - right.weight || left.profile.title.localeCompare(right.profile.title)).slice(0, 18);
+  return Array.from(related.values())
+    .sort((left, right) => left.weight - right.weight || left.profile.title.localeCompare(right.profile.title))
+    .slice(0, 18);
 }
+
 function pageProfileFromReference(entry, pageIndex) {
   if (!entry || typeof entry !== "object") {
     return null;
   }
-  return pageIndex.byKey.get(String(entry.pageKey || "")) || pageIndex.bySourceId.get(String(entry.sourceId || entry.id || "")) || pageIndex.byNodeId.get(String(entry.id || entry.nodeId || "")) || pageIndex.byObjectId.get(String(entry.objectId || "")) || pageIndex.byTitle.get(normalizePageLookup(entry.title || entry.name || "")) || null;
+  return (
+    pageIndex.byKey.get(String(entry.pageKey || "")) ||
+    pageIndex.bySourceId.get(String(entry.sourceId || entry.id || "")) ||
+    pageIndex.byNodeId.get(String(entry.id || entry.nodeId || "")) ||
+    pageIndex.byObjectId.get(String(entry.objectId || "")) ||
+    pageIndex.byTitle.get(normalizePageLookup(entry.title || entry.name || "")) ||
+    null
+  );
 }
+
 function linkedPagesPanel(related) {
   return `
     <nav class="linked-pages" aria-label="Linked pages">
@@ -3349,6 +3616,7 @@ function linkedPagesPanel(related) {
     </nav>
   `;
 }
+
 function pageContextLinks(profile, pageIndex) {
   const links = [];
   const add = (label, value, action, data = {}) => {
@@ -3375,14 +3643,15 @@ function pageContextLinks(profile, pageIndex) {
   if (profile.model) {
     add("Model", profile.model, "page_map_query", { mapQuery: profile.model });
   }
-  profile.integrationDomains.slice(0, 4).forEach(
-    (domain) => add("Integration", domain, "page_map_filter", { mapFilterKey: "integrationDomains", mapFilterValue: domain })
+  profile.integrationDomains.slice(0, 4).forEach((domain) =>
+    add("Integration", domain, "page_map_filter", { mapFilterKey: "integrationDomains", mapFilterValue: domain })
   );
-  profile.entityIds.slice(0, 6).forEach(
-    (entityId) => add("Entity", entityId, "page_map_filter", { mapFilterKey: "entityIds", mapFilterValue: entityId })
+  profile.entityIds.slice(0, 6).forEach((entityId) =>
+    add("Entity", entityId, "page_map_filter", { mapFilterKey: "entityIds", mapFilterValue: entityId })
   );
   return links;
 }
+
 function pageContextPanel(links) {
   return `
     <div class="page-context">
@@ -3390,8 +3659,11 @@ function pageContextPanel(links) {
     </div>
   `;
 }
+
 function contextLinkButton(link) {
-  const attrs = Object.entries(link.data || {}).map(([key, value]) => `data-${kebabCase(key)}="${escapeAttr(String(value))}"`).join(" ");
+  const attrs = Object.entries(link.data || {})
+    .map(([key, value]) => `data-${kebabCase(key)}="${escapeAttr(String(value))}"`)
+    .join(" ");
   return `
     <button type="button" class="context-chip" data-action="${escapeAttr(link.action)}" ${attrs}>
       <span>${escapeHtml(link.label)}</span>
@@ -3399,6 +3671,7 @@ function contextLinkButton(link) {
     </button>
   `;
 }
+
 function pageLinkForListItem(value, context = {}) {
   const pageIndex = context.pageIndex;
   if (!pageIndex?.byTitle) {
@@ -3409,7 +3682,7 @@ function pageLinkForListItem(value, context = {}) {
     raw.split(/\s+-\s+/)[0],
     raw.split(/\s+--\s+/)[0],
     raw.split(":")[0],
-    raw
+    raw,
   ].map((item) => item.trim()).filter(Boolean);
   for (const candidate of candidates) {
     const profile = pageIndex.byTitle.get(normalizePageLookup(candidate));
@@ -3419,6 +3692,7 @@ function pageLinkForListItem(value, context = {}) {
   }
   return null;
 }
+
 function renderListItem(value, context = {}) {
   const link = pageLinkForListItem(value, context);
   if (!link) {
@@ -3430,6 +3704,7 @@ function renderListItem(value, context = {}) {
     </button>${renderInlineMarkdown(link.rest, context)}
   `;
 }
+
 function renderGraphListItem(value, context = {}) {
   const raw = String(value || "").trim();
   const parts = raw.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
@@ -3438,26 +3713,27 @@ function renderGraphListItem(value, context = {}) {
   }
   return parts.map((part, index) => renderGraphListSegment(part, index)).join('<span class="list-separator"> - </span>');
 }
+
 function renderGraphListSegment(part, index) {
   const area = part.match(/^area\s+(.+)$/i);
   if (area) {
     return inlineActionButton("page_map_filter", `area ${area[1]}`, {
       mapFilterKey: "areaIds",
-      mapFilterValue: area[1]
+      mapFilterValue: area[1],
     });
   }
   const integration = part.match(/^integration\s+(.+)$/i);
   if (integration) {
     return inlineActionButton("page_map_filter", `integration ${integration[1]}`, {
       mapFilterKey: "integrationDomains",
-      mapFilterValue: integration[1]
+      mapFilterValue: integration[1],
     });
   }
   const device = part.match(/^device\s+([a-f0-9]{16,})$/i);
   if (device) {
     return inlineActionButton("page_map_filter", `device ${shortText(device[1], 12)}`, {
       mapFilterKey: "deviceIds",
-      mapFilterValue: device[1]
+      mapFilterValue: device[1],
     });
   }
   if (index === 0 || looksLikeModelToken(part)) {
@@ -3465,14 +3741,24 @@ function renderGraphListSegment(part, index) {
   }
   return renderInlineMarkdown(part);
 }
+
 function inlineActionButton(action, label, data = {}) {
-  const attrs = Object.entries(data).map(([key, value]) => `data-${kebabCase(key)}="${escapeAttr(String(value))}"`).join(" ");
+  const attrs = Object.entries(data)
+    .map(([key, value]) => `data-${kebabCase(key)}="${escapeAttr(String(value))}"`)
+    .join(" ");
   return `<button type="button" class="inline-page-link" data-action="${escapeAttr(action)}" ${attrs}>${escapeHtml(label)}</button>`;
 }
+
 function looksLikeModelToken(value) {
   const text = String(value || "").trim();
-  return text.length >= 4 && /[a-z]/i.test(text) && /[0-9_:-]/.test(text) && !/^https?:\/\//i.test(text);
+  return (
+    text.length >= 4 &&
+    /[a-z]/i.test(text) &&
+    /[0-9_:-]/.test(text) &&
+    !/^https?:\/\//i.test(text)
+  );
 }
+
 function stripLeadingMarkdownTitle(markdown, title) {
   const text = String(markdown || "");
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -3492,6 +3778,7 @@ function stripLeadingMarkdownTitle(markdown, title) {
   }
   return text;
 }
+
 function renderMarkdown(markdown, context = {}) {
   const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
   const html = [];
@@ -3500,6 +3787,7 @@ function renderMarkdown(markdown, context = {}) {
   let listItems = [];
   let codeLines = [];
   let inCode = false;
+
   const flushParagraph = () => {
     if (!paragraph.length) {
       return;
@@ -3523,6 +3811,7 @@ function renderMarkdown(markdown, context = {}) {
     html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
     codeLines = [];
   };
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith("```")) {
@@ -3545,6 +3834,7 @@ function renderMarkdown(markdown, context = {}) {
       flushList();
       continue;
     }
+
     const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       flushParagraph();
@@ -3553,6 +3843,7 @@ function renderMarkdown(markdown, context = {}) {
       html.push(`<h${level}>${renderInlineMarkdown(heading[2], context)}</h${level}>`);
       continue;
     }
+
     const unordered = trimmed.match(/^[-*]\s+(.+)$/);
     if (unordered) {
       flushParagraph();
@@ -3563,6 +3854,7 @@ function renderMarkdown(markdown, context = {}) {
       listItems.push(unordered[1]);
       continue;
     }
+
     const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
     if (ordered) {
       flushParagraph();
@@ -3573,15 +3865,18 @@ function renderMarkdown(markdown, context = {}) {
       listItems.push(ordered[1]);
       continue;
     }
+
     if (trimmed.startsWith(">")) {
       flushParagraph();
       flushList();
       html.push(`<blockquote>${renderInlineMarkdown(trimmed.replace(/^>\s?/, ""), context)}</blockquote>`);
       continue;
     }
+
     flushList();
     paragraph.push(trimmed);
   }
+
   flushParagraph();
   flushList();
   if (inCode || codeLines.length) {
@@ -3589,17 +3884,20 @@ function renderMarkdown(markdown, context = {}) {
   }
   return html.join("");
 }
+
 function renderInlineMarkdown(value, _context = {}) {
   let html = escapeHtml(value);
   html = html.replace(
     /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-    (_match, label, url) => `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer">${label}</a>`
+    (_match, label, url) =>
+      `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer">${label}</a>`
   );
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
   html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
   return html;
 }
+
 function refinementTaskIcon(state) {
   const value = String(state || "").toLowerCase();
   if (ACTIVE_REFINEMENT_STATES.has(value)) {
@@ -3619,6 +3917,7 @@ function refinementTaskIcon(state) {
   }
   return "mdi:auto-fix";
 }
+
 function refinementStateOptions(selected) {
   const states = [
     "",
@@ -3634,19 +3933,24 @@ function refinementStateOptions(selected) {
     "suppressed",
     "needs_review",
     "cancelled",
-    "failed"
+    "failed",
   ];
-  return states.map((state) => {
-    const label = state ? projectionLabel(state) : "Any state";
-    return `<option value="${escapeAttr(state)}" ${state === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
-  }).join("");
+  return states
+    .map((state) => {
+      const label = state ? projectionLabel(state) : "Any state";
+      return `<option value="${escapeAttr(state)}" ${state === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
 }
+
 function metadataField() {
   return `<label><span>Metadata JSON</span><textarea name="metadata" rows="3"></textarea></label>`;
 }
+
 function reviewActionOption(value, label, selected) {
   return `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
+
 function reviewActionOptions(issue, selected, count, canResolveSource = false) {
   if (canResolveSource) {
     return [
@@ -3661,7 +3965,7 @@ function reviewActionOptions(issue, selected, count, canResolveSource = false) {
         selected
       ),
       reviewActionOption("edit", "Save note or correction", selected),
-      reviewActionOption("forget", "Remove linked graph item", selected)
+      reviewActionOption("forget", "Remove linked graph item", selected),
     ].join("");
   }
   if (count === 1 && isBatteryIssue(issue)) {
@@ -3670,7 +3974,7 @@ function reviewActionOptions(issue, selected, count, canResolveSource = false) {
       reviewActionOption("accept", "Needs a battery type", selected),
       reviewActionOption("resolve", "Mark resolved", selected),
       reviewActionOption("edit", "Save note or correction", selected),
-      reviewActionOption("forget", "Remove linked graph item", selected)
+      reviewActionOption("forget", "Remove linked graph item", selected),
     ].join("");
   }
   return [
@@ -3678,9 +3982,10 @@ function reviewActionOptions(issue, selected, count, canResolveSource = false) {
     reviewActionOption("reject", "Not applicable or incorrect", selected),
     reviewActionOption("resolve", "Fixed already", selected),
     reviewActionOption("edit", "Add note or correction", selected),
-    reviewActionOption("forget", "Remove linked graph item", selected)
+    reviewActionOption("forget", "Remove linked graph item", selected),
   ].join("");
 }
+
 function reviewSourceHiddenFields(issue) {
   return `
     <input type="hidden" name="issueId" value="${escapeAttr(issue?.id || issue?.issueId || "")}">
@@ -3689,33 +3994,48 @@ function reviewSourceHiddenFields(issue) {
     <input type="hidden" name="relation" value="has_manual">
   `;
 }
+
 function reviewBulkSourceHiddenFields() {
   return '<input type="hidden" name="relation" value="has_manual">';
 }
+
 function sourceIdFromResult(fields, sourceResult) {
-  const source = sourceResult?.source || sourceResult?.result?.source || sourceResult?.sources?.[0] || sourceResult?.result?.sources?.[0] || {};
+  const source =
+    sourceResult?.source ||
+    sourceResult?.result?.source ||
+    sourceResult?.sources?.[0] ||
+    sourceResult?.result?.sources?.[0] ||
+    {};
   return String(
-    fields?.sourceId || source?.id || source?.sourceId || sourceResult?.sourceId || sourceResult?.result?.sourceId || sourceResult?.id || ""
+    fields?.sourceId ||
+      source?.id ||
+      source?.sourceId ||
+      sourceResult?.sourceId ||
+      sourceResult?.result?.sourceId ||
+      sourceResult?.id ||
+      ""
   );
 }
+
 function sourceLinkedReviewValue(sourceId, relation) {
   const value = {
     category: "source_linked",
     relation,
-    reason: "Linked a manual/source to this Home Graph object."
+    reason: "Linked a manual/source to this Home Graph object.",
   };
   if (sourceId) {
     value.sourceId = sourceId;
   }
   return value;
 }
+
 function triageInsight(result) {
   const processed = Number(result?.processed) || 0;
   const reviewed = Number(result?.reviewed) || 0;
   const skipped = Number(result?.skipped) || 0;
   const decisions = Array.isArray(result?.decisions) ? result.decisions : [];
   const kept = Math.max(0, processed - reviewed);
-  const categories = /* @__PURE__ */ new Map();
+  const categories = new Map();
   decisions.forEach((decision) => {
     const category = String(decision?.category || "").trim();
     if (!category) {
@@ -3723,12 +4043,19 @@ function triageInsight(result) {
     }
     categories.set(category, (categories.get(category) || 0) + 1);
   });
-  const topCategories = Array.from(categories.entries()).sort((left, right) => right[1] - left[1]).slice(0, 3).map(([category, count]) => `${category} (${count})`).join(", ");
+  const topCategories = Array.from(categories.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([category, count]) => `${category} (${count})`)
+    .join(", ");
   return [
     `Last batch: ${processed} checked, ${reviewed} auto-reviewed, ${kept} kept for review, ${skipped} already classified.`,
-    topCategories ? `Top categories: ${topCategories}.` : ""
-  ].filter(Boolean).join(" ");
+    topCategories ? `Top categories: ${topCategories}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
+
 function semanticReviewValue(issue, fields) {
   const action = fields.action || "";
   const note = fields.note || "";
@@ -3742,21 +4069,22 @@ function semanticReviewValue(issue, fields) {
     value.category = "not_applicable";
     if (code.endsWith("unknown_battery")) {
       value.fact = {
-        ...value.fact || {},
+        ...(value.fact || {}),
         batteryPowered: false,
-        batteryType: "none"
+        batteryType: "none",
       };
       value.reason = value.reason || "This Home Graph object does not use batteries.";
     } else if (code.endsWith("missing_manual")) {
       value.fact = {
-        ...value.fact || {},
-        manualRequired: false
+        ...(value.fact || {}),
+        manualRequired: false,
       };
       value.reason = value.reason || "This Home Graph object does not need a manual.";
     }
   }
-  return Object.keys(value).length ? value : void 0;
+  return Object.keys(value).length ? value : undefined;
 }
+
 function statusValue(status) {
   if (!status) {
     return "";
@@ -3772,28 +4100,37 @@ function statusValue(status) {
   }
   return JSON.stringify(status);
 }
+
 function statusCount(payload, key) {
   const value = payload?.[key] ?? payload?.status?.[key];
-  return value === void 0 || value === null ? "" : String(value);
+  return value === undefined || value === null ? "" : String(value);
 }
+
 function statusCapabilities(payload) {
   const value = payload?.capabilities ?? payload?.status?.capabilities;
   return Array.isArray(value) ? value.join(", ") : "";
 }
+
 function statusReadiness(payload) {
   const value = payload?.readiness ?? payload?.status?.readiness;
   return value && typeof value === "object" ? value : {};
 }
+
 function readinessLabel(payload) {
   const readiness = statusReadiness(payload);
   const parts = [
     readiness.state || "unknown",
-    readiness.openIssueCount !== void 0 ? `${readiness.openIssueCount} open issue(s)` : "",
-    readiness.activeRefinementTaskCount !== void 0 ? `${readiness.activeRefinementTaskCount} active task(s)` : "",
-    readiness.needsReviewTaskCount !== void 0 ? `${readiness.needsReviewTaskCount} needs review` : ""
+    readiness.openIssueCount !== undefined ? `${readiness.openIssueCount} open issue(s)` : "",
+    readiness.activeRefinementTaskCount !== undefined
+      ? `${readiness.activeRefinementTaskCount} active task(s)`
+      : "",
+    readiness.needsReviewTaskCount !== undefined
+      ? `${readiness.needsReviewTaskCount} needs review`
+      : "",
   ].filter(Boolean);
   return parts.join(" - ");
 }
+
 function busyLabel(action) {
   const labels = {
     ask: "Thinking through the Home Graph",
@@ -3804,10 +4141,11 @@ function busyLabel(action) {
     pages: "Loading automatic pages",
     upload: "Uploading and ingesting",
     sync: "Syncing Home Assistant context",
-    review: "Applying review decisions"
+    review: "Applying review decisions",
   };
   return labels[action] || `Working: ${action}`;
 }
+
 function refinementStatusLabel(statusPayload, refinementPayload) {
   const readiness = statusReadiness(statusPayload);
   const tasks = itemsFromPayload(refinementPayload, ["tasks"]);
@@ -3816,9 +4154,10 @@ function refinementStatusLabel(statusPayload, refinementPayload) {
   return [
     `${tasks.length} task record(s)`,
     `${readiness.activeRefinementTaskCount ?? active} active`,
-    `${readiness.needsReviewTaskCount ?? needsReview} needs review`
+    `${readiness.needsReviewTaskCount ?? needsReview} needs review`,
   ].join(" - ");
 }
+
 function refinementRunSummary(payload) {
   const result = payload?.result && typeof payload.result === "object" ? payload.result : payload;
   if (!result || typeof result !== "object") {
@@ -3830,10 +4169,11 @@ function refinementRunSummary(payload) {
     "requestedLimit",
     "effectiveLimit",
     "truncated",
-    "budgetExhausted"
+    "budgetExhausted",
   ];
-  return keys.some((key) => result[key] !== void 0) ? result : null;
+  return keys.some((key) => result[key] !== undefined) ? result : null;
 }
+
 function operationSummaryPanel(payload) {
   const result = payload?.result && typeof payload.result === "object" ? payload.result : payload;
   if (!result || typeof result !== "object" || result.ok === false) {
@@ -3852,25 +4192,30 @@ function operationSummaryPanel(payload) {
     </article>
   `;
 }
+
 function operationSummaryTitle(result) {
-  if (result.scanned !== void 0 || result.reparsed !== void 0) {
+  if (result.scanned !== undefined || result.reparsed !== undefined) {
     return "Reindex Summary";
   }
-  if (result.candidateGaps !== void 0 || result.processedGaps !== void 0) {
+  if (result.candidateGaps !== undefined || result.processedGaps !== undefined) {
     return "Refinement Summary";
   }
-  if (result.reviewed !== void 0) {
+  if (result.reviewed !== undefined) {
     return "Review Summary";
   }
-  if (result.pages !== void 0) {
+  if (result.pages !== undefined) {
     return "Pages Summary";
   }
   return "Result Summary";
 }
+
 function operationSummaryFields(result) {
   const generated = result.generated && typeof result.generated === "object" ? result.generated : {};
   const semantic = result.semantic && typeof result.semantic === "object" ? result.semantic : {};
-  const selfImprovement = semantic.selfImprovement && typeof semantic.selfImprovement === "object" ? semantic.selfImprovement : {};
+  const selfImprovement =
+    semantic.selfImprovement && typeof semantic.selfImprovement === "object"
+      ? semantic.selfImprovement
+      : {};
   return [
     ["Scanned", result.scanned],
     ["Reparsed", result.reparsed],
@@ -3882,9 +4227,9 @@ function operationSummaryFields(result) {
     ["Generated Pages Refreshed", result.refreshedGeneratedPageCount],
     ["Page Policy", result.generatedPagePolicyVersion],
     ["Coalesced", booleanLabel(result.coalesced)],
-    ["Sources", Array.isArray(result.sources) ? result.sources.length : void 0],
-    ["Failures", Array.isArray(result.failures) ? result.failures.length : void 0],
-    ["Quality Issues", Array.isArray(result.qualityIssues) ? result.qualityIssues.length : void 0],
+    ["Sources", Array.isArray(result.sources) ? result.sources.length : undefined],
+    ["Failures", Array.isArray(result.failures) ? result.failures.length : undefined],
+    ["Quality Issues", Array.isArray(result.qualityIssues) ? result.qualityIssues.length : undefined],
     ["Truncated", booleanLabel(result.truncated)],
     ["Budget Exhausted", booleanLabel(result.budgetExhausted)],
     ["Device Passports", generated.devicePassports],
@@ -3900,10 +4245,11 @@ function operationSummaryFields(result) {
     ["Requested Limit", result.requestedLimit ?? selfImprovement.requestedLimit],
     ["Effective Limit", result.effectiveLimit ?? selfImprovement.effectiveLimit],
     ["Queued Tasks", result.queuedTasks ?? result.queuedTaskCount ?? selfImprovement.queuedTasks],
-    ["Task IDs", Array.isArray(result.taskIds) ? result.taskIds.length : Array.isArray(selfImprovement.taskIds) ? selfImprovement.taskIds.length : void 0],
-    ["Reviewed", result.reviewed]
-  ].filter(([, value]) => value !== void 0 && value !== "");
+    ["Task IDs", Array.isArray(result.taskIds) ? result.taskIds.length : Array.isArray(selfImprovement.taskIds) ? selfImprovement.taskIds.length : undefined],
+    ["Reviewed", result.reviewed],
+  ].filter(([, value]) => value !== undefined && value !== "");
 }
+
 function refinementRunPanel(result) {
   const fields = [
     ["Candidate Gaps", result.candidateGaps],
@@ -3913,8 +4259,8 @@ function refinementRunPanel(result) {
     ["Truncated", booleanLabel(result.truncated)],
     ["Budget Exhausted", booleanLabel(result.budgetExhausted)],
     ["Queued Tasks", result.queuedTasks ?? result.queuedTaskCount],
-    ["Task IDs", Array.isArray(result.taskIds) ? result.taskIds.length : void 0]
-  ].filter(([, value]) => value !== void 0 && value !== "");
+    ["Task IDs", Array.isArray(result.taskIds) ? result.taskIds.length : undefined],
+  ].filter(([, value]) => value !== undefined && value !== "");
   if (!fields.length) {
     return "";
   }
@@ -3929,47 +4275,77 @@ function refinementRunPanel(result) {
     </section>
   `;
 }
+
 function booleanLabel(value) {
-  return typeof value === "boolean" ? value ? "yes" : "no" : value;
+  return typeof value === "boolean" ? (value ? "yes" : "no") : value;
 }
+
 function issueKey(issue) {
   return String(
-    issue?.id || issue?.issueId || issue?.nodeId || issue?.sourceId || issue?.message || JSON.stringify(issue || {})
+    issue?.id ||
+      issue?.issueId ||
+      issue?.nodeId ||
+      issue?.sourceId ||
+      issue?.message ||
+      JSON.stringify(issue || {})
   );
 }
+
 function issueTitle(issue) {
   return String(
-    issue?.title || issue?.message || issue?.code || issue?.id || issue?.issueId || "Home Graph issue"
+    issue?.title ||
+      issue?.message ||
+      issue?.code ||
+      issue?.id ||
+      issue?.issueId ||
+      "Home Graph issue"
   );
 }
+
 function issueMessage(issue) {
   const parts = [
-    issue?.message && issue?.title ? issue.message : void 0,
-    issue?.nodeId ? `Node ${issue.nodeId}` : void 0,
-    issue?.sourceId ? `Source ${issue.sourceId}` : void 0
+    issue?.message && issue?.title ? issue.message : undefined,
+    issue?.nodeId ? `Node ${issue.nodeId}` : undefined,
+    issue?.sourceId ? `Source ${issue.sourceId}` : undefined,
   ].filter(Boolean);
   return parts.length ? parts.join(" - ") : issue?.id || "";
 }
+
 function isOpenIssue(issue) {
   return String(issue?.status || "open").toLowerCase() === "open";
 }
+
 function isMissingSourceIssue(issue) {
-  const text = [issue?.code, issue?.title, issue?.message].filter(Boolean).join(" ").toLowerCase();
-  return text.includes("missing_manual") || text.includes("no linked manual") || text.includes("no linked source");
+  const text = [issue?.code, issue?.title, issue?.message]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return (
+    text.includes("missing_manual") ||
+    text.includes("no linked manual") ||
+    text.includes("no linked source")
+  );
 }
+
 function isSourceResolvableIssue(issue) {
   return Boolean(issue?.nodeId) && isMissingSourceIssue(issue);
 }
+
 function isBatteryIssue(issue) {
-  const text = [issue?.code, issue?.title, issue?.message].filter(Boolean).join(" ").toLowerCase();
+  const text = [issue?.code, issue?.title, issue?.message]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   return text.includes("unknown_battery") || text.includes("battery type");
 }
+
 function sourceOption(source) {
   const id = source?.id || source?.sourceId || "";
   const title = source?.title || source?.name || source?.url || source?.uri || id || "Source";
   const label = id && title !== id ? `${title} (${id})` : title;
   return `<option value="${escapeAttr(id)}">${escapeHtml(String(label))}</option>`;
 }
+
 function itemsFromPayload(payload, keys) {
   if (!payload) {
     return [];
@@ -3990,6 +4366,37 @@ function itemsFromPayload(payload, keys) {
   }
   return [];
 }
+
+function recordTitle(record) {
+  if (record === null || typeof record !== "object") {
+    return String(record ?? "Record");
+  }
+  return String(
+    record?.title ||
+      record?.name ||
+      record?.sourceUri ||
+      record?.canonicalUri ||
+      record?.id ||
+      "Record"
+  );
+}
+
+function recordSubtitle(record) {
+  if (record === null || typeof record !== "object") {
+    return "";
+  }
+  const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
+  return [
+    record?.kind || record?.sourceType || metadata.semanticKind,
+    record?.summary,
+    record?.sourceUri || record?.canonicalUri,
+    record?.id,
+  ]
+    .filter(Boolean)
+    .map((item) => String(item))
+    .join(" - ");
+}
+
 function normalizeAnswerPayload(payload) {
   const result = payload?.result && typeof payload.result === "object" ? payload.result : payload || {};
   const answer = result?.answer && typeof result.answer === "object" ? result.answer : {};
@@ -4003,17 +4410,20 @@ function normalizeAnswerPayload(payload) {
     facts: arrayField(answer.facts ?? result.facts),
     gaps: arrayField(answer.gaps ?? result.gaps),
     sources: arrayField(answer.sources ?? result.sources),
-    linkedObjects: arrayField(answer.linkedObjects ?? result.linkedObjects)
+    linkedObjects: arrayField(answer.linkedObjects ?? result.linkedObjects),
   };
 }
+
 function arrayField(value) {
   return Array.isArray(value) ? value : [];
 }
+
 function objectField(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
+
 function formatConfidence(value) {
-  if (value === void 0 || value === null || value === "") {
+  if (value === undefined || value === null || value === "") {
     return "";
   }
   const number = Number(value);
@@ -4025,17 +4435,27 @@ function formatConfidence(value) {
   }
   return String(value);
 }
+
 function answerRecordTitle(record) {
   if (record === null || typeof record !== "object") {
     return shortText(String(record ?? "Record"), 140);
   }
   return shortText(
     String(
-      record.title || record.name || record.summary || record.text || record.question || record.sourceUri || record.url || record.id || "Record"
+      record.title ||
+        record.name ||
+        record.summary ||
+        record.text ||
+        record.question ||
+        record.sourceUri ||
+        record.url ||
+        record.id ||
+        "Record"
     ),
     140
   );
 }
+
 function answerRecordSubtitle(record) {
   if (record === null || typeof record !== "object") {
     return "";
@@ -4046,9 +4466,13 @@ function answerRecordSubtitle(record) {
     record.kind || record.sourceType || metadata.semanticKind,
     record.status,
     confidence ? `confidence ${confidence}` : "",
-    record.sourceUri || record.url || record.canonicalUri
-  ].filter(Boolean).map((item) => shortText(String(item), 140)).join(" - ");
+    record.sourceUri || record.url || record.canonicalUri,
+  ]
+    .filter(Boolean)
+    .map((item) => shortText(String(item), 140))
+    .join(" - ");
 }
+
 function answerRecordSummary(record) {
   if (record === null || typeof record !== "object") {
     return "";
@@ -4056,15 +4480,19 @@ function answerRecordSummary(record) {
   const text = record.summary || record.description || record.reason || record.evidence;
   return text ? shortText(String(text), 280) : "";
 }
+
 function shortText(value, limit) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > limit ? `${text.slice(0, Math.max(0, limit - 1))}...` : text;
 }
+
 function isFormControl(element) {
   return Boolean(
-    element && ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName)
+    element &&
+      ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName)
   );
 }
+
 function isDirtyField(field) {
   if (!field?.name) {
     return false;
@@ -4084,52 +4512,74 @@ function isDirtyField(field) {
   }
   return field.value !== field.defaultValue;
 }
+
 function facetItems(values, key, labelIndex) {
   if (!values) {
     return [];
   }
   if (Array.isArray(values)) {
-    return values.map((item) => {
-      if (item && typeof item === "object") {
-        const value2 = String(item.value ?? item.id ?? item.key ?? "");
-        return {
-          value: value2,
-          label: facetItemLabel(item, value2),
-          count: Number(item.count) || 0
-        };
-      }
-      const value = String(item ?? "");
-      return { value, label: friendlyFacetLabel(value), count: 0 };
-    }).filter((item) => item.value).map((item) => enrichFacetItem(item, key, labelIndex));
+    return values
+      .map((item) => {
+        if (item && typeof item === "object") {
+          const value = String(item.value ?? item.id ?? item.key ?? "");
+          return {
+            value,
+            label: facetItemLabel(item, value),
+            count: Number(item.count) || 0,
+          };
+        }
+        const value = String(item ?? "");
+        return { value, label: friendlyFacetLabel(value), count: 0 };
+      })
+      .filter((item) => item.value)
+      .map((item) => enrichFacetItem(item, key, labelIndex));
   }
   if (typeof values === "object") {
-    return Object.entries(values).map(([value, count]) => ({
-      value,
-      label: friendlyFacetLabel(value),
-      count: Number(count) || 0
-    })).filter((item) => item.value).map((item) => enrichFacetItem(item, key, labelIndex)).sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+    return Object.entries(values)
+      .map(([value, count]) => ({
+        value,
+        label: friendlyFacetLabel(value),
+        count: Number(count) || 0,
+      }))
+      .filter((item) => item.value)
+      .map((item) => enrichFacetItem(item, key, labelIndex))
+      .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
   }
   return [];
 }
+
 function facetItemLabel(item, value) {
   const metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
-  const ha = metadata.homeAssistant && typeof metadata.homeAssistant === "object" ? metadata.homeAssistant : {};
+  const ha = metadata.homeAssistant && typeof metadata.homeAssistant === "object"
+    ? metadata.homeAssistant
+    : {};
   return String(
-    item.label || item.title || item.name || item.displayName || item.friendlyName || ha.name || ha.friendlyName || friendlyFacetLabel(value)
+    item.label ||
+      item.title ||
+      item.name ||
+      item.displayName ||
+      item.friendlyName ||
+      ha.name ||
+      ha.friendlyName ||
+      friendlyFacetLabel(value)
   );
 }
+
 function enrichFacetItem(item, key, labelIndex) {
   const value = String(item?.value || "");
   const indexed = labelIndex?.[key]?.get(value);
   const candidateLabel = indexed || item.label || "";
   const hasHumanLabel = isHumanFacetLabel(value, candidateLabel);
-  const label = hasHumanLabel && candidateLabel !== value ? String(candidateLabel) : friendlyFacetLabel(value);
+  const label = hasHumanLabel && candidateLabel !== value
+    ? String(candidateLabel)
+    : friendlyFacetLabel(value);
   return {
     ...item,
     label,
-    hasHumanLabel
+    hasHumanLabel,
   };
 }
+
 function shouldShowFacetItem(key, item, group = {}) {
   if (group.noisy && looksLikeNoisyFacetLabel(item?.label || item?.value)) {
     return false;
@@ -4139,35 +4589,43 @@ function shouldShowFacetItem(key, item, group = {}) {
   }
   return Boolean(item?.hasHumanLabel);
 }
+
 function displayFacetValue(key, value, labelIndex) {
   const indexed = labelIndex?.[key]?.get(String(value || ""));
   return indexed || friendlyFacetLabel(value);
 }
+
 function selectedMapFilterLabel(key, value) {
   if (key === "entityIds" && String(value || "").startsWith("automation.")) {
     return "Automations";
   }
   return new Map(MAP_HA_FILTERS).get(key) || key;
 }
+
 function facetSearchText(item, key) {
   return [
     key,
     item?.value,
     item?.label,
-    friendlyFacetLabel(item?.value)
-  ].filter(Boolean).join(" ").toLowerCase();
+    friendlyFacetLabel(item?.value),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
+
 function mapLabelIndex(map) {
   const index = {
-    entityIds: /* @__PURE__ */ new Map(),
-    deviceIds: /* @__PURE__ */ new Map(),
-    integrationIds: /* @__PURE__ */ new Map(),
-    areaIds: /* @__PURE__ */ new Map(),
-    labels: /* @__PURE__ */ new Map()
+    entityIds: new Map(),
+    deviceIds: new Map(),
+    integrationIds: new Map(),
+    areaIds: new Map(),
+    labels: new Map(),
   };
   const nodes = itemsFromPayload(map || {}, ["nodes"]);
   const edges = itemsFromPayload(map || {}, ["edges"]);
-  const nodeTitles = /* @__PURE__ */ new Map();
+  const nodeTitles = new Map();
+
   nodes.forEach((node) => {
     const title = humanMapTitle(node);
     const id = String(node?.id || "");
@@ -4179,26 +4637,27 @@ function mapLabelIndex(map) {
       "entity_id",
       "entity",
       "uniqueId",
-      "unique_id"
+      "unique_id",
     ]));
     addIndexedLabels(index.deviceIds, title, mapRecordValues(node, [
       "deviceId",
       "device_id",
-      "device"
+      "device",
     ]));
     addIndexedLabels(index.integrationIds, title, mapRecordValues(node, [
       "integrationId",
       "integration_id",
       "configEntryId",
-      "config_entry_id"
+      "config_entry_id",
     ]));
     addIndexedLabels(index.areaIds, title, mapRecordValues(node, [
       "areaId",
       "area_id",
-      "area"
+      "area",
     ]));
     addIndexedLabels(index.labels, title, mapRecordValues(node, ["label", "labels"]));
   });
+
   edges.forEach((edge) => {
     if (edge?.source && edge?.sourceTitle) {
       nodeTitles.set(String(edge.source), String(edge.sourceTitle));
@@ -4207,6 +4666,7 @@ function mapLabelIndex(map) {
       nodeTitles.set(String(edge.target), String(edge.targetTitle));
     }
   });
+
   nodeTitles.forEach((title, id) => {
     if (!isRawTechnicalId(id)) {
       return;
@@ -4215,18 +4675,23 @@ function mapLabelIndex(map) {
     addIndexedLabels(index.entityIds, title, [id]);
     addIndexedLabels(index.integrationIds, title, [id]);
   });
+
   return index;
 }
+
 function mapRecordValues(record, keys) {
   const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
-  const ha = metadata.homeAssistant && typeof metadata.homeAssistant === "object" ? metadata.homeAssistant : {};
+  const ha = metadata.homeAssistant && typeof metadata.homeAssistant === "object"
+    ? metadata.homeAssistant
+    : {};
   const containers = [record, record?.homeAssistant, record?.ha, metadata, ha].filter(
     (item) => item && typeof item === "object"
   );
-  return keys.flatMap(
-    (key) => containers.flatMap((item) => normalizeLabelValues(item?.[key]))
+  return keys.flatMap((key) =>
+    containers.flatMap((item) => normalizeLabelValues(item?.[key]))
   );
 }
+
 function normalizeLabelValues(value) {
   if (Array.isArray(value)) {
     return value.flatMap((item) => normalizeLabelValues(item));
@@ -4234,8 +4699,9 @@ function normalizeLabelValues(value) {
   if (value && typeof value === "object") {
     return normalizeLabelValues(value.id || value.value || value.name);
   }
-  return value === void 0 || value === null || value === "" ? [] : [String(value)];
+  return value === undefined || value === null || value === "" ? [] : [String(value)];
 }
+
 function addIndexedLabels(index, title, values) {
   if (!title) {
     return;
@@ -4247,15 +4713,22 @@ function addIndexedLabels(index, title, values) {
     index.set(value, title);
   });
 }
+
 function humanMapTitle(record) {
   const title = String(
-    record?.title || record?.name || record?.label || record?.friendlyName || record?.displayName || ""
+    record?.title ||
+      record?.name ||
+      record?.label ||
+      record?.friendlyName ||
+      record?.displayName ||
+      ""
   ).trim();
   if (!title || isRawTechnicalId(title)) {
     return "";
   }
   return title;
 }
+
 function friendlyFacetLabel(value) {
   const text = String(value || "");
   if (/^[a-f0-9]{16,}$/i.test(text) || /^[a-f0-9]{8,}_.+/i.test(text)) {
@@ -4267,6 +4740,7 @@ function friendlyFacetLabel(value) {
   }
   return text.replace(/_/g, " ");
 }
+
 function isHumanFacetLabel(value, label) {
   const text = String(label || "").trim();
   if (!text) {
@@ -4278,39 +4752,66 @@ function isHumanFacetLabel(value, label) {
   }
   return !looksLikeRawIdToken(text);
 }
+
 function isRawTechnicalId(value) {
   const text = String(value || "");
   return looksLikeRawIdToken(text);
 }
+
 function looksLikeRawIdToken(value) {
   const text = String(value || "").trim();
-  return /^[a-f0-9]{16,}$/i.test(text) || /^[a-f0-9]{8,}_.+/i.test(text) || /^[a-f0-9]{8,}[-_][a-f0-9_-]{8,}$/i.test(text);
+  return (
+    /^[a-f0-9]{16,}$/i.test(text) ||
+    /^[a-f0-9]{8,}_.+/i.test(text) ||
+    /^[a-f0-9]{8,}[-_][a-f0-9_-]{8,}$/i.test(text)
+  );
 }
+
 function looksLikeNoisyFacetLabel(value) {
   const text = String(value || "").trim();
   if (!text) {
     return false;
   }
   const wordCount = text.split(/\s+/).filter(Boolean).length;
-  return wordCount > 7 || /[?!.]$/.test(text) || /^(do not|never|always|make sure|check if|connect to|you have|everything you|can bluetooth|manuals?|missing[- ]|knowledge\.)/i.test(text);
+  return (
+    wordCount > 7 ||
+    /[?!.]$/.test(text) ||
+    /^(do not|never|always|make sure|check if|connect to|you have|everything you|can bluetooth|manuals?|missing[- ]|knowledge\.)/i.test(text)
+  );
 }
+
 function uniqueStrings(values) {
   return Array.from(
     new Set(
-      values.map((value) => String(value || "").trim()).filter(Boolean)
+      values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
     )
   );
 }
+
 function kebabCase(value) {
-  return String(value || "").replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[_\s]+/g, "-").toLowerCase();
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[_\s]+/g, "-")
+    .toLowerCase();
 }
+
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
 function escapeHtml(value) {
-  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
+
 function escapeAttr(value) {
   return escapeHtml(value);
 }
+
 customElements.define("goodvibes-home-panel", GoodVibesHomePanel);
