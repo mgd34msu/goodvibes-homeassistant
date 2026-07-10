@@ -12,8 +12,10 @@ from homeassistant.components.conversation import (
     ConversationEntityFeature,
     ConversationInput,
     ConversationResult,
+    ConverseError,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, intent
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -21,6 +23,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import GoodVibesRuntimeData
 from .client import GoodVibesClientError
 from .const import (
+    CONF_PROMPT,
     DEFAULT_ASSIST_CONVERSATION_PREFIX,
     DEFAULT_CONVERSATION_TIMEOUT_MS,
     DEFAULT_DISPLAY_NAME,
@@ -92,7 +95,17 @@ class GoodVibesConversationEntity(ConversationEntity):
             or f"{DEFAULT_ASSIST_CONVERSATION_PREFIX}-{uuid4()}"
         )
         message_id = f"ha-assist-{uuid4()}"
-        payload = self._build_payload(user_input, conversation_id, message_id)
+        try:
+            instructions = await self._async_assemble_instructions(
+                user_input, chat_log
+            )
+        except ConverseError as err:
+            # A misconfigured LLM API id (e.g. one that was removed) surfaces as
+            # a native conversation error rather than a daemon round-trip.
+            return err.as_conversation_result()
+        payload = self._build_payload(
+            user_input, conversation_id, message_id, instructions
+        )
         self._runtime.async_start_conversation_turn(message_id)
 
         final_holder: dict[str, Any] = {}
@@ -146,11 +159,48 @@ class GoodVibesConversationEntity(ConversationEntity):
             continue_conversation=False,
         )
 
+    async def _async_assemble_instructions(
+        self,
+        user_input: ConversationInput,
+        chat_log: ChatLog,
+    ) -> str | None:
+        """Assemble the turn's system prompt through Home Assistant's llm helper.
+
+        This routes the config entry's chosen Assist LLM API and custom prompt
+        through ``chat_log.async_provide_llm_data`` — the same helper a
+        first-class conversation agent uses. When an LLM API is selected, the
+        prompt Home Assistant assembles lists only the entities exposed to
+        assistants (``async_should_expose``), so the instructions handed to the
+        daemon honor the same boundary as the Home Graph snapshot.
+
+        The assembled prompt is returned so it can travel to the daemon as the
+        turn's instructions. It is forwarded only when the user has configured
+        the LLM API or a custom prompt; an unconfigured agent returns ``None`` so
+        the daemon keeps its own default behavior.
+        """
+
+        options = self._runtime.entry.options
+        llm_api = options.get(CONF_LLM_HASS_API)
+        prompt = options.get(CONF_PROMPT)
+        await chat_log.async_provide_llm_data(
+            user_input.as_llm_context(DOMAIN),
+            llm_api,
+            prompt,
+            user_input.extra_system_prompt,
+        )
+        if not (llm_api or prompt):
+            return None
+        for content in chat_log.content:
+            if getattr(content, "role", None) == "system" and content.content:
+                return content.content
+        return None
+
     def _build_payload(
         self,
         user_input: ConversationInput,
         conversation_id: str,
         message_id: str,
+        instructions: str | None = None,
     ) -> dict[str, Any]:
         """Build the daemon conversation request payload."""
 
@@ -164,7 +214,11 @@ class GoodVibesConversationEntity(ConversationEntity):
             context_payload["satelliteId"] = user_input.satellite_id
         if user_input.context.id:
             context_payload["haContextId"] = user_input.context.id
-        if user_input.extra_system_prompt:
+        if instructions:
+            # The Home Assistant llm helper already folds any per-turn
+            # extra_system_prompt into the assembled instructions.
+            context_payload["instructions"] = instructions
+        elif user_input.extra_system_prompt:
             context_payload["extraSystemPrompt"] = user_input.extra_system_prompt
 
         payload: dict[str, Any] = {

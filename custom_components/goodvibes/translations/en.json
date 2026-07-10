@@ -25,6 +25,18 @@
       "already_configured": "This GoodVibes daemon is already configured."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GoodVibes conversation",
+        "description": "These settings shape the Assist conversation turn before it reaches the daemon. The custom prompt and the selected Home Assistant LLM API are assembled by Home Assistant's conversation helper and sent to the daemon as the turn's instructions. The model call and Home Assistant control stay on the daemon.",
+        "data": {
+          "prompt": "Instructions",
+          "llm_hass_api": "Control Home Assistant"
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "daemon_status": {
