@@ -21,6 +21,7 @@ from .const import (
     CONF_DAEMON_URL,
     CONF_EVENT_TYPE,
     CONF_HOME_GRAPH_ENABLED,
+    CONF_INCLUDE_UNEXPOSED_ENTITIES,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
     CONF_WEBHOOK_SECRET,
@@ -28,6 +29,7 @@ from .const import (
     DEFAULT_EVENT_TYPE,
     DEFAULT_DEVICE_NAME,
     DEFAULT_HOME_GRAPH_ENABLED,
+    DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
     DOMAIN,
 )
 from .home_graph import build_home_graph_base_payload, derive_installation_id
@@ -62,6 +64,13 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_HOME_GRAPH_ENABLED,
                 default=defaults.get(
                     CONF_HOME_GRAPH_ENABLED, DEFAULT_HOME_GRAPH_ENABLED
+                ),
+            ): bool,
+            vol.Optional(
+                CONF_INCLUDE_UNEXPOSED_ENTITIES,
+                default=defaults.get(
+                    CONF_INCLUDE_UNEXPOSED_ENTITIES,
+                    DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
                 ),
             ): bool,
             vol.Optional(
@@ -124,6 +133,11 @@ async def _validate_input(
     home_graph_enabled = bool(
         user_input.get(CONF_HOME_GRAPH_ENABLED, DEFAULT_HOME_GRAPH_ENABLED)
     )
+    include_unexposed_entities = bool(
+        user_input.get(
+            CONF_INCLUDE_UNEXPOSED_ENTITIES, DEFAULT_INCLUDE_UNEXPOSED_ENTITIES
+        )
+    )
     installation_id = str(user_input.get(CONF_INSTALLATION_ID) or "").strip()
     if not installation_id:
         installation_id = derive_installation_id(hass)
@@ -161,6 +175,7 @@ async def _validate_input(
             CONF_WEBHOOK_SECRET: webhook_secret,
             CONF_EVENT_TYPE: event_type,
             CONF_HOME_GRAPH_ENABLED: home_graph_enabled,
+            CONF_INCLUDE_UNEXPOSED_ENTITIES: include_unexposed_entities,
             CONF_INSTALLATION_ID: installation_id,
             CONF_KNOWLEDGE_SPACE_ID: knowledge_space_id,
         },

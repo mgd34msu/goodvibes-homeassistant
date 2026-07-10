@@ -30,6 +30,18 @@ try:
 except ImportError:
     lr = None
 
+try:
+    from homeassistant.components.homeassistant.exposed_entities import (
+        async_should_expose,
+    )
+except ImportError:
+    async_should_expose = None
+
+# The Home Graph snapshot honors the same "expose to assistants" boundary that
+# Home Assistant's built-in Assist/conversation agents use. That boundary is
+# keyed per assistant; the conversation assistant key is "conversation".
+EXPOSED_ASSISTANT = "conversation"
+
 HELPER_DOMAINS = {
     "counter",
     "input_boolean",
@@ -90,15 +102,57 @@ async def async_build_home_graph_snapshot(
     entry: ConfigEntry,
     installation_id: str,
     knowledge_space_id: str | None = None,
+    include_unexposed: bool = False,
 ) -> dict[str, Any]:
-    """Build the Home Assistant context snapshot sent to the daemon."""
+    """Build the Home Assistant context snapshot sent to the daemon.
+
+    By default only entities the user has exposed to assistants are included, so
+    the snapshot respects the same boundary Home Assistant's own voice and
+    conversation agents honor. Pass ``include_unexposed=True`` to carry the whole
+    registry regardless of exposure. Devices and areas are pruned to those that
+    still own at least one included entity.
+    """
 
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     area_registry = ar.async_get(hass)
-    entities = [
-        _entity_snapshot(hass, entity)
+
+    included_registry_entities = [
+        entity
         for entity in _registry_items(entity_registry, "entities")
+        if _should_include_entity(
+            hass, str(getattr(entity, "entity_id", "")), include_unexposed
+        )
+    ]
+    entities = [
+        _entity_snapshot(hass, entity) for entity in included_registry_entities
+    ]
+
+    included_device_ids = {
+        device_id
+        for entity in included_registry_entities
+        if (device_id := getattr(entity, "device_id", None))
+    }
+    included_devices = [
+        device
+        for device in _registry_items(device_registry, "devices")
+        if getattr(device, "id", None) in included_device_ids
+    ]
+
+    # An area is kept when at least one included entity resolves to it, either
+    # directly (entity area) or through the area of an included device.
+    included_area_ids = {
+        area_id
+        for entity in included_registry_entities
+        if (area_id := getattr(entity, "area_id", None))
+    }
+    for device in included_devices:
+        if area_id := getattr(device, "area_id", None):
+            included_area_ids.add(area_id)
+    included_areas = [
+        area
+        for area in _registry_items(area_registry, "areas")
+        if getattr(area, "id", None) in included_area_ids
     ]
 
     snapshot: dict[str, Any] = {
@@ -106,14 +160,8 @@ async def async_build_home_graph_snapshot(
         "title": getattr(hass.config, "location_name", None) or "Home Assistant",
         "pageAutomation": dict(DEFAULT_PAGE_AUTOMATION),
         "entities": entities,
-        "devices": [
-            _device_snapshot(device)
-            for device in _registry_items(device_registry, "devices")
-        ],
-        "areas": [
-            _area_snapshot(area)
-            for area in _registry_items(area_registry, "areas")
-        ],
+        "devices": [_device_snapshot(device) for device in included_devices],
+        "areas": [_area_snapshot(area) for area in included_areas],
         "automations": _domain_snapshots(entities, "automation"),
         "scripts": _domain_snapshots(entities, "script"),
         "scenes": _domain_snapshots(entities, "scene"),
@@ -134,6 +182,26 @@ async def async_build_home_graph_snapshot(
         },
     }
     return snapshot
+
+
+def _should_include_entity(
+    hass: HomeAssistant,
+    entity_id: str,
+    include_unexposed: bool,
+) -> bool:
+    """Return whether a registry entity belongs in the snapshot.
+
+    With ``include_unexposed`` the whole registry is kept. Otherwise the entity
+    is included only when Home Assistant reports it as exposed to assistants. If
+    the exposed-entities helper is unavailable (older cores), the snapshot falls
+    back to including everything rather than hiding the entire home.
+    """
+
+    if not entity_id:
+        return False
+    if include_unexposed or async_should_expose is None:
+        return True
+    return bool(async_should_expose(hass, EXPOSED_ASSISTANT, entity_id))
 
 
 def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:

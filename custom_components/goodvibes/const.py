@@ -40,6 +40,7 @@ CONF_SESSION_ID = "session_id"
 CONF_TOOL = "tool"
 CONF_INPUT = "input"
 CONF_HOME_GRAPH_ENABLED = "home_graph_enabled"
+CONF_INCLUDE_UNEXPOSED_ENTITIES = "include_unexposed_entities"
 CONF_INSTALLATION_ID = "installation_id"
 CONF_KNOWLEDGE_SPACE_ID = "knowledge_space_id"
 CONF_URL = "url"
@@ -80,6 +81,10 @@ DEFAULT_ASSIST_CONVERSATION_PREFIX = "assist"
 DEFAULT_DISPLAY_NAME = "Home Assistant"
 DEFAULT_CONVERSATION_TIMEOUT_MS = 120000
 DEFAULT_HOME_GRAPH_ENABLED = True
+# By default the Home Graph snapshot only carries entities the user has exposed
+# to assistants (the same boundary Home Assistant's own voice and conversation
+# agents respect). Set the config toggle to include everything in the registry.
+DEFAULT_INCLUDE_UNEXPOSED_ENTITIES = False
 
 # Largest browser upload the panel proxy will buffer to local disk before
 # forwarding it to the daemon. This matches the daemon's own default artifact
