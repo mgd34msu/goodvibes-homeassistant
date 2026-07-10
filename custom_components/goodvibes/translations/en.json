@@ -29,13 +29,15 @@
     "step": {
       "init": {
         "title": "GoodVibes conversation",
-        "description": "These settings shape the Assist conversation turn before it reaches the daemon. The custom prompt and the selected Home Assistant LLM API are assembled by Home Assistant's conversation helper and sent to the daemon as the turn's instructions. The model call and Home Assistant control stay on the daemon. Perception triggers are optional and start disabled: when enabled, a state change of any selected entity starts an attributed GoodVibes session with the triggering context. Only entities exposed to assistants are watched.",
+        "description": "These settings shape the Assist conversation turn before it reaches the daemon. The custom prompt and the selected Home Assistant LLM API are assembled by Home Assistant's conversation helper and sent to the daemon as the turn's instructions. The model call and Home Assistant control stay on the daemon. Perception triggers are optional and start disabled: when enabled, a state change of any selected entity starts an attributed GoodVibes session with the triggering context. Only entities exposed to assistants are watched. Habit mining is optional and starts disabled: when enabled, the integration analyzes its own observation history locally and surfaces recurring patterns as automation proposals for you to review. Observations stay in memory only, bounded by the retention days, and nothing is created without your confirmation.",
         "data": {
           "prompt": "Instructions",
           "llm_hass_api": "Control Home Assistant",
           "perception_enabled": "Enable perception triggers",
           "perception_entities": "Entities that trigger a perception session",
-          "perception_prompt": "Perception session instructions"
+          "perception_prompt": "Perception session instructions",
+          "habit_mining_enabled": "Enable habit mining (proposals only)",
+          "habit_retention_days": "Habit observation retention (days)"
         }
       }
     }
@@ -95,6 +97,10 @@
     "daemon_capabilities_missing": {
       "title": "GoodVibes daemon is missing required surface capabilities",
       "description": "The connected GoodVibes daemon does not advertise Home Assistant surface capabilities this integration relies on: {capabilities}. Update the GoodVibes daemon (@pellux/goodvibes-sdk) so its Home Assistant surface matches this integration."
+    },
+    "habit_proposals_available": {
+      "title": "GoodVibes has habit automation proposals to review",
+      "description": "GoodVibes habit mining detected {count} recurring pattern(s) in your locally observed history and prepared automation proposals. Review them with the goodvibes.habit_proposals service; nothing is created until you accept a proposal with goodvibes.accept_habit."
     }
   }
 }

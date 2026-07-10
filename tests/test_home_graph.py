@@ -75,6 +75,70 @@ async def test_snapshot_records_generation_timestamp(hass, entry):
     assert "T" in generated_at
 
 
+async def test_entity_snapshot_carries_causal_provenance(hass, entry):
+    """With a resolver, an entity snapshot carries its state's attributed cause."""
+
+    from homeassistant.core import Context
+
+    hass.states.async_set(
+        "light.kitchen", "on", {"friendly_name": "Kitchen"}, context=Context(user_id="u9")
+    )
+    await hass.async_block_till_done()
+
+    registry_entity = SimpleNamespace(
+        entity_id="light.kitchen",
+        unique_id="k-1",
+        platform="demo",
+        device_id=None,
+        area_id=None,
+        name=None,
+        original_name="Kitchen",
+        translation_key=None,
+        entity_category=None,
+        disabled_by=None,
+        hidden_by=None,
+        labels=None,
+        aliases=None,
+    )
+
+    def _resolver(context):
+        if context is None:
+            return None
+        return {"contextId": context.id, "cause": {"kind": "user", "userId": context.user_id}}
+
+    snapshot = home_graph._entity_snapshot(hass, registry_entity, _resolver)
+
+    assert snapshot["provenance"]["cause"] == {"kind": "user", "userId": "u9"}
+    # The cause is mirrored into metadata for a metadata-only graph indexer.
+    assert snapshot["metadata"]["cause"] == {"kind": "user", "userId": "u9"}
+
+
+async def test_entity_snapshot_omits_provenance_without_resolver(hass, entry):
+    """No resolver means no fabricated provenance field."""
+
+    hass.states.async_set("light.kitchen", "on")
+    await hass.async_block_till_done()
+
+    registry_entity = SimpleNamespace(
+        entity_id="light.kitchen",
+        unique_id="k-1",
+        platform="demo",
+        device_id=None,
+        area_id=None,
+        name=None,
+        original_name="Kitchen",
+        translation_key=None,
+        entity_category=None,
+        disabled_by=None,
+        hidden_by=None,
+        labels=None,
+        aliases=None,
+    )
+
+    snapshot = home_graph._entity_snapshot(hass, registry_entity)
+    assert "provenance" not in snapshot
+
+
 def test_state_timestamp_absent_state_is_none():
     """A missing state yields no timestamp rather than a fabricated one."""
 

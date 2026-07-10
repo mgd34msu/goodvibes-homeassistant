@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from enum import Enum
 from typing import Any
 
@@ -103,6 +103,7 @@ async def async_build_home_graph_snapshot(
     installation_id: str,
     knowledge_space_id: str | None = None,
     include_unexposed: bool = False,
+    resolve_provenance: Callable[[Any], dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     """Build the Home Assistant context snapshot sent to the daemon.
 
@@ -111,6 +112,14 @@ async def async_build_home_graph_snapshot(
     conversation agents honor. Pass ``include_unexposed=True`` to carry the whole
     registry regardless of exposure. Devices and areas are pruned to those that
     still own at least one included entity.
+
+    When ``resolve_provenance`` is supplied it is called with each entity state's
+    Home Assistant :class:`~homeassistant.core.Context` and returns the causal
+    provenance for that state (which automation/script/user/integration caused
+    it, chained where Home Assistant supplies parent contexts). That provenance
+    travels on each entity so the registered/synced graph — and therefore the
+    daemon's grounding ``ask`` path — can answer cause questions. Older daemons
+    ignore the extra field.
     """
 
     entity_registry = er.async_get(hass)
@@ -125,7 +134,8 @@ async def async_build_home_graph_snapshot(
         )
     ]
     entities = [
-        _entity_snapshot(hass, entity) for entity in included_registry_entities
+        _entity_snapshot(hass, entity, resolve_provenance)
+        for entity in included_registry_entities
     ]
 
     included_device_ids = {
@@ -204,11 +214,19 @@ def _should_include_entity(
     return bool(async_should_expose(hass, EXPOSED_ASSISTANT, entity_id))
 
 
-def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:
+def _entity_snapshot(
+    hass: HomeAssistant,
+    entity: Any,
+    resolve_provenance: Callable[[Any], dict[str, Any] | None] | None = None,
+) -> dict[str, Any]:
     entity_id = str(getattr(entity, "entity_id", ""))
     domain = entity_id.split(".", 1)[0] if "." in entity_id else None
     platform = getattr(entity, "platform", None)
     state = hass.states.get(entity_id) if entity_id else None
+    provenance = None
+    if resolve_provenance is not None and state is not None:
+        # Attribute this state's cause from its Home Assistant context chain.
+        provenance = resolve_provenance(getattr(state, "context", None))
     return _clean_dict(
         {
             "entityId": entity_id,
@@ -230,6 +248,7 @@ def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:
             "lastChanged": _state_timestamp(state, "last_changed"),
             "lastUpdated": _state_timestamp(state, "last_updated"),
             "attributes": _state_attributes(state),
+            "provenance": provenance,
             "metadata": {
                 "source": "entity_registry",
                 "domain": domain,
@@ -239,6 +258,9 @@ def _entity_snapshot(hass: HomeAssistant, entity: Any) -> dict[str, Any]:
                 "entityCategory": _jsonable(getattr(entity, "entity_category", None)),
                 "disabledBy": _jsonable(getattr(entity, "disabled_by", None)),
                 "hiddenBy": _jsonable(getattr(entity, "hidden_by", None)),
+                # Mirror the attributed cause so a graph indexer that reads only
+                # metadata still carries "what caused this state".
+                "cause": (provenance or {}).get("cause"),
             },
         }
     )

@@ -41,6 +41,7 @@ from .const import (
     CONF_NOTE,
     CONF_PACKET_TYPE,
     CONF_PATH,
+    CONF_PROPOSAL_ID,
     CONF_PROVIDER_ID,
     CONF_QUERY,
     CONF_RELATION,
@@ -333,3 +334,25 @@ HOME_GRAPH_RESET_SCHEMA = vol.Schema(
 )
 
 HOME_GRAPH_REINDEX_SCHEMA = vol.Schema(_home_graph_common_schema())
+
+CAUSAL_CHAIN_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(CONF_ENTITY_ID): cv.entity_id,
+        vol.Optional(CONF_LIMIT, default=10): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    }
+)
+
+HABIT_PROPOSALS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+    }
+)
+
+ACCEPT_HABIT_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(CONF_PROPOSAL_ID): cv.string,
+        vol.Optional(CONF_CONFIRM): cv.string,
+    }
+)

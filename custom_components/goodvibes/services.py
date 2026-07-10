@@ -1,6 +1,6 @@
 """Home Assistant service handlers for the GoodVibes integration.
 
-These 26 services were previously defined as closures inside ``async_setup``;
+These services were previously defined as closures inside ``async_setup``;
 they now live at module level (Home Assistant's ``services.py`` convention) so
 each one can be unit tested in isolation. ``async_setup_services`` registers
 them once for the whole Home Assistant instance.
@@ -40,7 +40,10 @@ checks the calling user's per-entity control permission for that entity.
     home_graph_import    admin          Imports a Home Graph space
     home_graph_reset     admin          Destroys a Home Graph space
     home_graph_reindex   admin          Rebuilds the Home Graph index
+    causal_chain         admin+entity   Returns an entity's recent change causes
+    accept_habit         admin          Creates an automation from a proposal
     status               open (read)    Reports daemon/turn status
+    habit_proposals      open (read)    Lists consent-gated habit proposals
     home_graph_status    open (read)    Reports Home Graph status
     ask_home_graph       open (read)    Queries the Home Graph
     home_graph_issues    open (read)    Lists Home Graph issues
@@ -59,6 +62,7 @@ from typing import Any, Iterable
 from homeassistant.auth.permissions.const import POLICY_CONTROL
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .client import GoodVibesClientError
@@ -85,6 +89,7 @@ from .const import (
     CONF_NOTE,
     CONF_PACKET_TYPE,
     CONF_PATH,
+    CONF_PROPOSAL_ID,
     CONF_QUERY,
     CONF_RUN_ID,
     CONF_SESSION_ID,
@@ -99,6 +104,7 @@ from .const import (
     CONF_URL,
     CONF_VALUE,
     DOMAIN,
+    ISSUE_HABIT_PROPOSALS,
 )
 from .daemon_payloads import (
     copy_optional as _copy_optional,
@@ -110,12 +116,16 @@ from .daemon_payloads import (
     prompt_payload as _prompt_payload,
 )
 from .data import GoodVibesRuntimeData
+from .habits import async_create_automation_from_config
 from .home_graph import async_build_home_graph_snapshot
 from .schemas import (
+    ACCEPT_HABIT_SCHEMA,
     ASK_HOME_GRAPH_SCHEMA,
     CALL_TOOL_SCHEMA,
     CANCEL_SCHEMA,
+    CAUSAL_CHAIN_SCHEMA,
     DEVICE_PASSPORT_SCHEMA,
+    HABIT_PROPOSALS_SCHEMA,
     HOME_GRAPH_COMMON_SCHEMA,
     HOME_GRAPH_IMPORT_SCHEMA,
     HOME_GRAPH_ISSUES_SCHEMA,
@@ -330,6 +340,27 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema=HOME_GRAPH_REINDEX_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CAUSAL_CHAIN,
+        async_causal_chain,
+        schema=CAUSAL_CHAIN_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HABIT_PROPOSALS,
+        async_habit_proposals,
+        schema=HABIT_PROPOSALS_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ACCEPT_HABIT,
+        async_accept_habit,
+        schema=ACCEPT_HABIT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.data[DOMAIN]["services_registered"] = True
     return True
 
@@ -360,6 +391,9 @@ SERVICE_HOME_GRAPH_EXPORT = "home_graph_export"
 SERVICE_HOME_GRAPH_IMPORT = "home_graph_import"
 SERVICE_HOME_GRAPH_RESET = "home_graph_reset"
 SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
+SERVICE_CAUSAL_CHAIN = "causal_chain"
+SERVICE_HABIT_PROPOSALS = "habit_proposals"
+SERVICE_ACCEPT_HABIT = "accept_habit"
 
 async def async_prompt(call: ServiceCall) -> dict[str, Any]:
     await _async_verify_admin(call)
@@ -477,6 +511,7 @@ async def async_sync_home_graph(call: ServiceCall) -> dict[str, Any]:
         base_payload["installationId"],
         base_payload.get("knowledgeSpaceId"),
         include_unexposed=runtime.include_unexposed_entities,
+        resolve_provenance=runtime.provenance_resolver,
     )
     response = await _call_client(runtime.client.home_graph_sync(snapshot))
     runtime.async_apply_home_graph_response(response, sync=True)
@@ -496,6 +531,7 @@ async def async_sync_home_graph_context(
         base_payload["installationId"],
         base_payload.get("knowledgeSpaceId"),
         include_unexposed=runtime.include_unexposed_entities,
+        resolve_provenance=runtime.provenance_resolver,
     )
     response = await _call_client(runtime.client.home_graph_sync(snapshot))
     runtime.async_apply_home_graph_response(response, sync=True)
@@ -749,6 +785,186 @@ async def async_home_graph_reindex(call: ServiceCall) -> dict[str, Any]:
     runtime.async_apply_home_graph_response(response)
     await runtime.async_refresh_home_graph()
     return response
+
+async def async_causal_chain(call: ServiceCall) -> dict[str, Any]:
+    """Return the causal chain for an entity's recent tracked state changes.
+
+    Admin-gated, and additionally checks the caller's control permission for the
+    targeted entity. For each recent change (and the current state) it walks the
+    Home Assistant context chain to attribute a cause, resolving any user id to a
+    display name. The tracked history is in-memory since the integration started,
+    stated in the response's ``note`` rather than implied to be complete.
+    """
+
+    await _async_verify_admin(call)
+    entity_id = call.data[CONF_ENTITY_ID]
+    await _async_verify_entity_control(call, [entity_id])
+    runtime = _runtime_from_service_call(call.hass, call)
+    tracker = runtime.provenance_tracker
+    limit = int(call.data.get(CONF_LIMIT, 10))
+    user_cache: dict[str, str] = {}
+
+    changes: list[dict[str, Any]] = []
+    if tracker is not None:
+        for change in tracker.recent_changes(entity_id, limit):
+            provenance = await _async_enrich_provenance_users(
+                call.hass, tracker.resolve(change.context), user_cache
+            )
+            changes.append(
+                {
+                    "from": change.old_state,
+                    "to": change.new_state,
+                    "changedAt": change.changed_at,
+                    "provenance": provenance,
+                }
+            )
+
+    current = call.hass.states.get(entity_id)
+    current_view: dict[str, Any] | None = None
+    if current is not None:
+        current_provenance = None
+        if tracker is not None:
+            current_provenance = await _async_enrich_provenance_users(
+                call.hass, tracker.resolve(current.context), user_cache
+            )
+        current_view = {
+            "state": current.state,
+            "lastChanged": _iso_state(current, "last_changed"),
+            "lastUpdated": _iso_state(current, "last_updated"),
+            "provenance": current_provenance,
+        }
+
+    return {
+        "entityId": entity_id,
+        "current": current_view,
+        "changes": changes,
+        "trackedCount": len(changes),
+        "note": (
+            "Causal history is held in memory since the integration last started "
+            "and is attributed from the Home Assistant context chain; changes "
+            "before startup or from causes not observed are not included."
+        ),
+    }
+
+
+async def _async_enrich_provenance_users(
+    hass: HomeAssistant,
+    provenance: dict[str, Any] | None,
+    cache: dict[str, str],
+) -> dict[str, Any] | None:
+    """Resolve any user id in a provenance dict to a display name in place."""
+
+    if not provenance:
+        return provenance
+
+    async def _name(user_id: str) -> str | None:
+        if user_id in cache:
+            return cache[user_id]
+        user = await hass.auth.async_get_user(user_id)
+        name = user.name if user is not None else None
+        if name:
+            cache[user_id] = name
+        return name
+
+    if user_id := provenance.get("userId"):
+        if name := await _name(str(user_id)):
+            provenance["userName"] = name
+    cause = provenance.get("cause")
+    if isinstance(cause, dict) and (user_id := cause.get("userId")):
+        if name := await _name(str(user_id)):
+            cause["userName"] = name
+    return provenance
+
+
+def _iso_state(state: Any, attr: str) -> str | None:
+    """Return a state timestamp attribute as ISO text."""
+
+    value = getattr(state, attr, None)
+    isoformat = getattr(value, "isoformat", None)
+    return str(isoformat()) if callable(isoformat) else None
+
+
+async def async_habit_proposals(call: ServiceCall) -> dict[str, Any]:
+    """Return the current consent-gated habit-mining proposals (read-only).
+
+    When mining is enabled the analysis is re-run so the returned proposals are
+    current; when it is disabled the stored (possibly empty) list is returned
+    with ``enabled: false``.
+    """
+
+    runtime = _runtime_from_service_call(call.hass, call)
+    miner = runtime.habit_miner
+    if miner is not None:
+        await async_apply_habit_proposals(call.hass, runtime, miner.analyze())
+    return {
+        "enabled": miner is not None,
+        "proposals": runtime.habit_proposals,
+        "count": len(runtime.habit_proposals),
+    }
+
+
+async def async_accept_habit(call: ServiceCall) -> dict[str, Any]:
+    """Create a standard Home Assistant automation from a reviewed proposal.
+
+    Admin-gated and confirmation-gated: the caller must pass ``confirm: CREATE``.
+    Nothing is created without this explicit acceptance.
+    """
+
+    await _async_verify_admin(call)
+    runtime = _runtime_from_service_call(call.hass, call)
+    proposal_id = call.data[CONF_PROPOSAL_ID]
+    proposal = next(
+        (
+            item
+            for item in runtime.habit_proposals
+            if item.get("proposalId") == proposal_id
+        ),
+        None,
+    )
+    if proposal is None:
+        raise HomeAssistantError(f"Unknown habit proposal: {proposal_id}")
+    automation = proposal.get("automation")
+    if not automation:
+        raise HomeAssistantError(
+            "This proposal has no automation to create (no safe service mapping)."
+        )
+    if call.data.get(CONF_CONFIRM) != "CREATE":
+        raise HomeAssistantError("Type CREATE in confirm to create this automation.")
+    automation_id = await async_create_automation_from_config(call.hass, automation)
+    return {
+        "created": True,
+        "automationId": automation_id,
+        "alias": automation.get("alias"),
+    }
+
+
+async def async_apply_habit_proposals(
+    hass: HomeAssistant,
+    runtime: GoodVibesRuntimeData,
+    proposals: list,
+) -> None:
+    """Store proposals on the runtime and raise/clear the review repair issue.
+
+    ``proposals`` is a list of ``HabitProposal`` objects; they are stored as
+    JSON-safe dicts. When any proposal exists an informational (non-fixable)
+    repair issue points the user at the review services; otherwise it is cleared.
+    """
+
+    runtime.habit_proposals = [proposal.as_dict() for proposal in proposals]
+    if runtime.habit_proposals:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            ISSUE_HABIT_PROPOSALS,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_HABIT_PROPOSALS,
+            translation_placeholders={"count": str(len(runtime.habit_proposals))},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_HABIT_PROPOSALS)
+    async_dispatcher_send(hass, runtime.signal)
+
 
 async def _async_verify_admin(call: ServiceCall) -> None:
     """Require an administrator when the call carries a user context.

@@ -115,6 +115,8 @@ Authorization: Bearer <daemon operator token>
 
 The daemon handles each Home Assistant Assist conversation in an isolated remote-chat session and returns `assistant.speechText` or `assistant.text` directly. The integration does not use `/webhook/homeassistant` for Assist responses that need spoken output.
 
+The conversation entity is a normal, selectable conversation agent, so it works as the agent in an Assist pipeline fed by a [Wyoming](https://www.home-assistant.io/integrations/wyoming/) voice satellite. Wake word, speech-to-text, text-to-speech, and full-duplex talk mode stay with Home Assistant and Wyoming. See [docs/voice-assist.md](docs/voice-assist.md).
+
 The webhook endpoint remains for automation/service calls that intentionally want queued async behavior:
 
 ```http
@@ -200,6 +202,12 @@ Home Graph services:
 - `goodvibes.home_graph_reset`
 - `goodvibes.home_graph_reindex`
 
+Home intelligence services:
+
+- `goodvibes.causal_chain` — why an entity's recent state changes happened, from the Home Assistant context chain (admin-gated). See [docs/causal-provenance.md](docs/causal-provenance.md).
+- `goodvibes.habit_proposals` — list consent-gated recurring-pattern automation proposals (read-only).
+- `goodvibes.accept_habit` — create a standard automation from a reviewed proposal (admin-gated, requires `confirm: CREATE`). See [docs/habits.md](docs/habits.md).
+
 See [docs/services.md](docs/services.md) for service examples, common fields, and service categories. Home Assistant selector-level field details live in [custom_components/goodvibes/services.yaml](custom_components/goodvibes/services.yaml).
 
 ## Sensors, Repairs, and Updates
@@ -225,6 +233,10 @@ The integration listens for `goodvibes_message` by default. If you configure a c
 
 - [Home Graph reference](docs/home-graph.md)
 - [Service reference](docs/services.md)
+- [Conversation agent](docs/conversation.md)
+- [Voice: Wyoming → Assist → GoodVibes](docs/voice-assist.md)
+- [Causal provenance](docs/causal-provenance.md)
+- [Habit mining](docs/habits.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Known limits](docs/known-limits.md)
 - [Security and credentials](docs/security.md)
