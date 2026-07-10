@@ -8,15 +8,57 @@ them once for the whole Home Assistant instance.
 Each handler resolves its target config-entry runtime with
 ``_runtime_from_service_call(call.hass, call)`` and reuses the shared daemon
 payload builders in ``daemon_payloads``.
+
+Authorization
+-------------
+Every handler that submits work to the daemon, controls a running turn, or
+writes/rebuilds/destroys the Home Graph verifies the calling user with
+``_async_verify_admin`` before acting. When a call carries a user context whose
+user is not an administrator, that helper raises ``Unauthorized``. Calls with no
+user context (automations, scripts, and other trusted internal callers) are
+allowed through, matching how Home Assistant core treats admin-only services.
+Read-only query handlers stay open on purpose so dashboards and non-admin users
+can inspect state. ``home_graph_packet`` additionally accepts an entity id, so it
+checks the calling user's per-entity control permission for that entity.
+
+    Service              Authorization  Reason
+    -------------------  -------------  ---------------------------------------
+    prompt               admin          Submits a chat turn to the daemon
+    run_agent            admin          Starts an autonomous agent run
+    cancel               admin          Cancels a running turn/agent/task
+    call_tool            admin          Invokes an arbitrary daemon tool
+    sync_home_graph      admin          Uploads a home snapshot to the daemon
+    ingest_url           admin          Writes a source into the Home Graph
+    ingest_note          admin          Writes a note into the Home Graph
+    ingest_artifact      admin          Writes an artifact into the Home Graph
+    link_knowledge       admin          Creates a Home Graph link
+    unlink_knowledge     admin          Removes a Home Graph link
+    review_fact          admin          Records a fact-review decision
+    device_passport      admin          Generates/refreshes a device passport
+    room_page            admin          Generates/refreshes a room page
+    home_graph_packet    admin+entity   Generates a packet; may target an entity
+    home_graph_import    admin          Imports a Home Graph space
+    home_graph_reset     admin          Destroys a Home Graph space
+    home_graph_reindex   admin          Rebuilds the Home Graph index
+    status               open (read)    Reports daemon/turn status
+    home_graph_status    open (read)    Reports Home Graph status
+    ask_home_graph       open (read)    Queries the Home Graph
+    home_graph_issues    open (read)    Lists Home Graph issues
+    home_graph_sources   open (read)    Lists Home Graph sources
+    home_graph_pages     open (read)    Lists Home Graph pages
+    home_graph_browse    open (read)    Browses the Home Graph
+    home_graph_map       open (read)    Reads the Home Graph map
+    home_graph_export    open (read)    Exports a Home Graph space
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Iterable
 
+from homeassistant.auth.permissions.const import POLICY_CONTROL
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .client import GoodVibesClientError
@@ -320,6 +362,7 @@ SERVICE_HOME_GRAPH_RESET = "home_graph_reset"
 SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
 
 async def async_prompt(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = _prompt_payload(call.data, message_key="message", body_type="prompt")
     response = await _call_client(runtime.client.prompt(payload))
@@ -327,6 +370,7 @@ async def async_prompt(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_run_agent(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = _prompt_payload(call.data, message_key=CONF_TASK, body_type="agent")
     payload["task"] = payload.pop("message")
@@ -360,6 +404,7 @@ async def async_status(call: ServiceCall) -> dict[str, Any]:
     }
 
 async def async_cancel(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     if task_id := call.data.get(CONF_TASK_ID):
         response = await _call_client(runtime.client.cancel_task(task_id))
@@ -402,6 +447,7 @@ async def async_cancel(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_call_tool(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     return await _call_client(
         runtime.client.call_tool(call.data[CONF_TOOL], call.data.get(CONF_INPUT, {}))
@@ -421,6 +467,7 @@ async def async_home_graph_status(call: ServiceCall) -> dict[str, Any]:
     }
 
 async def async_sync_home_graph(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     _ensure_home_graph_enabled(runtime)
     base_payload = runtime.home_graph_base_payload(call.data)
@@ -465,6 +512,7 @@ async def async_regenerate_home_graph_pages(
         async_dispatcher_send(runtime.hass, runtime.signal)
 
 async def async_ingest_url(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     await async_sync_home_graph_context(runtime, call.data)
     payload = {
@@ -479,6 +527,7 @@ async def async_ingest_url(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_ingest_note(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     await async_sync_home_graph_context(runtime, call.data)
     payload = {
@@ -494,6 +543,7 @@ async def async_ingest_note(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_ingest_artifact(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     await async_sync_home_graph_context(runtime, call.data)
     payload = _home_graph_payload(runtime, call.data)
@@ -519,6 +569,7 @@ async def async_ingest_artifact(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_link_knowledge(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = _knowledge_link_payload(runtime, call.data)
     response = await _call_client(runtime.client.home_graph_link(payload))
@@ -527,6 +578,7 @@ async def async_link_knowledge(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_unlink_knowledge(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = _knowledge_link_payload(runtime, call.data)
     response = await _call_client(runtime.client.home_graph_unlink(payload))
@@ -552,6 +604,7 @@ async def async_ask_home_graph(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_device_passport(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = runtime.home_graph_base_payload(call.data)
     _copy_optional(call.data, payload, CONF_DEVICE_ID, "deviceId")
@@ -564,6 +617,7 @@ async def async_device_passport(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_room_page(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = runtime.home_graph_base_payload(call.data)
     _copy_optional(call.data, payload, CONF_AREA_ID, "areaId")
@@ -572,6 +626,9 @@ async def async_room_page(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_home_graph_packet(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
+    if entity_id := call.data.get(CONF_ENTITY_ID):
+        await _async_verify_entity_control(call, [entity_id])
     runtime = _runtime_from_service_call(call.hass, call)
     payload = {
         **runtime.home_graph_base_payload(call.data),
@@ -597,6 +654,7 @@ async def async_home_graph_issues(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_review_fact(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = {
         **runtime.home_graph_base_payload(call.data),
@@ -657,6 +715,7 @@ async def async_home_graph_export(call: ServiceCall) -> dict[str, Any]:
     return await _call_client(runtime.client.home_graph_export(payload))
 
 async def async_home_graph_import(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = {
         **runtime.home_graph_base_payload(call.data),
@@ -668,6 +727,7 @@ async def async_home_graph_import(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_home_graph_reset(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = runtime.home_graph_base_payload(call.data)
     dry_run = bool(call.data.get(CONF_DRY_RUN))
@@ -682,12 +742,73 @@ async def async_home_graph_reset(call: ServiceCall) -> dict[str, Any]:
     return response
 
 async def async_home_graph_reindex(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
     payload = runtime.home_graph_base_payload(call.data)
     response = await _call_client(runtime.client.home_graph_reindex(payload))
     runtime.async_apply_home_graph_response(response)
     await runtime.async_refresh_home_graph()
     return response
+
+async def _async_verify_admin(call: ServiceCall) -> None:
+    """Require an administrator when the call carries a user context.
+
+    Calls with no ``context.user_id`` (automations, scripts, other trusted
+    internal callers) are allowed, matching Home Assistant core's handling of
+    admin-only services. A call made on behalf of a user is allowed only when
+    that user is an administrator; otherwise ``Unauthorized`` is raised.
+    """
+
+    user_id = call.context.user_id
+    if user_id is None:
+        return
+    user = await call.hass.auth.async_get_user(user_id)
+    if user is None:
+        raise UnknownUser(
+            context=call.context,
+            permission=POLICY_CONTROL,
+            user_id=user_id,
+        )
+    if not user.is_admin:
+        raise Unauthorized(
+            context=call.context,
+            user_id=user_id,
+            permission=POLICY_CONTROL,
+        )
+
+
+async def _async_verify_entity_control(
+    call: ServiceCall, entity_ids: Iterable[str]
+) -> None:
+    """Check the calling user's control permission for each targeted entity.
+
+    Applied to handlers that accept an entity id. With no user context the call
+    is allowed (trusted internal caller). Administrators pass every entity; a
+    non-admin user must hold control permission for each targeted entity.
+    """
+
+    user_id = call.context.user_id
+    if user_id is None:
+        return
+    user = await call.hass.auth.async_get_user(user_id)
+    if user is None:
+        raise UnknownUser(
+            context=call.context,
+            permission=POLICY_CONTROL,
+            user_id=user_id,
+        )
+    for entity_id in entity_ids:
+        if not entity_id:
+            continue
+        if not user.permissions.check_entity(entity_id, POLICY_CONTROL):
+            raise Unauthorized(
+                context=call.context,
+                user_id=user_id,
+                permission=POLICY_CONTROL,
+                perm_category="entities",
+                entity_id=entity_id,
+            )
+
 
 def _runtime_from_service_call(
     hass: HomeAssistant, call: ServiceCall
