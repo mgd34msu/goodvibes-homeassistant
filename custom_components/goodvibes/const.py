@@ -13,6 +13,20 @@ INTEGRATION_VERSION = "0.6.5"
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
 SDK_VALIDATED_VERSION = "1.6.1"
 
+# The daemon HTTP contract this client is written against. At connect the client
+# reads the daemon's advertised software version (GET /status -> version) and
+# the Home Assistant surface capabilities (GET /api/homeassistant/health ->
+# capabilities) and compares them against these declarations, raising a Home
+# Assistant repair issue when the daemon is older than the minimum this client
+# needs or is missing a surface capability it relies on. MIN_DAEMON_VERSION is
+# the oldest daemon whose Home Assistant surface speaks the contract this
+# integration depends on: the streaming conversation delta frames landed in SDK
+# 1.3.0, so that is the floor.
+MIN_DAEMON_VERSION = "1.3.0"
+REQUIRED_DAEMON_CAPABILITIES = ("conversation-stream", "conversation-cancel")
+ISSUE_DAEMON_VERSION = "daemon_version_unsupported"
+ISSUE_DAEMON_CAPABILITIES = "daemon_capabilities_missing"
+
 UPDATE_REPOSITORY = "mgd34msu/goodvibes-homeassistant"
 UPDATE_RELEASES_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
 UPDATE_RELEASES_URL = f"https://github.com/{UPDATE_REPOSITORY}/releases"
