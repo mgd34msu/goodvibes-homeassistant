@@ -59,6 +59,11 @@ CONF_INCLUDE_UNEXPOSED_ENTITIES = "include_unexposed_entities"
 # own option key ("llm_hass_api") so the selected Assist LLM API is stored the
 # same way first-class conversation agents store it.
 CONF_PROMPT = "prompt"
+# Perception-trigger options (options flow). Off by default; when enabled, state
+# changes of the selected entities start an attributed daemon session.
+CONF_PERCEPTION_ENABLED = "perception_enabled"
+CONF_PERCEPTION_ENTITIES = "perception_entities"
+CONF_PERCEPTION_PROMPT = "perception_prompt"
 CONF_INSTALLATION_ID = "installation_id"
 CONF_KNOWLEDGE_SPACE_ID = "knowledge_space_id"
 CONF_URL = "url"
@@ -99,6 +104,18 @@ DEFAULT_ASSIST_CONVERSATION_PREFIX = "assist"
 DEFAULT_DISPLAY_NAME = "Home Assistant"
 DEFAULT_CONVERSATION_TIMEOUT_MS = 120000
 DEFAULT_HOME_GRAPH_ENABLED = True
+# Perception triggers are opt-in and start disabled. When enabled with no
+# custom instruction, this default frames the attributed session.
+DEFAULT_PERCEPTION_ENABLED = False
+DEFAULT_PERCEPTION_PROMPT = (
+    "A Home Assistant entity you observe changed state. Review the change and "
+    "take any helpful action that is within your allowed tools."
+)
+# Minimum seconds between attributed sessions started for the same entity, so a
+# chattering sensor cannot spawn a flood of daemon sessions.
+PERCEPTION_MIN_INTERVAL_S = 10.0
+DEFAULT_PERCEPTION_DISPLAY_NAME = "GoodVibes Perception"
+DEFAULT_PERCEPTION_CONVERSATION_PREFIX = "perception"
 # By default the Home Graph snapshot only carries entities the user has exposed
 # to assistants (the same boundary Home Assistant's own voice and conversation
 # agents respect). Set the config toggle to include everything in the registry.

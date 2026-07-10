@@ -25,6 +25,9 @@ from .const import (
     CONF_INCLUDE_UNEXPOSED_ENTITIES,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
+    CONF_PERCEPTION_ENABLED,
+    CONF_PERCEPTION_ENTITIES,
+    CONF_PERCEPTION_PROMPT,
     CONF_PROMPT,
     CONF_WEBHOOK_SECRET,
     DEFAULT_DAEMON_URL,
@@ -32,6 +35,7 @@ from .const import (
     DEFAULT_DEVICE_NAME,
     DEFAULT_HOME_GRAPH_ENABLED,
     DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
+    DEFAULT_PERCEPTION_ENABLED,
     DOMAIN,
 )
 from .home_graph import build_home_graph_base_payload, derive_installation_id
@@ -154,6 +158,16 @@ class GoodVibesOptionsFlow(config_entries.OptionsFlow):
                 options.pop(CONF_PROMPT)
             if llm_apis := user_input.get(CONF_LLM_HASS_API):
                 options[CONF_LLM_HASS_API] = llm_apis
+            # Perception triggers: off unless explicitly enabled with entities.
+            options[CONF_PERCEPTION_ENABLED] = bool(
+                user_input.get(CONF_PERCEPTION_ENABLED, DEFAULT_PERCEPTION_ENABLED)
+            )
+            if entities := user_input.get(CONF_PERCEPTION_ENTITIES):
+                options[CONF_PERCEPTION_ENTITIES] = list(entities)
+            if perception_prompt := (
+                user_input.get(CONF_PERCEPTION_PROMPT) or ""
+            ).strip():
+                options[CONF_PERCEPTION_PROMPT] = perception_prompt
             return self.async_create_entry(title="", data=options)
 
         return self.async_show_form(
@@ -187,6 +201,28 @@ def _options_schema(
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(options=hass_apis, multiple=True)
         )
+    schema[
+        vol.Optional(
+            CONF_PERCEPTION_ENABLED,
+            default=options.get(CONF_PERCEPTION_ENABLED, DEFAULT_PERCEPTION_ENABLED),
+        )
+    ] = selector.BooleanSelector()
+    schema[
+        vol.Optional(
+            CONF_PERCEPTION_ENTITIES,
+            default=options.get(CONF_PERCEPTION_ENTITIES, []),
+        )
+    ] = selector.EntitySelector(selector.EntitySelectorConfig(multiple=True))
+    schema[
+        vol.Optional(
+            CONF_PERCEPTION_PROMPT,
+            description={
+                "suggested_value": options.get(CONF_PERCEPTION_PROMPT, "")
+            },
+        )
+    ] = selector.TextSelector(
+        selector.TextSelectorConfig(multiline=True)
+    )
     return vol.Schema(schema)
 
 

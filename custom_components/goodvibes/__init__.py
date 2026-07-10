@@ -13,7 +13,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -26,10 +26,13 @@ from .const import (
     CONF_INCLUDE_UNEXPOSED_ENTITIES,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
+    CONF_PERCEPTION_ENABLED,
+    CONF_PERCEPTION_PROMPT,
     CONF_WEBHOOK_SECRET,
     DEFAULT_EVENT_TYPE,
     DEFAULT_HOME_GRAPH_ENABLED,
     DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
+    DEFAULT_PERCEPTION_ENABLED,
     DOMAIN,
     PLATFORMS,
 )
@@ -37,6 +40,7 @@ from .coordinator import GoodVibesDataUpdateCoordinator
 from .data import GoodVibesRuntimeData
 from .home_graph import async_build_home_graph_snapshot, derive_installation_id
 from .home_graph_watch import GoodVibesHomeGraphWatcher
+from .perception import GoodVibesPerceptionManager, perception_entity_ids
 from .services import _log_home_graph_sync, async_setup_services
 from .frontend import async_setup_frontend, async_unload_frontend_panel
 
@@ -134,7 +138,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         watcher.async_start()
         runtime.home_graph_watcher = watcher
+
+    _async_start_perception(runtime)
+    # Apply option changes (conversation prompt, perception triggers) by reloading
+    # the entry so the perception manager is rebuilt from the new configuration.
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
+
+
+@callback
+def _async_start_perception(runtime: GoodVibesRuntimeData) -> None:
+    """Start the perception-trigger manager when it is enabled in options.
+
+    Off by default: the manager is only created when ``perception_enabled`` is
+    set in the options flow and at least one exposed entity is selected.
+    """
+
+    options = runtime.entry.options
+    if not options.get(CONF_PERCEPTION_ENABLED, DEFAULT_PERCEPTION_ENABLED):
+        return
+    entity_ids = perception_entity_ids(options)
+    if not entity_ids:
+        return
+    manager = GoodVibesPerceptionManager(
+        runtime.hass,
+        runtime,
+        entity_ids,
+        options.get(CONF_PERCEPTION_PROMPT),
+    )
+    manager.async_start()
+    runtime.perception_manager = manager
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry after its options change."""
+
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def _async_auto_sync_home_graph(
@@ -172,6 +211,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runtime.unsubscribe_auto_sync()
         if runtime and runtime.home_graph_watcher:
             runtime.home_graph_watcher.async_stop()
+        if runtime and runtime.perception_manager:
+            runtime.perception_manager.async_stop()
         if not any(
             isinstance(value, GoodVibesRuntimeData)
             for value in hass.data.get(DOMAIN, {}).values()

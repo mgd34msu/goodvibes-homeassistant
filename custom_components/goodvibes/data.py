@@ -93,6 +93,8 @@ class GoodVibesRuntimeData:
     unsubscribe_auto_sync: Any | None = None
     # The registry-change watcher that keeps the daemon Home Graph fresh.
     home_graph_watcher: Any | None = None
+    # The perception-trigger manager (state-change -> attributed session).
+    perception_manager: Any | None = None
     # The DataUpdateCoordinator that owns the batched refresh for this entry.
     # Set in async_setup_entry after both objects exist.
     coordinator: Any = None

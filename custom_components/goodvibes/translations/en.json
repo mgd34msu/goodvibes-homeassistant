@@ -29,10 +29,13 @@
     "step": {
       "init": {
         "title": "GoodVibes conversation",
-        "description": "These settings shape the Assist conversation turn before it reaches the daemon. The custom prompt and the selected Home Assistant LLM API are assembled by Home Assistant's conversation helper and sent to the daemon as the turn's instructions. The model call and Home Assistant control stay on the daemon.",
+        "description": "These settings shape the Assist conversation turn before it reaches the daemon. The custom prompt and the selected Home Assistant LLM API are assembled by Home Assistant's conversation helper and sent to the daemon as the turn's instructions. The model call and Home Assistant control stay on the daemon. Perception triggers are optional and start disabled: when enabled, a state change of any selected entity starts an attributed GoodVibes session with the triggering context. Only entities exposed to assistants are watched.",
         "data": {
           "prompt": "Instructions",
-          "llm_hass_api": "Control Home Assistant"
+          "llm_hass_api": "Control Home Assistant",
+          "perception_enabled": "Enable perception triggers",
+          "perception_entities": "Entities that trigger a perception session",
+          "perception_prompt": "Perception session instructions"
         }
       }
     }
