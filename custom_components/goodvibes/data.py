@@ -59,6 +59,7 @@ class GoodVibesRuntimeData:
     home_graph_enabled: bool
     installation_id: str
     knowledge_space_id: str | None
+    include_unexposed_entities: bool = False
     manifest: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
     daemon_status: dict[str, Any] = field(default_factory=dict)

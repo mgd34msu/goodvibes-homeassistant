@@ -287,6 +287,7 @@ async def _handle_home_graph_action(
             runtime.entry,
             base_payload["installationId"],
             base_payload.get("knowledgeSpaceId"),
+            include_unexposed=runtime.include_unexposed_entities,
         )
         response = await runtime.client.home_graph_sync(snapshot)
         runtime.async_apply_home_graph_response(response, sync=True)
@@ -656,6 +657,7 @@ async def _async_sync_home_graph_context(
         runtime.entry,
         base_payload["installationId"],
         base_payload.get("knowledgeSpaceId"),
+        include_unexposed=runtime.include_unexposed_entities,
     )
     response = await runtime.client.home_graph_sync(snapshot)
     runtime.async_apply_home_graph_response(response, sync=True)

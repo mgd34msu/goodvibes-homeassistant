@@ -429,6 +429,7 @@ async def async_sync_home_graph(call: ServiceCall) -> dict[str, Any]:
         runtime.entry,
         base_payload["installationId"],
         base_payload.get("knowledgeSpaceId"),
+        include_unexposed=runtime.include_unexposed_entities,
     )
     response = await _call_client(runtime.client.home_graph_sync(snapshot))
     runtime.async_apply_home_graph_response(response, sync=True)
@@ -447,6 +448,7 @@ async def async_sync_home_graph_context(
         runtime.entry,
         base_payload["installationId"],
         base_payload.get("knowledgeSpaceId"),
+        include_unexposed=runtime.include_unexposed_entities,
     )
     response = await _call_client(runtime.client.home_graph_sync(snapshot))
     runtime.async_apply_home_graph_response(response, sync=True)

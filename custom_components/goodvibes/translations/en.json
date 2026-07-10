@@ -10,6 +10,7 @@
           "webhook_secret": "Home Assistant webhook secret",
           "event_type": "Home Assistant event type",
           "home_graph_enabled": "Enable Home Graph",
+          "include_unexposed_entities": "Include entities not exposed to assistants in the Home Graph",
           "installation_id": "Home Graph installation ID",
           "knowledge_space_id": "Home Graph knowledge space ID"
         }

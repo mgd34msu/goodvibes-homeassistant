@@ -22,11 +22,13 @@ from .const import (
     CONF_DAEMON_URL,
     CONF_EVENT_TYPE,
     CONF_HOME_GRAPH_ENABLED,
+    CONF_INCLUDE_UNEXPOSED_ENTITIES,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
     CONF_WEBHOOK_SECRET,
     DEFAULT_EVENT_TYPE,
     DEFAULT_HOME_GRAPH_ENABLED,
+    DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
     DOMAIN,
     PLATFORMS,
 )
@@ -72,6 +74,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         installation_id=entry.data.get(CONF_INSTALLATION_ID)
         or derive_installation_id(hass, entry),
         knowledge_space_id=entry.data.get(CONF_KNOWLEDGE_SPACE_ID) or None,
+        include_unexposed_entities=entry.data.get(
+            CONF_INCLUDE_UNEXPOSED_ENTITIES, DEFAULT_INCLUDE_UNEXPOSED_ENTITIES
+        ),
     )
 
     coordinator = GoodVibesDataUpdateCoordinator(hass, entry, runtime)
@@ -131,6 +136,7 @@ async def _async_auto_sync_home_graph(runtime: GoodVibesRuntimeData) -> None:
             runtime.entry,
             base_payload["installationId"],
             base_payload.get("knowledgeSpaceId"),
+            include_unexposed=runtime.include_unexposed_entities,
         )
         response = await runtime.client.home_graph_sync(snapshot)
         runtime.async_apply_home_graph_response(response, sync=True)

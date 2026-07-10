@@ -79,3 +79,92 @@ def test_state_timestamp_absent_state_is_none():
     """A missing state yields no timestamp rather than a fabricated one."""
 
     assert home_graph._state_timestamp(None, "last_changed") is None
+
+
+def _registry_fixtures():
+    """Two entities, two devices, two areas across an exposed/unexposed split."""
+
+    entities = [
+        SimpleNamespace(
+            entity_id="light.kitchen", device_id="dev-kitchen", area_id=None
+        ),
+        SimpleNamespace(
+            entity_id="light.hidden", device_id="dev-hidden", area_id="area-hidden"
+        ),
+    ]
+    devices = [
+        SimpleNamespace(id="dev-kitchen", area_id="area-kitchen"),
+        SimpleNamespace(id="dev-hidden", area_id="area-hidden"),
+    ]
+    areas = [
+        SimpleNamespace(id="area-kitchen"),
+        SimpleNamespace(id="area-hidden"),
+    ]
+    return {"entities": entities, "devices": devices, "areas": areas}
+
+
+async def _patched_snapshot(hass, entry, *, include_unexposed, exposed):
+    """Build a snapshot over the fixtures with a controlled exposure boundary."""
+
+    fixtures = _registry_fixtures()
+
+    def _fake_registry_items(_registry, attr):
+        return fixtures.get(attr, [])
+
+    def _fake_should_expose(_hass, _assistant, entity_id):
+        return entity_id in exposed
+
+    with (
+        patch.object(home_graph, "async_get_integration", None),
+        patch.object(home_graph, "_registry_items", _fake_registry_items),
+        patch.object(home_graph, "async_should_expose", _fake_should_expose),
+    ):
+        return await home_graph.async_build_home_graph_snapshot(
+            hass,
+            entry,
+            installation_id="inst-1",
+            knowledge_space_id=None,
+            include_unexposed=include_unexposed,
+        )
+
+
+async def test_snapshot_filters_to_exposed_entities_by_default(hass, entry):
+    """Only entities exposed to assistants reach the default snapshot."""
+
+    snapshot = await _patched_snapshot(
+        hass, entry, include_unexposed=False, exposed={"light.kitchen"}
+    )
+
+    entity_ids = {item["entityId"] for item in snapshot["entities"]}
+    assert entity_ids == {"light.kitchen"}
+
+
+async def test_snapshot_prunes_devices_and_areas_to_included_entities(hass, entry):
+    """Devices/areas survive only when an included entity resolves to them."""
+
+    snapshot = await _patched_snapshot(
+        hass, entry, include_unexposed=False, exposed={"light.kitchen"}
+    )
+
+    device_ids = {item["id"] for item in snapshot["devices"]}
+    area_ids = {item["id"] for item in snapshot["areas"]}
+    # light.kitchen has no area of its own; it inherits its device's area.
+    assert device_ids == {"dev-kitchen"}
+    assert area_ids == {"area-kitchen"}
+    assert "dev-hidden" not in device_ids
+    assert "area-hidden" not in area_ids
+
+
+async def test_snapshot_include_unexposed_keeps_everything(hass, entry):
+    """The toggle carries the whole registry regardless of exposure."""
+
+    snapshot = await _patched_snapshot(
+        hass, entry, include_unexposed=True, exposed=set()
+    )
+
+    entity_ids = {item["entityId"] for item in snapshot["entities"]}
+    device_ids = {item["id"] for item in snapshot["devices"]}
+    area_ids = {item["id"] for item in snapshot["areas"]}
+    assert entity_ids == {"light.kitchen", "light.hidden"}
+    assert device_ids == {"dev-kitchen", "dev-hidden"}
+    assert area_ids == {"area-kitchen", "area-hidden"}
