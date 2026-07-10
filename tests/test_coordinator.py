@@ -10,7 +10,7 @@ from custom_components.goodvibes.const import DOMAIN
 from custom_components.goodvibes.coordinator import GoodVibesDataUpdateCoordinator
 from custom_components.goodvibes.data import GoodVibesRuntimeData
 
-DAEMON = "http://127.0.0.1:3210"
+DAEMON = "http://127.0.0.1:3421"
 ENTRY_DATA = {
     "daemon_url": DAEMON,
     "daemon_token": "tok",

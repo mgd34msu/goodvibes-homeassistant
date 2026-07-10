@@ -18,7 +18,7 @@ from custom_components.goodvibes.client import (
     _query_path,
 )
 
-DAEMON = "http://127.0.0.1:3210"
+DAEMON = "http://127.0.0.1:3421"
 
 
 def _client(hass, token: str | None = "tok-abc") -> GoodVibesClient:

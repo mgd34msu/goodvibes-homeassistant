@@ -71,7 +71,7 @@ CONF_CODE = "code"
 CONF_CONFIRM = "confirm"
 CONF_DRY_RUN = "dry_run"
 
-DEFAULT_DAEMON_URL = "http://127.0.0.1:3210"
+DEFAULT_DAEMON_URL = "http://127.0.0.1:3421"
 DEFAULT_EVENT_TYPE = "goodvibes_message"
 DEFAULT_DEVICE_ID = "goodvibes-daemon"
 DEFAULT_DEVICE_NAME = "GoodVibes Daemon"
