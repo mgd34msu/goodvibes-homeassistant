@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .client import GoodVibesClient, GoodVibesClientError
 from .const import (
@@ -35,7 +36,8 @@ from .const import (
 from .coordinator import GoodVibesDataUpdateCoordinator
 from .data import GoodVibesRuntimeData
 from .home_graph import async_build_home_graph_snapshot, derive_installation_id
-from .services import async_setup_services
+from .home_graph_watch import GoodVibesHomeGraphWatcher
+from .services import _log_home_graph_sync, async_setup_services
 from .frontend import async_setup_frontend, async_unload_frontend_panel
 
 _LOGGER = logging.getLogger(__name__)
@@ -123,11 +125,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     hass, _async_auto_sync_home_graph(runtime), name=task_name
                 ),
             )
+        # Keep the daemon-registered graph fresh: re-sync it (debounced) whenever
+        # the home structure changes so conversation turns keep referencing an
+        # up-to-date graph without carrying the snapshot per turn.
+        watcher = GoodVibesHomeGraphWatcher(
+            hass,
+            lambda: _async_auto_sync_home_graph(runtime, trigger="registry-change"),
+        )
+        watcher.async_start()
+        runtime.home_graph_watcher = watcher
     return True
 
 
-async def _async_auto_sync_home_graph(runtime: GoodVibesRuntimeData) -> None:
-    """Refresh the daemon Home Graph in the background after setup."""
+async def _async_auto_sync_home_graph(
+    runtime: GoodVibesRuntimeData, *, trigger: str = "startup"
+) -> None:
+    """Refresh the daemon Home Graph in the background after setup or a change."""
 
     try:
         base_payload = runtime.home_graph_base_payload()
@@ -140,7 +153,7 @@ async def _async_auto_sync_home_graph(runtime: GoodVibesRuntimeData) -> None:
         )
         response = await runtime.client.home_graph_sync(snapshot)
         runtime.async_apply_home_graph_response(response, sync=True)
-        _log_home_graph_sync(snapshot, response, trigger="startup")
+        _log_home_graph_sync(snapshot, response, trigger=trigger)
         await runtime.async_refresh_home_graph()
     except GoodVibesClientError as err:
         runtime.home_graph_last_error = str(err)
@@ -157,6 +170,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runtime.unsubscribe_event()
         if runtime and runtime.unsubscribe_auto_sync:
             runtime.unsubscribe_auto_sync()
+        if runtime and runtime.home_graph_watcher:
+            runtime.home_graph_watcher.async_stop()
         if not any(
             isinstance(value, GoodVibesRuntimeData)
             for value in hass.data.get(DOMAIN, {}).values()
