@@ -233,4 +233,10 @@ class GoodVibesConversationEntity(ConversationEntity):
             payload["userId"] = user_input.context.user_id
         if user_input.device_id:
             payload["deviceId"] = user_input.device_id
+        # Reference the same Home Graph the integration registers and re-syncs
+        # (see home_graph_watch.py) so the daemon can ground this turn in it.
+        # The daemon parses this field optionally, so an older daemon that does
+        # not understand it simply ignores it and the turn completes as before.
+        if self._runtime.home_graph_enabled:
+            payload["grounding"] = self._runtime.home_graph_base_payload()
         return payload

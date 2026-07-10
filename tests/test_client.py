@@ -199,6 +199,45 @@ async def test_conversation_stream_parses_sse_frames(hass, aioclient_mock):
     assert headers["Authorization"] == "Bearer tok-abc"
 
 
+async def test_conversation_stream_grounding_reference_is_additive(hass, aioclient_mock):
+    """A payload carrying a grounding reference still completes normally.
+
+    Simulates an older daemon that predates the grounding reference: the
+    mocked endpoint returns its usual final frame without inspecting the
+    request body at all, standing in for a daemon that simply ignores an
+    unrecognized ``grounding`` field. The turn must complete exactly as it
+    would without the field, and the field must still have been sent so a
+    newer daemon can use it.
+    """
+
+    body = (
+        "event: final\n"
+        'data: {"status": "completed", "assistant": {"speechText": "Lights on."}}\n'
+        "\n"
+    )
+    aioclient_mock.post(
+        f"{DAEMON}/api/homeassistant/conversation/stream",
+        text=body,
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    payload = {
+        "message": "hi",
+        "grounding": {
+            "installationId": "my-house",
+            "knowledgeSpaceId": "homeassistant:my-house",
+        },
+    }
+    frames = [
+        frame async for frame in _client(hass).conversation_stream(payload)
+    ]
+
+    assert frames[-1]["data"]["status"] == "completed"
+    assert frames[-1]["data"]["assistant"]["speechText"] == "Lights on."
+    _method, _url, sent_data, _headers = aioclient_mock.mock_calls[0]
+    assert sent_data["grounding"] == payload["grounding"]
+
+
 async def test_conversation_stream_error_status_raises_typed(hass, aioclient_mock):
     """A non-200 stream response raises the matching typed client error."""
 

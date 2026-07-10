@@ -23,7 +23,14 @@ from custom_components.goodvibes.const import CONF_PROMPT, DOMAIN
 DAEMON = "http://127.0.0.1:3421"
 
 
-def _entity(hass, options: dict | None = None):
+def _entity(
+    hass,
+    options: dict | None = None,
+    *,
+    home_graph_enabled: bool = True,
+    installation_id: str = "test-installation",
+    knowledge_space_id: str = "homeassistant:test-installation",
+):
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id=DAEMON,
@@ -31,7 +38,20 @@ def _entity(hass, options: dict | None = None):
         options=options or {},
     )
     entry.add_to_hass(hass)
-    runtime = SimpleNamespace(entry=entry)
+    runtime = SimpleNamespace(
+        entry=entry,
+        home_graph_enabled=home_graph_enabled,
+        installation_id=installation_id,
+        effective_knowledge_space_id=knowledge_space_id,
+    )
+    # Mirrors GoodVibesRuntimeData.home_graph_base_payload: the same
+    # installation/knowledge-space identifier the integration registers the
+    # Home Graph under (see data.py) is what a conversation turn should send
+    # back as its grounding reference.
+    runtime.home_graph_base_payload = lambda data=None: {
+        "installationId": runtime.installation_id,
+        "knowledgeSpaceId": runtime.effective_knowledge_space_id,
+    }
     entity = conv.GoodVibesConversationEntity(runtime)
     entity.hass = hass
     return entity
@@ -125,6 +145,37 @@ def test_build_payload_falls_back_to_extra_system_prompt(hass):
     )
     assert payload["context"]["extraSystemPrompt"] == "one-off note"
     assert "instructions" not in payload["context"]
+
+
+def test_build_payload_carries_grounding_reference(hass):
+    """The turn references the same graph the integration registers/re-syncs.
+
+    ``home_graph_watch.py`` keeps the daemon-registered Home Graph fresh under
+    ``installation_id``/``effective_knowledge_space_id``; this is the identifier
+    a conversation turn must send back so the daemon can ground the turn in
+    that same registered graph.
+    """
+
+    entity = _entity(
+        hass,
+        installation_id="my-house",
+        knowledge_space_id="homeassistant:my-house",
+    )
+    payload = entity._build_payload(_user_input(), "conv-1", "msg-1")
+
+    assert payload["grounding"] == {
+        "installationId": "my-house",
+        "knowledgeSpaceId": "homeassistant:my-house",
+    }
+
+
+def test_build_payload_omits_grounding_when_home_graph_disabled(hass):
+    """No grounding reference is sent for a graph that was never registered."""
+
+    entity = _entity(hass, home_graph_enabled=False)
+    payload = entity._build_payload(_user_input(), "conv-1", "msg-1")
+
+    assert "grounding" not in payload
 
 
 async def test_options_flow_saves_custom_prompt(hass):
