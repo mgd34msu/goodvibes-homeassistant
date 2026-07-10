@@ -159,3 +159,50 @@ async def test_options_flow_empty_prompt_stores_nothing(hass):
     )
     assert result["type"] == "create_entry"
     assert CONF_PROMPT not in entry.options
+
+
+async def test_options_flow_saves_perception_triggers(hass):
+    """The options flow persists perception enablement, entities, and prompt."""
+
+    from custom_components.goodvibes.const import (
+        CONF_PERCEPTION_ENABLED,
+        CONF_PERCEPTION_ENTITIES,
+        CONF_PERCEPTION_PROMPT,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=DAEMON, data={"daemon_url": DAEMON}
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_PERCEPTION_ENABLED: True,
+            CONF_PERCEPTION_ENTITIES: ["binary_sensor.front_door"],
+            CONF_PERCEPTION_PROMPT: "Note who is at the door.",
+        },
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_PERCEPTION_ENABLED] is True
+    assert entry.options[CONF_PERCEPTION_ENTITIES] == ["binary_sensor.front_door"]
+    assert entry.options[CONF_PERCEPTION_PROMPT] == "Note who is at the door."
+
+
+async def test_options_flow_perception_defaults_off(hass):
+    """Perception stays disabled when the options form is submitted untouched."""
+
+    from custom_components.goodvibes.const import CONF_PERCEPTION_ENABLED
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=DAEMON, data={"daemon_url": DAEMON}
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_PROMPT: "Speak plainly."}
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_PERCEPTION_ENABLED] is False
