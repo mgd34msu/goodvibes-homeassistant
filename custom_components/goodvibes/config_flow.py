@@ -21,6 +21,8 @@ from .const import (
     CONF_DAEMON_TOKEN,
     CONF_DAEMON_URL,
     CONF_EVENT_TYPE,
+    CONF_HABIT_MINING_ENABLED,
+    CONF_HABIT_RETENTION_DAYS,
     CONF_HOME_GRAPH_ENABLED,
     CONF_INCLUDE_UNEXPOSED_ENTITIES,
     CONF_INSTALLATION_ID,
@@ -33,9 +35,13 @@ from .const import (
     DEFAULT_DAEMON_URL,
     DEFAULT_EVENT_TYPE,
     DEFAULT_DEVICE_NAME,
+    DEFAULT_HABIT_MINING_ENABLED,
+    DEFAULT_HABIT_RETENTION_DAYS,
     DEFAULT_HOME_GRAPH_ENABLED,
     DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
     DEFAULT_PERCEPTION_ENABLED,
+    HABIT_RETENTION_DAYS_MAX,
+    HABIT_RETENTION_DAYS_MIN,
     DOMAIN,
 )
 from .home_graph import build_home_graph_base_payload, derive_installation_id
@@ -168,6 +174,22 @@ class GoodVibesOptionsFlow(config_entries.OptionsFlow):
                 user_input.get(CONF_PERCEPTION_PROMPT) or ""
             ).strip():
                 options[CONF_PERCEPTION_PROMPT] = perception_prompt
+            # Habit mining: off unless explicitly enabled. Retention days are
+            # clamped to the honest in-memory window bounds.
+            options[CONF_HABIT_MINING_ENABLED] = bool(
+                user_input.get(CONF_HABIT_MINING_ENABLED, DEFAULT_HABIT_MINING_ENABLED)
+            )
+            retention_days = user_input.get(
+                CONF_HABIT_RETENTION_DAYS, DEFAULT_HABIT_RETENTION_DAYS
+            )
+            try:
+                retention_days = int(retention_days)
+            except (TypeError, ValueError):
+                retention_days = DEFAULT_HABIT_RETENTION_DAYS
+            options[CONF_HABIT_RETENTION_DAYS] = max(
+                HABIT_RETENTION_DAYS_MIN,
+                min(HABIT_RETENTION_DAYS_MAX, retention_days),
+            )
             return self.async_create_entry(title="", data=options)
 
         return self.async_show_form(
@@ -222,6 +244,29 @@ def _options_schema(
         )
     ] = selector.TextSelector(
         selector.TextSelectorConfig(multiline=True)
+    )
+    schema[
+        vol.Optional(
+            CONF_HABIT_MINING_ENABLED,
+            default=options.get(
+                CONF_HABIT_MINING_ENABLED, DEFAULT_HABIT_MINING_ENABLED
+            ),
+        )
+    ] = selector.BooleanSelector()
+    schema[
+        vol.Optional(
+            CONF_HABIT_RETENTION_DAYS,
+            default=options.get(
+                CONF_HABIT_RETENTION_DAYS, DEFAULT_HABIT_RETENTION_DAYS
+            ),
+        )
+    ] = selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=HABIT_RETENTION_DAYS_MIN,
+            max=HABIT_RETENTION_DAYS_MAX,
+            step=1,
+            mode=selector.NumberSelectorMode.BOX,
+        )
     )
     return vol.Schema(schema)
 

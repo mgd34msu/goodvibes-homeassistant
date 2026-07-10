@@ -819,3 +819,46 @@ home_graph_reindex:
     knowledge_space_id:
       selector:
         text:
+
+causal_chain:
+  description: Return the causal chain for an entity's recent state changes — which automation, script, scene, service call, or user caused each change, from the Home Assistant context chain. Admin only.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    entity_id:
+      required: true
+      selector:
+        entity:
+    limit:
+      default: 10
+      selector:
+        number:
+          min: 1
+          mode: box
+
+habit_proposals:
+  description: List the consent-gated habit-mining automation proposals detected from locally observed history. Read-only; enable habit mining in the integration options first.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+
+accept_habit:
+  description: Create a standard Home Assistant automation from a reviewed habit proposal. Admin only and requires confirmation; nothing is created without it.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    proposal_id:
+      required: true
+      description: The proposalId from goodvibes.habit_proposals.
+      selector:
+        text:
+    confirm:
+      description: Type CREATE to confirm creating the automation.
+      selector:
+        text:

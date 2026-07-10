@@ -24,24 +24,36 @@ from .const import (
     CONF_EVENT_TYPE,
     CONF_HOME_GRAPH_ENABLED,
     CONF_INCLUDE_UNEXPOSED_ENTITIES,
+    CONF_HABIT_MINING_ENABLED,
+    CONF_HABIT_RETENTION_DAYS,
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
     CONF_PERCEPTION_ENABLED,
     CONF_PERCEPTION_PROMPT,
     CONF_WEBHOOK_SECRET,
     DEFAULT_EVENT_TYPE,
+    DEFAULT_HABIT_MINING_ENABLED,
+    DEFAULT_HABIT_RETENTION_DAYS,
     DEFAULT_HOME_GRAPH_ENABLED,
     DEFAULT_INCLUDE_UNEXPOSED_ENTITIES,
     DEFAULT_PERCEPTION_ENABLED,
     DOMAIN,
+    HABIT_RETENTION_DAYS_MAX,
+    HABIT_RETENTION_DAYS_MIN,
     PLATFORMS,
 )
 from .coordinator import GoodVibesDataUpdateCoordinator
 from .data import GoodVibesRuntimeData
+from .habits import GoodVibesHabitMiner
 from .home_graph import async_build_home_graph_snapshot, derive_installation_id
 from .home_graph_watch import GoodVibesHomeGraphWatcher
 from .perception import GoodVibesPerceptionManager, perception_entity_ids
-from .services import _log_home_graph_sync, async_setup_services
+from .provenance import GoodVibesProvenanceTracker
+from .services import (
+    _log_home_graph_sync,
+    async_apply_habit_proposals,
+    async_setup_services,
+)
 from .frontend import async_setup_frontend, async_unload_frontend_panel
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,6 +102,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = runtime
+
+    # Start the causal-provenance tracker before the first Home Graph sync so the
+    # context chain it indexes can attribute the cause of state changes. It is a
+    # lightweight, read-only bus listener and runs regardless of Home Graph so
+    # the causal_chain service works on its own.
+    provenance_tracker = GoodVibesProvenanceTracker(hass)
+    provenance_tracker.async_start()
+    runtime.provenance_tracker = provenance_tracker
 
     await async_setup_frontend(hass)
     # Device info comes from the manifest; fetch it, then let the coordinator own
@@ -140,10 +160,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         runtime.home_graph_watcher = watcher
 
     _async_start_perception(runtime)
-    # Apply option changes (conversation prompt, perception triggers) by reloading
-    # the entry so the perception manager is rebuilt from the new configuration.
+    _async_start_habit_mining(runtime)
+    # Apply option changes (conversation prompt, perception triggers, habit
+    # mining) by reloading the entry so the managers are rebuilt from the new
+    # configuration.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
+
+
+@callback
+def _async_start_habit_mining(runtime: GoodVibesRuntimeData) -> None:
+    """Start consent-gated habit mining when it is enabled in options.
+
+    Off by default: the miner is only created when ``habit_mining_enabled`` is
+    set in the admin-only options flow. Retention days are clamped to a sane
+    range so the in-memory observation window stays bounded.
+    """
+
+    options = runtime.entry.options
+    if not options.get(CONF_HABIT_MINING_ENABLED, DEFAULT_HABIT_MINING_ENABLED):
+        return
+    retention_days = options.get(
+        CONF_HABIT_RETENTION_DAYS, DEFAULT_HABIT_RETENTION_DAYS
+    )
+    try:
+        retention_days = int(retention_days)
+    except (TypeError, ValueError):
+        retention_days = DEFAULT_HABIT_RETENTION_DAYS
+    retention_days = max(
+        HABIT_RETENTION_DAYS_MIN, min(HABIT_RETENTION_DAYS_MAX, retention_days)
+    )
+
+    async def _on_proposals(proposals) -> None:
+        await async_apply_habit_proposals(runtime.hass, runtime, proposals)
+
+    miner = GoodVibesHabitMiner(
+        runtime.hass,
+        runtime,
+        retention_days=retention_days,
+        on_proposals=_on_proposals,
+    )
+    miner.async_start()
+    runtime.habit_miner = miner
 
 
 @callback
@@ -189,6 +247,7 @@ async def _async_auto_sync_home_graph(
             base_payload["installationId"],
             base_payload.get("knowledgeSpaceId"),
             include_unexposed=runtime.include_unexposed_entities,
+            resolve_provenance=runtime.provenance_resolver,
         )
         response = await runtime.client.home_graph_sync(snapshot)
         runtime.async_apply_home_graph_response(response, sync=True)
@@ -213,6 +272,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runtime.home_graph_watcher.async_stop()
         if runtime and runtime.perception_manager:
             runtime.perception_manager.async_stop()
+        if runtime and runtime.provenance_tracker:
+            runtime.provenance_tracker.async_stop()
+        if runtime and runtime.habit_miner:
+            runtime.habit_miner.async_stop()
         if not any(
             isinstance(value, GoodVibesRuntimeData)
             for value in hass.data.get(DOMAIN, {}).values()

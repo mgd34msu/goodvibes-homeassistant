@@ -245,15 +245,131 @@ async def test_entity_control_check_allows_no_user_context(hass):
     await svc._async_verify_entity_control(call, ["light.kitchen"])
 
 
+async def test_causal_chain_returns_recent_change_causes(hass, runtime):
+    """causal_chain resolves an entity's recent changes to their causes."""
+
+    from custom_components.goodvibes.provenance import GoodVibesProvenanceTracker
+
+    tracker = GoodVibesProvenanceTracker(hass)
+    tracker.async_start()
+    runtime.provenance_tracker = tracker
+    try:
+        hass.states.async_set("light.kitchen", "off")
+        await hass.async_block_till_done()
+        hass.states.async_set("light.kitchen", "on")
+        await hass.async_block_till_done()
+
+        result = await _call(hass, "async_causal_chain", {"entity_id": "light.kitchen"})
+        assert result["entityId"] == "light.kitchen"
+        assert result["current"]["state"] == "on"
+        assert result["changes"][0]["to"] == "on"
+        assert result["changes"][0]["provenance"]["cause"]["kind"]
+        assert "note" in result
+    finally:
+        tracker.async_stop()
+
+
+async def test_causal_chain_rejects_non_admin(hass, runtime, hass_read_only_user):
+    """causal_chain is admin-gated like the other state-touching services."""
+
+    with pytest.raises(Unauthorized):
+        await _call_as(
+            hass, "async_causal_chain", {"entity_id": "light.kitchen"},
+            hass_read_only_user.id,
+        )
+
+
+async def test_habit_proposals_reports_disabled_when_no_miner(hass, runtime):
+    """With no miner configured, habit_proposals reports it is disabled."""
+
+    result = await _call(hass, "async_habit_proposals", {})
+    assert result["enabled"] is False
+    assert result["proposals"] == []
+
+
+async def test_accept_habit_requires_confirmation(hass, runtime):
+    """accept_habit refuses to create anything without the CREATE confirmation."""
+
+    runtime.habit_proposals = [
+        {
+            "proposalId": "abc",
+            "automation": {"id": "goodvibes_habit_abc", "alias": "x"},
+        }
+    ]
+    with pytest.raises(HomeAssistantError):
+        await _call(hass, "async_accept_habit", {"proposal_id": "abc"})
+
+
+async def test_accept_habit_unknown_proposal_raises(hass, runtime):
+    """accept_habit raises for a proposal id it does not know."""
+
+    with pytest.raises(HomeAssistantError):
+        await _call(
+            hass, "async_accept_habit", {"proposal_id": "nope", "confirm": "CREATE"}
+        )
+
+
+async def test_accept_habit_creates_automation(hass, runtime, tmp_path):
+    """A confirmed accept creates the standard automation from the proposal."""
+
+    hass.config.config_dir = str(tmp_path)
+    reloaded: list[int] = []
+    hass.services.async_register(
+        "automation", "reload", lambda call: reloaded.append(1)
+    )
+    runtime.habit_proposals = [
+        {
+            "proposalId": "abc",
+            "automation": {
+                "id": "goodvibes_habit_abc",
+                "alias": "GoodVibes habit",
+                "trigger": [{"platform": "time", "at": "07:00:00"}],
+                "condition": [],
+                "action": [
+                    {"service": "light.turn_on", "target": {"entity_id": "light.k"}}
+                ],
+            },
+        }
+    ]
+    result = await _call(
+        hass, "async_accept_habit", {"proposal_id": "abc", "confirm": "CREATE"}
+    )
+    assert result["created"] is True
+    assert result["automationId"] == "goodvibes_habit_abc"
+    assert reloaded == [1]
+
+
+async def test_accept_habit_rejects_non_admin(hass, runtime, hass_read_only_user):
+    """accept_habit is admin-gated."""
+
+    runtime.habit_proposals = [{"proposalId": "abc", "automation": {"id": "x"}}]
+    with pytest.raises(Unauthorized):
+        await _call_as(
+            hass,
+            "async_accept_habit",
+            {"proposal_id": "abc", "confirm": "CREATE"},
+            hass_read_only_user.id,
+        )
+
+
 async def test_setup_services_registers_all_and_is_idempotent(hass):
     """async_setup_services registers the full service surface once."""
 
     await svc.async_setup_services(hass)
     registered = hass.services.async_services().get(DOMAIN, {})
-    # 26 services: the 24 in the smoke list plus status and home_graph_status.
-    assert len(registered) == 26
-    for service in ("prompt", "status", "home_graph_status", "sync_home_graph"):
+    # 29 services: the 24 in the smoke list plus status and home_graph_status,
+    # plus causal_chain, habit_proposals, and accept_habit.
+    assert len(registered) == 29
+    for service in (
+        "prompt",
+        "status",
+        "home_graph_status",
+        "sync_home_graph",
+        "causal_chain",
+        "habit_proposals",
+        "accept_habit",
+    ):
         assert service in registered
     # A second call is a no-op (guarded by the services_registered flag).
     await svc.async_setup_services(hass)
-    assert len(hass.services.async_services().get(DOMAIN, {})) == 26
+    assert len(hass.services.async_services().get(DOMAIN, {})) == 29

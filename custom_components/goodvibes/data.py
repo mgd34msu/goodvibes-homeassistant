@@ -95,6 +95,11 @@ class GoodVibesRuntimeData:
     home_graph_watcher: Any | None = None
     # The perception-trigger manager (state-change -> attributed session).
     perception_manager: Any | None = None
+    # The causal-provenance tracker (context chain -> cause of a state change).
+    provenance_tracker: Any | None = None
+    # The consent-gated habit miner and its latest proposals (opt-in; may be None).
+    habit_miner: Any | None = None
+    habit_proposals: list[dict[str, Any]] = field(default_factory=list)
     # The DataUpdateCoordinator that owns the batched refresh for this entry.
     # Set in async_setup_entry after both objects exist.
     coordinator: Any = None
@@ -104,6 +109,17 @@ class GoodVibesRuntimeData:
         """Return this entry's dispatcher signal."""
 
         return f"{SIGNAL_UPDATE}_{self.entry.entry_id}"
+
+    @property
+    def provenance_resolver(self):
+        """Return the causal-provenance resolver, or ``None`` when unavailable.
+
+        Handed to the Home Graph snapshot builder so each entity's state carries
+        the cause attributed from its Home Assistant context chain.
+        """
+
+        tracker = self.provenance_tracker
+        return tracker.resolve if tracker is not None else None
 
     @property
     def effective_knowledge_space_id(self) -> str:

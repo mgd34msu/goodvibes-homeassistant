@@ -241,6 +241,48 @@ async def test_options_flow_saves_perception_triggers(hass):
     assert entry.options[CONF_PERCEPTION_PROMPT] == "Note who is at the door."
 
 
+async def test_options_flow_saves_habit_mining(hass):
+    """The options flow persists habit-mining enablement and clamped retention."""
+
+    from custom_components.goodvibes.const import (
+        CONF_HABIT_MINING_ENABLED,
+        CONF_HABIT_RETENTION_DAYS,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=DAEMON, data={"daemon_url": DAEMON}
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_HABIT_MINING_ENABLED: True, CONF_HABIT_RETENTION_DAYS: 30},
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_HABIT_MINING_ENABLED] is True
+    # Retention is stored as an int within the honest bounds.
+    assert entry.options[CONF_HABIT_RETENTION_DAYS] == 30
+
+
+async def test_options_flow_habit_mining_defaults_off(hass):
+    """Habit mining stays disabled when the options form is submitted untouched."""
+
+    from custom_components.goodvibes.const import CONF_HABIT_MINING_ENABLED
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=DAEMON, data={"daemon_url": DAEMON}
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_PROMPT: "Speak plainly."}
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_HABIT_MINING_ENABLED] is False
+
+
 async def test_options_flow_perception_defaults_off(hass):
     """Perception stays disabled when the options form is submitted untouched."""
 

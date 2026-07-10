@@ -64,6 +64,12 @@ CONF_PROMPT = "prompt"
 CONF_PERCEPTION_ENABLED = "perception_enabled"
 CONF_PERCEPTION_ENTITIES = "perception_entities"
 CONF_PERCEPTION_PROMPT = "perception_prompt"
+# Consent-gated habit mining (options flow). Off by default; when enabled, the
+# integration analyzes its own observation history locally and surfaces recurring
+# patterns as automation PROPOSALS for the user to review. Nothing is created
+# silently and no observation data leaves the machine.
+CONF_HABIT_MINING_ENABLED = "habit_mining_enabled"
+CONF_HABIT_RETENTION_DAYS = "habit_retention_days"
 CONF_INSTALLATION_ID = "installation_id"
 CONF_KNOWLEDGE_SPACE_ID = "knowledge_space_id"
 CONF_URL = "url"
@@ -94,6 +100,7 @@ CONF_SEVERITY = "severity"
 CONF_CODE = "code"
 CONF_CONFIRM = "confirm"
 CONF_DRY_RUN = "dry_run"
+CONF_PROPOSAL_ID = "proposal_id"
 
 DEFAULT_DAEMON_URL = "http://127.0.0.1:3421"
 DEFAULT_EVENT_TYPE = "goodvibes_message"
@@ -116,6 +123,36 @@ DEFAULT_PERCEPTION_PROMPT = (
 PERCEPTION_MIN_INTERVAL_S = 10.0
 DEFAULT_PERCEPTION_DISPLAY_NAME = "GoodVibes Perception"
 DEFAULT_PERCEPTION_CONVERSATION_PREFIX = "perception"
+# Causal provenance. The integration tracks the Home Assistant context chain
+# (context.id / parent_id / user_id) that links a state change to its cause: an
+# automation run, a script, a scene, a service call, or a user. These are the
+# Home Assistant bus event types whose context identifies a triggering cause; a
+# state change's context is walked back through these to attribute the cause.
+EVENT_AUTOMATION_TRIGGERED = "automation_triggered"
+EVENT_SCRIPT_STARTED = "script_started"
+# Bound the in-memory causal indexes so a busy home cannot grow them without
+# limit. These are recent-history caches, not a full audit log.
+PROVENANCE_MAX_CAUSES = 1024
+PROVENANCE_MAX_CHANGES = 2048
+PROVENANCE_MAX_CHANGES_PER_ENTITY = 25
+PROVENANCE_CHAIN_MAX_DEPTH = 12
+
+# Consent-gated habit mining defaults and honest retention bounds. Observations
+# live in memory only, capped by both age (retention days) and count.
+DEFAULT_HABIT_MINING_ENABLED = False
+DEFAULT_HABIT_RETENTION_DAYS = 14
+HABIT_RETENTION_DAYS_MIN = 1
+HABIT_RETENTION_DAYS_MAX = 60
+HABIT_MAX_OBSERVATIONS = 20000
+# A pattern is proposed only when it recurs on at least this many distinct days
+# and this many total times inside the retained window.
+HABIT_MIN_DISTINCT_DAYS = 3
+HABIT_MIN_OCCURRENCES = 3
+# Width of the time-of-day bucket a recurring change is grouped into, in minutes.
+HABIT_TIME_BUCKET_MINUTES = 30
+# How often the local analysis runs while habit mining is enabled.
+HABIT_ANALYSIS_INTERVAL_MINUTES = 180
+
 # By default the Home Graph snapshot only carries entities the user has exposed
 # to assistants (the same boundary Home Assistant's own voice and conversation
 # agents respect). Set the config toggle to include everything in the registry.
@@ -180,6 +217,8 @@ TOOL_NAME_TO_ID = {
     "homeassistant_fire_event": "homeassistant:fire_event",
     "homeassistant_render_template": "homeassistant:render_template",
 }
+
+ISSUE_HABIT_PROPOSALS = "habit_proposals_available"
 
 TERMINAL_STATUSES = {
     "complete",
