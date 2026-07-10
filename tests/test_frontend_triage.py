@@ -20,7 +20,7 @@ from custom_components.goodvibes.const import DOMAIN
 from custom_components.goodvibes.data import GoodVibesRuntimeData
 from custom_components.goodvibes.frontend import _async_triage_home_graph_issues
 
-DAEMON = "http://127.0.0.1:3210"
+DAEMON = "http://127.0.0.1:3421"
 ENTRY_DATA = {
     "daemon_url": DAEMON,
     "daemon_token": "tok",

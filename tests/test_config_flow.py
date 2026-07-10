@@ -9,7 +9,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.goodvibes.const import DOMAIN
 
-DAEMON = "http://127.0.0.1:3210"
+DAEMON = "http://127.0.0.1:3421"
 
 USER_INPUT = {
     "daemon_url": DAEMON,

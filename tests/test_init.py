@@ -12,7 +12,7 @@ import custom_components.goodvibes as gv
 from custom_components.goodvibes import GoodVibesRuntimeData
 from custom_components.goodvibes.const import DOMAIN
 
-DAEMON = "http://127.0.0.1:3210"
+DAEMON = "http://127.0.0.1:3421"
 
 ENTRY_DATA = {
     "daemon_url": DAEMON,
