@@ -84,6 +84,14 @@
     "home_graph_issues": {
       "title": "GoodVibes Home Graph has unresolved issues",
       "description": "GoodVibes reported {count} unresolved Home Graph issue(s). Check the Home Graph issues sensor or call goodvibes.home_graph_issues for details."
+    },
+    "daemon_version_unsupported": {
+      "title": "GoodVibes daemon is too old for this integration",
+      "description": "This GoodVibes integration speaks a daemon contract that needs daemon version {minimum} or newer, but the connected daemon reports {advertised}. Update the GoodVibes daemon (@pellux/goodvibes-sdk) so its Home Assistant surface matches this integration."
+    },
+    "daemon_capabilities_missing": {
+      "title": "GoodVibes daemon is missing required surface capabilities",
+      "description": "The connected GoodVibes daemon does not advertise Home Assistant surface capabilities this integration relies on: {capabilities}. Update the GoodVibes daemon (@pellux/goodvibes-sdk) so its Home Assistant surface matches this integration."
     }
   }
 }

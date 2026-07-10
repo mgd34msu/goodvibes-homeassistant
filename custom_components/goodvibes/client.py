@@ -46,6 +46,8 @@ from .const import (
     ENDPOINT_STATUS,
     ENDPOINT_TOOLS,
     DEFAULT_CONVERSATION_TIMEOUT_MS,
+    MIN_DAEMON_VERSION,
+    REQUIRED_DAEMON_CAPABILITIES,
     TOOL_NAME_TO_ID,
     WEBHOOK_PATH,
 )
@@ -121,6 +123,12 @@ class GoodVibesClient:
         self._daemon_url = normalize_daemon_url(daemon_url)
         self._daemon_token = daemon_token.strip() if daemon_token else None
         self._webhook_secret = webhook_secret.strip()
+
+    #: The daemon HTTP contract this client is written against. The integration
+    #: checks these against what the daemon advertises at connect (see
+    #: ``version_check`` and ``data.GoodVibesRuntimeData._async_check_daemon_contract``).
+    minimum_daemon_version = MIN_DAEMON_VERSION
+    required_daemon_capabilities = REQUIRED_DAEMON_CAPABILITIES
 
     @property
     def daemon_url(self) -> str:

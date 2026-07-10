@@ -26,10 +26,15 @@ from .const import (
     CONF_STATUS,
     DEFAULT_DEVICE_NAME,
     DOMAIN,
+    ISSUE_DAEMON_CAPABILITIES,
+    ISSUE_DAEMON_VERSION,
+    MIN_DAEMON_VERSION,
+    REQUIRED_DAEMON_CAPABILITIES,
     SIGNAL_UPDATE,
     TERMINAL_STATUSES,
 )
 from .home_graph import build_home_graph_base_payload, default_knowledge_space_id
+from .version_check import DaemonContractCheck, check_daemon_contract
 
 
 def _result_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -78,6 +83,8 @@ class GoodVibesRuntimeData:
     home_graph_last_sync_at: str | None = None
     home_graph_last_response: dict[str, Any] = field(default_factory=dict)
     home_graph_last_error: str | None = None
+    daemon_contract_ok: bool = True
+    daemon_contract_error: str | None = None
     active_session_id: str | None = None
     active_message_id: str | None = None
     active_agent_id: str | None = None
@@ -192,12 +199,73 @@ class GoodVibesRuntimeData:
             self.tool_catalog = tool_catalog
             if self.status != "homeassistant_error":
                 self.last_error = None
+            self._async_check_daemon_contract(daemon_status, health)
         except GoodVibesClientError as err:
             self.status = "error"
             self.last_error = str(err)
         finally:
             await self.async_refresh_home_graph()
             async_dispatcher_send(self.hass, self.signal)
+
+    def _async_check_daemon_contract(
+        self,
+        daemon_status: dict[str, Any],
+        health: dict[str, Any],
+    ) -> None:
+        """Compare the daemon's advertised contract to the one this client speaks.
+
+        Reads the daemon software version (``/status``) and the Home Assistant
+        surface capabilities (``/api/homeassistant/health``) and raises a Home
+        Assistant repair issue when the daemon is older than the minimum this
+        client needs, or when a surface capability it relies on is missing.
+        Clears the issues again once the daemon satisfies the contract.
+        """
+
+        check: DaemonContractCheck = check_daemon_contract(
+            daemon_status,
+            health,
+            minimum_version=MIN_DAEMON_VERSION,
+            required_capabilities=REQUIRED_DAEMON_CAPABILITIES,
+        )
+        self.daemon_contract_ok = check.ok
+        if check.version_ok:
+            _async_clear_repair_issue(self.hass, ISSUE_DAEMON_VERSION)
+        else:
+            _async_create_repair_issue(
+                self.hass,
+                ISSUE_DAEMON_VERSION,
+                ISSUE_DAEMON_VERSION,
+                {
+                    "advertised": str(check.advertised_version or "unknown"),
+                    "minimum": check.minimum_version,
+                },
+                severity=ir.IssueSeverity.ERROR,
+            )
+        if check.capabilities_ok:
+            _async_clear_repair_issue(self.hass, ISSUE_DAEMON_CAPABILITIES)
+        else:
+            _async_create_repair_issue(
+                self.hass,
+                ISSUE_DAEMON_CAPABILITIES,
+                ISSUE_DAEMON_CAPABILITIES,
+                {"capabilities": ", ".join(check.missing_capabilities)},
+                severity=ir.IssueSeverity.ERROR,
+            )
+        if check.ok:
+            self.daemon_contract_error = None
+        else:
+            problems: list[str] = []
+            if not check.version_ok:
+                problems.append(
+                    f"daemon {check.advertised_version or 'unknown'} is older than "
+                    f"the required {check.minimum_version}"
+                )
+            if not check.capabilities_ok:
+                problems.append(
+                    "missing surface capabilities: "
+                    + ", ".join(check.missing_capabilities)
+                )
+            self.daemon_contract_error = "; ".join(problems)
 
     async def async_refresh_home_graph(self) -> None:
         """Refresh daemon Home Graph status without failing core status."""
@@ -375,6 +443,33 @@ class GoodVibesRuntimeData:
         async_dispatcher_send(self.hass, self.signal)
 
 
+def _async_create_repair_issue(
+    hass: HomeAssistant,
+    issue_id: str,
+    translation_key: str,
+    placeholders: dict[str, str] | None = None,
+    *,
+    severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
+) -> None:
+    """Create a Home Assistant repair issue for the GoodVibes integration."""
+
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=severity,
+        translation_key=translation_key,
+        translation_placeholders=placeholders,
+    )
+
+
+def _async_clear_repair_issue(hass: HomeAssistant, issue_id: str) -> None:
+    """Clear a GoodVibes Home Assistant repair issue."""
+
+    ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
 def _async_create_home_graph_issue(
     hass: HomeAssistant,
     issue_id: str,
@@ -383,21 +478,13 @@ def _async_create_home_graph_issue(
 ) -> None:
     """Create a Home Assistant repair issue for Home Graph."""
 
-    ir.async_create_issue(
-        hass,
-        DOMAIN,
-        issue_id,
-        is_fixable=False,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key=translation_key,
-        translation_placeholders=placeholders,
-    )
+    _async_create_repair_issue(hass, issue_id, translation_key, placeholders)
 
 
 def _async_clear_home_graph_issue(hass: HomeAssistant, issue_id: str) -> None:
     """Clear a Home Assistant repair issue for Home Graph."""
 
-    ir.async_delete_issue(hass, DOMAIN, issue_id)
+    _async_clear_repair_issue(hass, issue_id)
 
 
 def _home_graph_issue_count(payload: dict[str, Any]) -> int:
