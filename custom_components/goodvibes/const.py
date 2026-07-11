@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .generated_client import OPERATOR_ROUTES
+
 DOMAIN = "goodvibes"
 INTEGRATION_VERSION = "0.6.5"
 
@@ -10,6 +12,14 @@ INTEGRATION_VERSION = "0.6.5"
 # records the newest npm version the daemon contract was last validated against
 # (see docs/sdk-compatibility.md). CI echoes the live npm version against this
 # label as an informational nudge when the two drift.
+#
+# Kept as a hand-set literal, not read from generated_client.CONTRACT_VERSION:
+# the two coincide today but mean different things (CONTRACT_VERSION is what
+# the *mechanical* REST subset was generated against; this label attests a
+# human re-ran the docs/sdk-compatibility.md checklist, which also covers
+# hand-written surfaces the generated client does not). See
+# test_version_check.py::test_contract_version_is_at_least_min_daemon_version
+# for the one place this pin is actually checked against CONTRACT_VERSION.
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
 SDK_VALIDATED_VERSION = "1.6.1"
 
@@ -21,7 +31,9 @@ SDK_VALIDATED_VERSION = "1.6.1"
 # needs or is missing a surface capability it relies on. MIN_DAEMON_VERSION is
 # the oldest daemon whose Home Assistant surface speaks the contract this
 # integration depends on: the streaming conversation delta frames landed in SDK
-# 1.3.0, so that is the floor.
+# 1.3.0, so that is the floor. Conversation streaming is hand-written (not an
+# operator method — see generated_client.py's header), so this floor stays
+# hand-maintained for the same reason as SDK_VALIDATED_VERSION above.
 MIN_DAEMON_VERSION = "1.3.0"
 REQUIRED_DAEMON_CAPABILITIES = ("conversation-stream", "conversation-cancel")
 ISSUE_DAEMON_VERSION = "daemon_version_unsupported"
@@ -170,42 +182,44 @@ SIGNAL_UPDATE = "goodvibes_update"
 
 WEBHOOK_PATH = "/webhook/homeassistant"
 
-ENDPOINT_STATUS = "/status"
+# Hand-written: not operator methods (see generated_client.py's header).
 ENDPOINT_HEALTH = "/api/homeassistant/health"
 ENDPOINT_CONVERSATION = "/api/homeassistant/conversation"
 ENDPOINT_CONVERSATION_STREAM = "/api/homeassistant/conversation/stream"
 ENDPOINT_CONVERSATION_CANCEL = "/api/homeassistant/conversation/cancel"
-ENDPOINT_MANIFEST = "/api/channels/actions/homeassistant/homeassistant-manifest"
-ENDPOINT_HOMEASSISTANT_STATUS = (
-    "/api/channels/actions/homeassistant/homeassistant-status"
-)
-ENDPOINT_TOOLS = "/api/channels/tools/homeassistant"
-ENDPOINT_AGENT_TOOLS = "/api/channels/agent-tools/homeassistant"
-ENDPOINT_HOME_GRAPH_STATUS = "/api/homeassistant/home-graph/status"
-ENDPOINT_HOME_GRAPH_SYNC = "/api/homeassistant/home-graph/sync"
-ENDPOINT_HOME_GRAPH_INGEST_URL = "/api/homeassistant/home-graph/ingest/url"
-ENDPOINT_HOME_GRAPH_INGEST_NOTE = "/api/homeassistant/home-graph/ingest/note"
-ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT = "/api/homeassistant/home-graph/ingest/artifact"
-ENDPOINT_HOME_GRAPH_LINK = "/api/homeassistant/home-graph/link"
-ENDPOINT_HOME_GRAPH_UNLINK = "/api/homeassistant/home-graph/unlink"
-ENDPOINT_HOME_GRAPH_ASK = "/api/homeassistant/home-graph/ask"
-ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT = (
-    "/api/homeassistant/home-graph/device-passport"
-)
-ENDPOINT_HOME_GRAPH_ROOM_PAGE = "/api/homeassistant/home-graph/room-page"
-ENDPOINT_HOME_GRAPH_PACKET = "/api/homeassistant/home-graph/packet"
-ENDPOINT_HOME_GRAPH_ISSUES = "/api/homeassistant/home-graph/issues"
-ENDPOINT_HOME_GRAPH_FACT_REVIEW = "/api/homeassistant/home-graph/facts/review"
-ENDPOINT_HOME_GRAPH_SOURCES = "/api/homeassistant/home-graph/sources"
-ENDPOINT_HOME_GRAPH_PAGES = "/api/homeassistant/home-graph/pages"
-ENDPOINT_HOME_GRAPH_BROWSE = "/api/homeassistant/home-graph/browse"
-ENDPOINT_HOME_GRAPH_MAP = "/api/homeassistant/home-graph/map"
-ENDPOINT_HOME_GRAPH_EXPORT = "/api/homeassistant/home-graph/export"
-ENDPOINT_HOME_GRAPH_IMPORT = "/api/homeassistant/home-graph/import"
-ENDPOINT_HOME_GRAPH_RESET = "/api/homeassistant/home-graph/reset"
-ENDPOINT_HOME_GRAPH_REINDEX = "/api/homeassistant/home-graph/reindex"
-ENDPOINT_HOME_GRAPH_REFINEMENT_RUN = "/api/homeassistant/home-graph/refinement/run"
-ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS = "/api/homeassistant/home-graph/refinement/tasks"
+
+# Every constant below is an operator method this client consumes, so its path
+# is read from the vendored generated client (OPERATOR_ROUTES) instead of
+# being hand-typed. {surface}/{actionId}/{toolId} are filled with the one
+# Home Assistant surface value this integration uses.
+ENDPOINT_STATUS = OPERATOR_ROUTES["control.status"].path
+ENDPOINT_MANIFEST = OPERATOR_ROUTES["channels.actions.invoke"].path.format(surface="homeassistant", actionId="homeassistant-manifest")
+ENDPOINT_HOMEASSISTANT_STATUS = OPERATOR_ROUTES["channels.actions.invoke"].path.format(surface="homeassistant", actionId="homeassistant-status")
+ENDPOINT_TOOLS = OPERATOR_ROUTES["channels.tools.surface.list"].path.format(surface="homeassistant")
+ENDPOINT_AGENT_TOOLS = OPERATOR_ROUTES["channels.agent_tools.surface.list"].path.format(surface="homeassistant")
+ENDPOINT_HOME_GRAPH_STATUS = OPERATOR_ROUTES["homeassistant.homeGraph.status"].path
+ENDPOINT_HOME_GRAPH_SYNC = OPERATOR_ROUTES["homeassistant.homeGraph.syncHomeGraph"].path
+ENDPOINT_HOME_GRAPH_INGEST_URL = OPERATOR_ROUTES["homeassistant.homeGraph.ingestHomeGraphUrl"].path
+ENDPOINT_HOME_GRAPH_INGEST_NOTE = OPERATOR_ROUTES["homeassistant.homeGraph.ingestHomeGraphNote"].path
+ENDPOINT_HOME_GRAPH_INGEST_ARTIFACT = OPERATOR_ROUTES["homeassistant.homeGraph.ingestHomeGraphArtifact"].path
+ENDPOINT_HOME_GRAPH_LINK = OPERATOR_ROUTES["homeassistant.homeGraph.linkHomeGraphKnowledge"].path
+ENDPOINT_HOME_GRAPH_UNLINK = OPERATOR_ROUTES["homeassistant.homeGraph.unlinkHomeGraphKnowledge"].path
+ENDPOINT_HOME_GRAPH_ASK = OPERATOR_ROUTES["homeassistant.homeGraph.askHomeGraph"].path
+ENDPOINT_HOME_GRAPH_DEVICE_PASSPORT = OPERATOR_ROUTES["homeassistant.homeGraph.refreshDevicePassport"].path
+ENDPOINT_HOME_GRAPH_ROOM_PAGE = OPERATOR_ROUTES["homeassistant.homeGraph.generateRoomPage"].path
+ENDPOINT_HOME_GRAPH_PACKET = OPERATOR_ROUTES["homeassistant.homeGraph.generateHomeGraphPacket"].path
+ENDPOINT_HOME_GRAPH_ISSUES = OPERATOR_ROUTES["homeassistant.homeGraph.listHomeGraphIssues"].path
+ENDPOINT_HOME_GRAPH_FACT_REVIEW = OPERATOR_ROUTES["homeassistant.homeGraph.reviewHomeGraphFact"].path
+ENDPOINT_HOME_GRAPH_SOURCES = OPERATOR_ROUTES["homeassistant.homeGraph.sources.list"].path
+ENDPOINT_HOME_GRAPH_PAGES = OPERATOR_ROUTES["homeassistant.homeGraph.pages.list"].path
+ENDPOINT_HOME_GRAPH_BROWSE = OPERATOR_ROUTES["homeassistant.homeGraph.browse"].path
+ENDPOINT_HOME_GRAPH_MAP = OPERATOR_ROUTES["homeassistant.homeGraph.map"].path
+ENDPOINT_HOME_GRAPH_EXPORT = OPERATOR_ROUTES["homeassistant.homeGraph.export"].path
+ENDPOINT_HOME_GRAPH_IMPORT = OPERATOR_ROUTES["homeassistant.homeGraph.import"].path
+ENDPOINT_HOME_GRAPH_RESET = OPERATOR_ROUTES["homeassistant.homeGraph.reset"].path
+ENDPOINT_HOME_GRAPH_REINDEX = OPERATOR_ROUTES["homeassistant.homeGraph.reindex"].path
+ENDPOINT_HOME_GRAPH_REFINEMENT_RUN = OPERATOR_ROUTES["homeassistant.homeGraph.refinement.run"].path
+ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS = OPERATOR_ROUTES["homeassistant.homeGraph.refinement.tasks.list"].path
 
 TOOL_NAME_TO_ID = {
     "homeassistant_manifest": "homeassistant:manifest",

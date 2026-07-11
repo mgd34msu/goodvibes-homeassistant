@@ -51,6 +51,7 @@ from .const import (
     TOOL_NAME_TO_ID,
     WEBHOOK_PATH,
 )
+from .generated_client import OPERATOR_ROUTES
 
 DEFAULT_REQUEST_TIMEOUT = 20
 HOME_GRAPH_SYNC_TIMEOUT = 600
@@ -264,18 +265,20 @@ class GoodVibesClient:
     async def cancel_task(self, task_id: str) -> dict[str, Any]:
         """Cancel a runtime task by task id."""
 
-        path = f"/api/tasks/{quote(task_id, safe='')}/cancel"
+        path = OPERATOR_ROUTES["tasks.cancel"].path.format(taskId=quote(task_id, safe=""))
         return await self._request("POST", path, json={})
 
     async def agent_status(self, agent_id: str) -> dict[str, Any]:
         """Return lightweight status for an agent id."""
 
-        return await self._request("GET", f"/task/{quote(agent_id, safe='')}")
+        path = OPERATOR_ROUTES["tasks.status"].path.format(agentId=quote(agent_id, safe=""))
+        return await self._request("GET", path)
 
     async def runtime_task(self, task_id: str) -> dict[str, Any]:
         """Return a runtime task record."""
 
-        return await self._request("GET", f"/api/tasks/{quote(task_id, safe='')}")
+        path = OPERATOR_ROUTES["tasks.get"].path.format(taskId=quote(task_id, safe=""))
+        return await self._request("GET", path)
 
     async def call_tool(
         self, tool: str, input_payload: Mapping[str, Any]
@@ -283,7 +286,7 @@ class GoodVibesClient:
         """Invoke a daemon-exposed Home Assistant tool."""
 
         tool_id = TOOL_NAME_TO_ID.get(tool, tool)
-        path = f"/api/channels/tools/homeassistant/{quote(tool_id, safe='')}"
+        path = OPERATOR_ROUTES["channels.tools.invoke"].path.format(surface="homeassistant", toolId=quote(tool_id, safe=""))
         return await self._request("POST", path, json=dict(input_payload))
 
     async def home_graph_status(
@@ -545,7 +548,7 @@ class GoodVibesClient:
     ) -> dict[str, Any]:
         """Return one Home Graph refinement task."""
 
-        path = f"{ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS}/{quote(task_id, safe='')}"
+        path = OPERATOR_ROUTES["homeassistant.homeGraph.refinement.task.get"].path.format(id=quote(task_id, safe=""))
         return await self._request("GET", _query_path(path, payload))
 
     async def home_graph_refinement_run(
@@ -567,10 +570,7 @@ class GoodVibesClient:
     ) -> dict[str, Any]:
         """Cancel a queued or active Home Graph refinement task."""
 
-        path = (
-            f"{ENDPOINT_HOME_GRAPH_REFINEMENT_TASKS}/"
-            f"{quote(task_id, safe='')}/cancel"
-        )
+        path = OPERATOR_ROUTES["homeassistant.homeGraph.refinement.task.cancel"].path.format(id=quote(task_id, safe=""))
         return await self._request("POST", path, json=dict(payload))
 
     async def _webhook(self, payload: Mapping[str, Any]) -> dict[str, Any]:
