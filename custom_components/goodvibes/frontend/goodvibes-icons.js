@@ -1,4 +1,4 @@
-/*! GoodVibes Home Assistant goodvibes-icons.js v0.6.5
+/*! GoodVibes Home Assistant goodvibes-icons.js v0.7.0
  * Built from frontend/src/goodvibes-icons.js by frontend/build.mjs — do not edit the
  * served artifact directly; edit the source and rebuild. */
 

@@ -13,13 +13,29 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.3.3` (`const.SDK_VALIDATED_VERSION`).
+- **Last validated against:** `1.7.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-11.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
-every route the integration calls is intact at `1.3.3`. A pin-forward to a newer SDK is therefore
+every route the integration calls is intact at `1.7.0`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+The 2026-07-11 pass regenerated `custom_components/goodvibes/generated_client.py` from the SDK's
+own generator (`bun run homeassistant-client:generate` in a sibling `goodvibes-sdk` checkout,
+against its published `1.7.0` tag) and vendored the result. The regenerated artifact carried no
+route, method, or shape changes beyond its own `Contract product version` and `CONTRACT_VERSION`
+labels moving from `1.6.1` to `1.7.0` — the operator contract's REST subset this client depends on
+(33 methods) is unchanged. `tests/test_generated_client_sync.py` confirmed the vendored copy is
+byte-identical to that regenerated artifact, and this repo's full local check recipe from
+`docs/development.md` (`python -m compileall`, the frontend JS syntax check, the release-metadata
+consistency check, `git diff --check`, and the full `pytest` suite) passed against it, including
+the response-shape assertions below and
+`test_version_check.py::test_contract_version_is_at_least_min_daemon_version`. The SDK's
+own `1.7.0` changelog entry for `/api/homeassistant/conversation` (optional home-graph grounding
+reference) documents a hand-written surface, not a generated one; this integration already sends
+that grounding reference unconditionally (see commit `b815fd5`), so no further client change was
+needed for it.
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant once
 the daemon reports healthy so the integration reopens its daemon client.

@@ -2,6 +2,55 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-07-11
+
+- Validate against `@pellux/goodvibes-sdk` 1.7.0. Regenerate and vendor
+  `custom_components/goodvibes/generated_client.py` from the SDK's own
+  generator against the published `1.7.0` contract; the operator REST
+  subset this client depends on (33 methods) is unchanged from `1.6.1`, so
+  only the contract version labels moved.
+- Ground every Assist conversation turn in the registered Home Graph: the
+  turn now sends the same installation/knowledge-space identifiers the
+  integration already registers and re-syncs the graph under, so a
+  `1.7.0`+ daemon can fold retrieved home-graph grounding into the turn's
+  system prompt. Older daemons ignore the field and complete the turn
+  unchanged.
+- Route conversation turns through Home Assistant's `llm` helper layer,
+  with a new options-flow choice of Assist LLM API and a custom prompt;
+  the daemon still owns the model call and Home Assistant control.
+- Filter the Home Graph snapshot to entities exposed to assistants by
+  default (matching Home Assistant's own voice/conversation boundary),
+  with an opt-in toggle to carry the full registry, and add per-entity
+  `lastChanged`/`lastUpdated` observation timestamps to each snapshot
+  entity.
+- Re-sync the daemon Home Graph automatically, debounced, whenever the
+  entity, device, or area registries change, instead of only at startup.
+- Check the daemon's advertised version and Home Assistant surface
+  capabilities at connect and raise a Home Assistant repair issue when
+  the daemon is older than this client's minimum or missing a required
+  capability, instead of failing obscurely mid-conversation.
+- Require an administrator for every GoodVibes service that changes
+  state, submits daemon work, or writes/rebuilds/destroys the Home
+  Graph; read-only query services stay open, matching Home Assistant's
+  own admin-only service gating.
+- Add causal provenance ("why did the light turn on") from the Home
+  Assistant context chain, an admin-gated `goodvibes.causal_chain`
+  service, and consent-gated, off-by-default local habit mining that
+  proposes automations (never creates them silently) via a repair
+  notification and the `goodvibes.habit_proposals` /
+  `goodvibes.accept_habit` services.
+- Add opt-in, rate-limited perception triggers: selected entities'
+  state changes can start an attributed GoodVibes daemon session
+  carrying the triggering context, configured in the admin-only options
+  flow and off by default.
+- Build the sidebar panel assets from checked-in source with a
+  reproducible esbuild pipeline (`frontend/build.mjs`) instead of
+  hand-editing the served bundle; CI and the release workflow verify the
+  committed artifacts match a fresh build.
+- Fix: correct the default daemon URL port from 3210 to the daemon's
+  actual default control-plane port, 3421, and drop a stale pinned SDK
+  version from the config flow's setup description.
+
 ## 0.6.5 - 2026-07-09
 
 - Validate against `@pellux/goodvibes-sdk` 1.6.1. On a 1.6.1+ daemon,
