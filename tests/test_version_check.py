@@ -6,11 +6,25 @@ from custom_components.goodvibes.const import (
     MIN_DAEMON_VERSION,
     REQUIRED_DAEMON_CAPABILITIES,
 )
+from custom_components.goodvibes.generated_client import CONTRACT_VERSION
 from custom_components.goodvibes.version_check import (
     check_daemon_contract,
     is_version_at_least,
     parse_version,
 )
+
+
+def test_contract_version_is_at_least_min_daemon_version():
+    """The generated contract's version must not fall below the declared floor.
+
+    MIN_DAEMON_VERSION is hand-maintained (see const.py) because it covers
+    hand-written surfaces the generated client does not, but it still must
+    describe a daemon no newer than the one the mechanical REST subset was
+    generated against — otherwise the floor would claim compatibility with a
+    contract version this client was never checked against.
+    """
+
+    assert is_version_at_least(CONTRACT_VERSION, MIN_DAEMON_VERSION)
 
 
 def test_parse_version_ignores_prefix_and_suffix():
