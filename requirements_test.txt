@@ -11,3 +11,12 @@ pytest-homeassistant-custom-component==0.13.316
 # a test sets up the frontend component, which imports the built frontend
 # package. Pin it to the version homeassistant 2026.2.3 expects.
 home-assistant-frontend==20260128.6
+
+# tests/test_assist_pipeline.py and tests/test_conversation.py import
+# homeassistant.components.conversation, whose own manifest.json requirements
+# (hassil, home-assistant-intents) Home Assistant normally installs at
+# integration-load time but pytest-homeassistant-custom-component does not
+# auto-install for tests. Pin to exactly what the conversation component's
+# manifest.json declares for homeassistant 2026.2.3.
+hassil==3.5.0
+home-assistant-intents==2026.1.28
