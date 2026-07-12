@@ -76,6 +76,17 @@ class GoodVibesConversationEntity(ConversationEntity):
             "sw_version": self._runtime.sw_version,
         }
 
+    @property
+    def available(self) -> bool:
+        """Report unavailable while the daemon connection is down.
+
+        A turn submitted while the daemon is unreachable (or fails its
+        version/capability contract) can only fail, so the agent reports
+        unavailable instead of accepting Assist requests it cannot serve.
+        """
+
+        return self._runtime.daemon_connected
+
     async def _async_handle_message(
         self,
         user_input: ConversationInput,

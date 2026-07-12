@@ -99,6 +99,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = GoodVibesDataUpdateCoordinator(hass, entry, runtime)
     runtime.coordinator = coordinator
+    # Redo the daemon-side half of setup once the reconnect watchdog
+    # (data.GoodVibesRuntimeData) gets the connection back: the device
+    # registry entry (sw_version may have changed across the outage) and the
+    # Home Graph sync, so a reconnect ends up equivalent to a fresh setup
+    # with no action from the user.
+    runtime.on_daemon_reconnected = lambda: _async_handle_daemon_reconnected(
+        hass, entry, runtime
+    )
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = runtime
@@ -122,15 +130,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         runtime.event_type, runtime.async_handle_event
     )
 
-    device_registry = dr.async_get(hass)
-    device_registry.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, runtime.device_identifier)},
-        manufacturer="GoodVibes",
-        model=runtime.device_model,
-        name=runtime.device_name,
-        sw_version=runtime.sw_version,
-    )
+    _async_register_device(hass, entry, runtime)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if runtime.home_graph_enabled:
@@ -166,6 +166,45 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # configuration.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
+
+
+@callback
+def _async_register_device(
+    hass: HomeAssistant, entry: ConfigEntry, runtime: GoodVibesRuntimeData
+) -> None:
+    """Create or refresh the device registry entry for the daemon.
+
+    Idempotent, so it is safe to call again after a reconnect (see
+    ``_async_handle_daemon_reconnected``) in case the daemon's reported
+    sw_version changed while the connection was down.
+    """
+
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, runtime.device_identifier)},
+        manufacturer="GoodVibes",
+        model=runtime.device_model,
+        name=runtime.device_name,
+        sw_version=runtime.sw_version,
+    )
+
+
+async def _async_handle_daemon_reconnected(
+    hass: HomeAssistant, entry: ConfigEntry, runtime: GoodVibesRuntimeData
+) -> None:
+    """Redo the daemon-side setup work once the connection recovers.
+
+    Mirrors what async_setup_entry does at initial connect against the
+    daemon: refresh the device registry entry and re-sync the Home Graph (if
+    enabled). Manifest fetch and the batched status/contract refresh already
+    ran in the reconnect attempt that called this, so this only needs the
+    parts of setup that are not part of that refresh.
+    """
+
+    _async_register_device(hass, entry, runtime)
+    if runtime.home_graph_enabled:
+        await _async_auto_sync_home_graph(runtime, trigger="reconnect")
 
 
 @callback
@@ -268,6 +307,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runtime.unsubscribe_event()
         if runtime and runtime.unsubscribe_auto_sync:
             runtime.unsubscribe_auto_sync()
+        if runtime and runtime.reconnect_unsub:
+            runtime.reconnect_unsub()
         if runtime and runtime.home_graph_watcher:
             runtime.home_graph_watcher.async_stop()
         if runtime and runtime.perception_manager:

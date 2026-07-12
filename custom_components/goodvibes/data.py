@@ -10,6 +10,8 @@ entity platforms can import the type without importing the service handlers.
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,9 +19,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
-from .client import GoodVibesClient, GoodVibesClientError
+from .client import GoodVibesClient, GoodVibesClientError, GoodVibesUnavailableError
 from .const import (
     CONF_INSTALLATION_ID,
     CONF_KNOWLEDGE_SPACE_ID,
@@ -27,14 +30,19 @@ from .const import (
     DEFAULT_DEVICE_NAME,
     DOMAIN,
     ISSUE_DAEMON_CAPABILITIES,
+    ISSUE_DAEMON_UNREACHABLE,
     ISSUE_DAEMON_VERSION,
     MIN_DAEMON_VERSION,
+    RECONNECT_INITIAL_DELAY_S,
+    RECONNECT_MAX_DELAY_S,
     REQUIRED_DAEMON_CAPABILITIES,
     SIGNAL_UPDATE,
     TERMINAL_STATUSES,
 )
 from .home_graph import build_home_graph_base_payload, default_knowledge_space_id
 from .version_check import DaemonContractCheck, check_daemon_contract
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _result_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -85,6 +93,20 @@ class GoodVibesRuntimeData:
     home_graph_last_error: str | None = None
     daemon_contract_ok: bool = True
     daemon_contract_error: str | None = None
+    # True only when the daemon is both reachable and satisfies the version and
+    # capability contract; entities key their availability off this so a
+    # dropped or incompatible connection never serves stale state as if it
+    # were current (see async_refresh / _async_mark_daemon_*).
+    daemon_connected: bool = True
+    daemon_unreachable_error: str | None = None
+    # Cancel callback for the pending reconnect attempt (async_call_later),
+    # None when no reconnect is scheduled.
+    reconnect_unsub: Any | None = None
+    reconnect_delay: float = RECONNECT_INITIAL_DELAY_S
+    # Set by async_setup_entry to redo the daemon-side setup work (device
+    # registry refresh, Home Graph sync) once a reconnect succeeds, so
+    # recovering is equivalent to a fresh setup with no user action.
+    on_daemon_reconnected: Callable[[], Awaitable[None]] | None = None
     active_session_id: str | None = None
     active_message_id: str | None = None
     active_agent_id: str | None = None
@@ -196,6 +218,13 @@ class GoodVibesRuntimeData:
         asyncio.gather instead of one serial round-trip after another. The Home
         Graph reads run as a second concurrent batch inside
         async_refresh_home_graph.
+
+        This is also the daemon-connection probe: a connection failure here
+        (as opposed to an error response from a reachable daemon) marks the
+        connection down, raises the honest repair issue, and starts the
+        reconnect watchdog. This method never raises a client error itself —
+        callers (setup, the coordinator, the reconnect watchdog) can always
+        await it and read the outcome off ``daemon_connected``/``status``.
         """
 
         try:
@@ -207,38 +236,56 @@ class GoodVibesRuntimeData:
                     self.client.tool_catalog(),
                 )
             )
-            self.health = health
-            self.daemon_status = daemon_status
-            self.status = str(daemon_status.get("status") or "running")
-            self.homeassistant_status = _result_payload(raw_surface_status)
-            if self.homeassistant_status.get("ok") is False:
-                self.status = "homeassistant_error"
-                self.last_error = str(
-                    self.homeassistant_status.get("error") or "Home Assistant surface error"
-                )
-            self.tool_catalog = tool_catalog
-            if self.status != "homeassistant_error":
-                self.last_error = None
-            self._async_check_daemon_contract(daemon_status, health)
+        except GoodVibesUnavailableError as err:
+            self._async_mark_daemon_unreachable(str(err))
+            async_dispatcher_send(self.hass, self.signal)
+            return
         except GoodVibesClientError as err:
             self.status = "error"
             self.last_error = str(err)
-        finally:
             await self.async_refresh_home_graph()
             async_dispatcher_send(self.hass, self.signal)
+            return
+
+        self.health = health
+        self.daemon_status = daemon_status
+        self.status = str(daemon_status.get("status") or "running")
+        self.homeassistant_status = _result_payload(raw_surface_status)
+        if self.homeassistant_status.get("ok") is False:
+            self.status = "homeassistant_error"
+            self.last_error = str(
+                self.homeassistant_status.get("error") or "Home Assistant surface error"
+            )
+        self.tool_catalog = tool_catalog
+        if self.status != "homeassistant_error":
+            self.last_error = None
+        check = self._async_check_daemon_contract(daemon_status, health)
+        if check.ok:
+            self._async_mark_daemon_reachable()
+        else:
+            # The daemon answered but fails the version/capability contract.
+            # daemon_version_unsupported / daemon_capabilities_missing (raised
+            # above by _async_check_daemon_contract) already say honestly why;
+            # this just keeps entities unavailable and retries instead of
+            # resuming normal operation against an incompatible daemon.
+            self._async_mark_daemon_not_ready()
+        await self.async_refresh_home_graph()
+        async_dispatcher_send(self.hass, self.signal)
 
     def _async_check_daemon_contract(
         self,
         daemon_status: dict[str, Any],
         health: dict[str, Any],
-    ) -> None:
+    ) -> DaemonContractCheck:
         """Compare the daemon's advertised contract to the one this client speaks.
 
         Reads the daemon software version (``/status``) and the Home Assistant
         surface capabilities (``/api/homeassistant/health``) and raises a Home
         Assistant repair issue when the daemon is older than the minimum this
         client needs, or when a surface capability it relies on is missing.
-        Clears the issues again once the daemon satisfies the contract.
+        Clears the issues again once the daemon satisfies the contract. Returns
+        the check so the caller can gate resuming normal operation on it (see
+        async_refresh).
         """
 
         check: DaemonContractCheck = check_daemon_contract(
@@ -286,6 +333,109 @@ class GoodVibesRuntimeData:
                     + ", ".join(check.missing_capabilities)
                 )
             self.daemon_contract_error = "; ".join(problems)
+        return check
+
+    @callback
+    def _async_mark_daemon_reachable(self) -> None:
+        """Record a fully healthy daemon connection and stop retrying.
+
+        Reachable and contract-compatible: entities resume normal operation
+        and the daemon_unreachable repair issue clears. (daemon_version /
+        daemon_capabilities are handled separately by
+        _async_check_daemon_contract, since they can be raised or cleared
+        independently of reachability.)
+        """
+
+        if not self.daemon_connected:
+            _LOGGER.info("GoodVibes daemon connection restored")
+        self.daemon_connected = True
+        self.daemon_unreachable_error = None
+        self.reconnect_delay = RECONNECT_INITIAL_DELAY_S
+        _async_clear_repair_issue(self.hass, ISSUE_DAEMON_UNREACHABLE)
+
+    @callback
+    def _async_mark_daemon_not_ready(self) -> None:
+        """The daemon answered but fails the version/capability contract.
+
+        Distinct from an unreachable daemon: the connection itself is fine, so
+        this does not raise ISSUE_DAEMON_UNREACHABLE (that would be
+        dishonest) — the version/capability issues already say why. Entities
+        still report unavailable and the reconnect watchdog keeps retrying,
+        because this client cannot safely operate against an incompatible
+        daemon.
+        """
+
+        self.daemon_connected = False
+        self.daemon_unreachable_error = None
+        _async_clear_repair_issue(self.hass, ISSUE_DAEMON_UNREACHABLE)
+        self._async_ensure_reconnect_scheduled()
+
+    @callback
+    def _async_mark_daemon_unreachable(self, error: str) -> None:
+        """Record that the daemon connection dropped.
+
+        Entities key their availability off ``daemon_connected`` so they
+        report unavailable instead of serving stale state, and a repair issue
+        tells the user honestly what happened. Schedules the reconnect
+        watchdog (if one is not already pending) so recovery needs no user
+        action.
+        """
+
+        was_connected = self.daemon_connected
+        self.daemon_connected = False
+        self.daemon_unreachable_error = error
+        self.status = "unavailable"
+        self.last_error = error
+        _async_create_repair_issue(
+            self.hass,
+            ISSUE_DAEMON_UNREACHABLE,
+            ISSUE_DAEMON_UNREACHABLE,
+            {"error": error[:200]},
+            severity=ir.IssueSeverity.ERROR,
+        )
+        if was_connected:
+            _LOGGER.warning("GoodVibes daemon connection lost: %s", error)
+        self._async_ensure_reconnect_scheduled()
+
+    @callback
+    def _async_ensure_reconnect_scheduled(self) -> None:
+        """Schedule the next reconnect attempt if one is not already pending.
+
+        Uses the current backoff delay, then doubles it (capped at
+        RECONNECT_MAX_DELAY_S) so a second consecutive failure waits longer
+        than the first. _async_mark_daemon_reachable resets the delay back to
+        RECONNECT_INITIAL_DELAY_S once a probe succeeds, so the next drop
+        starts the ramp over.
+        """
+
+        if self.reconnect_unsub is not None:
+            return
+        delay = self.reconnect_delay
+        self.reconnect_unsub = async_call_later(
+            self.hass, delay, self._async_reconnect_attempt
+        )
+        self.reconnect_delay = min(delay * 2, RECONNECT_MAX_DELAY_S)
+
+    async def _async_reconnect_attempt(self, _now: Any) -> None:
+        """One reconnect probe.
+
+        Repeats the same daemon reads setup makes (manifest fetch, then the
+        batched core refresh with its version/capability probe). A failure
+        here runs straight back through async_refresh's own
+        _async_mark_daemon_unreachable/_async_mark_daemon_not_ready, which
+        schedules the next attempt at the (already-doubled) backoff delay —
+        this method does not need to schedule retries itself. On success it
+        runs ``on_daemon_reconnected`` (set by async_setup_entry) to redo the
+        rest of what setup does against the daemon — currently the device
+        registry refresh and the Home Graph sync — so reconnecting is
+        equivalent to a fresh setup and needs no action from the user.
+        """
+
+        self.reconnect_unsub = None
+        await self.async_fetch_manifest()
+        await self.async_refresh()
+        if self.daemon_connected and self.on_daemon_reconnected is not None:
+            await self.on_daemon_reconnected()
 
     async def async_refresh_home_graph(self) -> None:
         """Refresh daemon Home Graph status without failing core status."""

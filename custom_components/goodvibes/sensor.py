@@ -295,6 +295,19 @@ class GoodVibesSensor(SensorEntity):
         }
 
     @property
+    def available(self) -> bool:
+        """Report unavailable while the daemon connection is down.
+
+        Every value here is read from the daemon; serving the last successful
+        read as if it were current once the connection has dropped (or the
+        daemon fails the version/capability contract) would be dishonest, so
+        this mirrors GoodVibesRuntimeData.daemon_connected instead of always
+        returning True.
+        """
+
+        return self._runtime.daemon_connected
+
+    @property
     def native_value(self) -> Any:
         """Return the sensor value."""
 

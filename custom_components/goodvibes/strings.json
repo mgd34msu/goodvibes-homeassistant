@@ -98,6 +98,10 @@
       "title": "GoodVibes daemon is missing required surface capabilities",
       "description": "The connected GoodVibes daemon does not advertise Home Assistant surface capabilities this integration relies on: {capabilities}. Update the GoodVibes daemon (@pellux/goodvibes-sdk) so its Home Assistant surface matches this integration."
     },
+    "daemon_unreachable": {
+      "title": "GoodVibes daemon is unreachable",
+      "description": "The GoodVibes integration cannot reach the daemon: {error}. GoodVibes entities will report unavailable until the connection returns; the integration is retrying automatically and needs no action from you."
+    },
     "habit_proposals_available": {
       "title": "GoodVibes has habit automation proposals to review",
       "description": "GoodVibes habit mining detected {count} recurring pattern(s) in your locally observed history and prepared automation proposals. Review them with the goodvibes.habit_proposals service; nothing is created until you accept a proposal with goodvibes.accept_habit."
