@@ -38,6 +38,18 @@ MIN_DAEMON_VERSION = "1.3.0"
 REQUIRED_DAEMON_CAPABILITIES = ("conversation-stream", "conversation-cancel")
 ISSUE_DAEMON_VERSION = "daemon_version_unsupported"
 ISSUE_DAEMON_CAPABILITIES = "daemon_capabilities_missing"
+# Raised while the daemon cannot be reached at all (connection refused, timed
+# out) as distinct from ISSUE_DAEMON_VERSION/ISSUE_DAEMON_CAPABILITIES, which
+# mean the daemon answered but fails the contract. Cleared the moment a probe
+# reaches the daemon again, whether or not the contract then passes.
+ISSUE_DAEMON_UNREACHABLE = "daemon_unreachable"
+
+# The daemon-connection watchdog (data.GoodVibesRuntimeData) retries an
+# unreachable or contract-incompatible daemon on an exponential backoff that
+# starts here and never gives up, so the integration recovers on its own
+# instead of waiting for Home Assistant to restart.
+RECONNECT_INITIAL_DELAY_S = 1.0
+RECONNECT_MAX_DELAY_S = 60.0
 
 UPDATE_REPOSITORY = "mgd34msu/goodvibes-homeassistant"
 UPDATE_RELEASES_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
