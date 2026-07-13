@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-07-13
+
+- Validate against `@pellux/goodvibes-sdk` 1.8.0. Re-vendor
+  `custom_components/goodvibes/generated_client.py` byte-for-byte from the
+  published `1.8.0` Python artifact. The only contract change is on
+  `GET /status`: the daemon now accepts an optional receipt-consumption
+  request and may return a `receipts` list alongside `status` and `version`.
+  This field is additive and daemon-side; the integration reads only
+  `status` and `version`, so no client code changed. All 33 consumed
+  operator methods and their REST routes are unchanged from `1.7.1`.
+- Re-run the `docs/sdk-compatibility.md` validation checklist against a
+  daemon booted from the published `1.8.0` SDK on an isolated home and an
+  ephemeral port; the daemon HTTP contract the integration depends on
+  (`/status`, `/api/homeassistant/health`, the Home Graph routes, and the
+  conversation/stream/cancel routes) responded with the expected shapes.
+
 ## 0.7.0 - 2026-07-11
 
 - Validate against `@pellux/goodvibes-sdk` 1.7.0. Regenerate and vendor
