@@ -13,29 +13,33 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.7.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-11.
+- **Last validated against:** `1.8.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-13.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
-every route the integration calls is intact at `1.7.0`. A pin-forward to a newer SDK is therefore
+every route the integration calls is intact at `1.8.0`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
 
-The 2026-07-11 pass regenerated `custom_components/goodvibes/generated_client.py` from the SDK's
-own generator (`bun run homeassistant-client:generate` in a sibling `goodvibes-sdk` checkout,
-against its published `1.7.0` tag) and vendored the result. The regenerated artifact carried no
-route, method, or shape changes beyond its own `Contract product version` and `CONTRACT_VERSION`
-labels moving from `1.6.1` to `1.7.0` — the operator contract's REST subset this client depends on
-(33 methods) is unchanged. `tests/test_generated_client_sync.py` confirmed the vendored copy is
-byte-identical to that regenerated artifact, and this repo's full local check recipe from
-`docs/development.md` (`python -m compileall`, the frontend JS syntax check, the release-metadata
-consistency check, `git diff --check`, and the full `pytest` suite) passed against it, including
-the response-shape assertions below and
-`test_version_check.py::test_contract_version_is_at_least_min_daemon_version`. The SDK's
-own `1.7.0` changelog entry for `/api/homeassistant/conversation` (optional home-graph grounding
-reference) documents a hand-written surface, not a generated one; this integration already sends
-that grounding reference unconditionally (see commit `b815fd5`), so no further client change was
-needed for it.
+The 2026-07-13 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
+from the published `1.8.0` package's own generated Python artifact
+(`dist/contracts/artifacts/python/homeassistant_operator_client.py`, extracted from
+`@pellux/goodvibes-sdk@1.8.0` on npm). The only contract change from `1.7.1` is on `GET /status`:
+`ControlStatusInput` is now a typed shape carrying an optional `receipts` request
+(`Literal["consume"]`) and `ControlStatusOutput` gains an optional `receipts` list — the daemon's
+new receipt-consumption contract. Both are additive and daemon-side; the integration reads only
+`status` and `version` from `/status`, so no client code changed. The operator contract's REST
+subset this client depends on (33 methods) and all its routes are unchanged. This pass also booted
+a daemon from the published `1.8.0` SDK (isolated home, ephemeral port) and re-ran the validation
+checklist against it: `/status` (including a bad-token `401` and the new `receipts=consume`
+response), `/api/homeassistant/health` (capabilities include `conversation-stream` and
+`conversation-cancel`), the manifest action, and the Home Graph status/sync/ask/pages/map/reindex/
+issues routes all returned the expected shapes, and the conversation, conversation/stream, and
+conversation/cancel routes exist and stream the expected frame envelope. This repo's full local
+check recipe from `docs/development.md` (`python -m compileall`, the frontend JS syntax check, the
+release-metadata consistency check, `git diff --check`, and the full `pytest` suite) passed against
+it, including the response-shape assertions below and
+`test_version_check.py::test_contract_version_is_at_least_min_daemon_version`.
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant once
 the daemon reports healthy so the integration reopens its daemon client.
