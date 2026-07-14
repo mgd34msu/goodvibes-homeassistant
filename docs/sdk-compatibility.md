@@ -13,32 +13,31 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.8.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-13.
+- **Last validated against:** `1.9.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-14.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
-every route the integration calls is intact at `1.8.0`. A pin-forward to a newer SDK is therefore
+every route the integration calls is intact at `1.9.0`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
 
-The 2026-07-13 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
-from the published `1.8.0` package's own generated Python artifact
+The 2026-07-14 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
+from the published `1.9.0` package's own generated Python artifact
 (`dist/contracts/artifacts/python/homeassistant_operator_client.py`, extracted from
-`@pellux/goodvibes-sdk@1.8.0` on npm). The only contract change from `1.7.1` is on `GET /status`:
-`ControlStatusInput` is now a typed shape carrying an optional `receipts` request
-(`Literal["consume"]`) and `ControlStatusOutput` gains an optional `receipts` list — the daemon's
-new receipt-consumption contract. Both are additive and daemon-side; the integration reads only
-`status` and `version` from `/status`, so no client code changed. The operator contract's REST
-subset this client depends on (33 methods) and all its routes are unchanged. This pass also booted
-a daemon from the published `1.8.0` SDK (isolated home, ephemeral port) and re-ran the validation
-checklist against it: `/status` (including a bad-token `401` and the new `receipts=consume`
-response), `/api/homeassistant/health` (capabilities include `conversation-stream` and
-`conversation-cancel`), the manifest action, and the Home Graph status/sync/ask/pages/map/reindex/
-issues routes all returned the expected shapes, and the conversation, conversation/stream, and
-conversation/cancel routes exist and stream the expected frame envelope. This repo's full local
-check recipe from `docs/development.md` (`python -m compileall`, the frontend JS syntax check, the
-release-metadata consistency check, `git diff --check`, and the full `pytest` suite) passed against
-it, including the response-shape assertions below and
+`@pellux/goodvibes-sdk@1.9.0` on npm). The only diff from `1.8.0` is the version label itself
+(`Contract product version: 1.9.0` and `CONTRACT_VERSION = "1.9.0"`); the operator contract's REST
+subset this client depends on (33 methods) and all its route bindings and types are byte-for-byte
+unchanged. This pass also booted a daemon from the published `1.9.0` SDK (isolated home, ephemeral
+port, Home Assistant surface enabled) and re-ran the validation checklist against it: `/status`
+(including a bad-token `401` and the `receipts=consume` response, both reporting `version: 1.9.0`),
+`/api/homeassistant/health` (capabilities include `conversation-stream` and `conversation-cancel`),
+the manifest action, and the Home Graph status/sync/ask/pages/map/reindex/issues/refinement-run
+routes all returned the expected shapes, and the conversation, conversation/stream, and
+conversation/cancel routes returned the expected results, including a full streamed frame envelope
+(`delta` frames followed by a terminal `final` frame) and a real assistant reply. This repo's full
+local check recipe from `docs/development.md` (`python -m compileall`, the frontend JS syntax
+check, the release-metadata consistency check, `git diff --check`, and the full `pytest` suite)
+passed against it, including the response-shape assertions below and
 `test_version_check.py::test_contract_version_is_at_least_min_daemon_version`.
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant once
