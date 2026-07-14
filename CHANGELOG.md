@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-07-14
+
+- Validate against `@pellux/goodvibes-sdk` 1.9.0. Re-vendor
+  `custom_components/goodvibes/generated_client.py` byte-for-byte from the
+  published `1.9.0` Python artifact. The only diff from `1.8.0` is the
+  contract version label; all 33 consumed operator methods and their REST
+  routes are byte-for-byte unchanged.
+- Re-run the `docs/sdk-compatibility.md` validation checklist against a
+  daemon booted from the published `1.9.0` SDK on an isolated home and an
+  ephemeral port, with the Home Assistant surface enabled: `/status`
+  (including a bad-token `401` and the `receipts=consume` response),
+  `/api/homeassistant/health`, the manifest action, the Home Graph
+  status/sync/ask/pages/map/reindex/issues/refinement-run routes, and the
+  conversation/stream/cancel routes all responded with the expected shapes,
+  including a full streamed `delta`/`final` frame sequence and a real
+  assistant reply.
+
 ## 0.8.0 - 2026-07-13
 
 - Validate against `@pellux/goodvibes-sdk` 1.8.0. Re-vendor
