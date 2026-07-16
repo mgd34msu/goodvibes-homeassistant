@@ -13,23 +13,26 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.9.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-14.
+- **Last validated against:** `1.10.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-16.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
-every route the integration calls is intact at `1.9.0`. A pin-forward to a newer SDK is therefore
+every route the integration calls is intact at `1.10.0`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
 
-The 2026-07-14 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
-from the published `1.9.0` package's own generated Python artifact
+The 2026-07-16 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
+from the published `1.10.0` package's own generated Python artifact
 (`dist/contracts/artifacts/python/homeassistant_operator_client.py`, extracted from
-`@pellux/goodvibes-sdk@1.9.0` on npm). The only diff from `1.8.0` is the version label itself
-(`Contract product version: 1.9.0` and `CONTRACT_VERSION = "1.9.0"`); the operator contract's REST
-subset this client depends on (33 methods) and all its route bindings and types are byte-for-byte
-unchanged. This pass also booted a daemon from the published `1.9.0` SDK (isolated home, ephemeral
-port, Home Assistant surface enabled) and re-ran the validation checklist against it: `/status`
-(including a bad-token `401` and the `receipts=consume` response, both reporting `version: 1.9.0`),
+`@pellux/goodvibes-sdk@1.10.0` on npm). The only diff from `1.9.0` is the version label itself
+(`Contract product version: 1.10.0` and `CONTRACT_VERSION = "1.10.0"`); the operator contract's
+REST subset this client depends on (33 methods) and all its route bindings and types are
+byte-for-byte unchanged, so the 1.10.0 changes upstream (`voice.local.*` and `ops.memory.get`) did
+not touch the HA-consumed method set at all. This pass also booted a daemon from the published
+`1.10.0` SDK (isolated home directory, isolated working directory, ephemeral loopback port, Home
+Assistant surface enabled — composed via the SDK's own published `bootDaemon` factory from
+`@pellux/goodvibes-sdk/daemon`, stopped in a `finally` block) and re-ran the validation checklist
+against it: `/status` (including a bad-token `401`, reporting `version: 1.10.0`),
 `/api/homeassistant/health` (capabilities include `conversation-stream` and `conversation-cancel`),
 the manifest action, and the Home Graph status/sync/ask/pages/map/reindex/issues/refinement-run
 routes all returned the expected shapes, and the conversation, conversation/stream, and
