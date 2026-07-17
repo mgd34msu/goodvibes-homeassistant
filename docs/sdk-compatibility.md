@@ -13,7 +13,7 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.11.1` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-17.
+- **Last validated against:** `1.11.2` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-17.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
@@ -22,20 +22,20 @@ a validation-and-docs pass, not a code rewrite; the only real risk is response-s
 JSON bodies, which the checks below and the test suite guard against.
 
 The 2026-07-17 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
-from the published `1.11.1` package's Python artifact; the only diff from `1.10.1` is the version
-label itself (`Contract product version: 1.11.1`, `CONTRACT_VERSION = "1.11.1"`) — the SDK's
-`1.11.0`/`1.11.1` releases are release-engineering only (shared CI/CD toolchain + reusable
-workflows; `1.11.1` adds a bin entry to the toolchain package) and did not touch the operator
-contract, so all 33 consumed methods, routes, and types are unchanged. This pass also booted a
-daemon from the published `1.11.1` SDK (`bootDaemon` from `@pellux/goodvibes-sdk/daemon`, isolated
-home and working directories, ephemeral loopback port, stopped in a `finally` block) and probed the
-routes this integration reads directly: `/status` returned `status`/`version: 1.11.1` and `401` on
-a bad bearer token; `/api/homeassistant/health` capabilities include `conversation-stream` and
-`conversation-cancel`; `/api/homeassistant/home-graph/status` returned `ok`, the graph counts, and
-`readiness`; `/api/homeassistant/home-graph/issues` returned `ok`/`spaceId`/`issues`. The
-conversation/stream/cancel deep exercise was not repeated this pass — the contract those routes
-bind to is byte-for-byte identical to the fully-exercised `1.10.1` pass. This repo's full pytest
-suite passed against the re-vendored client.
+from the published `1.11.2` package's Python artifact; the only diff from `1.10.1` is the version
+label itself (`Contract product version: 1.11.2`, `CONTRACT_VERSION = "1.11.2"`) — the SDK's
+`1.11.0`/`1.11.1`/`1.11.2` releases are release-engineering only (shared CI/CD toolchain + reusable
+workflows) and did not touch the operator contract, so all 33 consumed methods, routes, and types
+are unchanged. This pass also booted a daemon from the published `1.11.2` SDK (`bootDaemon` from
+`@pellux/goodvibes-sdk/daemon`, isolated home and working directories, ephemeral loopback port,
+stopped in a `finally` block) and probed the routes this integration reads directly: `/status`
+returned `status`/`version: 1.11.2` and `401` on a bad bearer token; `/api/homeassistant/health`
+capabilities include `conversation-stream` and `conversation-cancel`;
+`/api/homeassistant/home-graph/status` returned `ok`, the graph counts, and `readiness`;
+`/api/homeassistant/home-graph/issues` returned `ok`/`spaceId`/`issues`. The conversation/stream/
+cancel deep exercise was not repeated this pass — the contract those routes bind to is
+byte-for-byte identical to the fully-exercised `1.10.1` pass. This repo's full pytest suite passed
+against the re-vendored client.
 
 The 2026-07-16 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
 from the published `1.10.1` package's own generated Python artifact
