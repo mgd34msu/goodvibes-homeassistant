@@ -18,6 +18,7 @@ jobs:
   validate:
     name: Validate integration files
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -92,6 +93,7 @@ jobs:
   tests:
     name: Pytest
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -111,7 +113,6 @@ jobs:
         run: python -m pytest
 
       - name: SDK version nudge (informational)
-        continue-on-error: true
         run: |
           validated=$(python - <<'PY'
           import pathlib
@@ -131,24 +132,26 @@ jobs:
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
       - name: Run hassfest
-        uses: home-assistant/actions/hassfest@master
+        uses: home-assistant/actions/hassfest@f4ca6f671bd429efb108c0f2fa0ae8af0215986c # master
 
   hacs:
     name: HACS validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
       - name: Run HACS validation
-        uses: hacs/action@main
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration
           comment: "false"
