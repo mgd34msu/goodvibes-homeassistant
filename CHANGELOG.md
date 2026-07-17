@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.10.3 - 2026-07-17
+
+- Validate against `@pellux/goodvibes-sdk` 1.11.3 (SDK-internal fixes only; the
+  operator contract is unchanged). Re-vendor
+  `custom_components/goodvibes/generated_client.py` from the published 1.11.3
+  Python artifact — the only diff is the contract version label. Live daemon
+  probe against the published package: status/auth/health/home-graph routes all
+  return the expected shapes; full pytest suite (208) green.
+
 ## 0.10.2 - 2026-07-17
 
 - Validate against `@pellux/goodvibes-sdk` 1.11.2 (release-engineering-only SDK
