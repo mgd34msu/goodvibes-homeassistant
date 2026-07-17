@@ -6,9 +6,17 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      mode:
+        description: "dry-run (default; validates only, does not publish) or release (publish the dispatched tag)"
+        required: false
+        type: choice
+        options:
+          - dry-run
+          - release
+        default: dry-run
       tag:
-        description: "Tag to release, for example v0.5.67"
-        required: true
+        description: "Tag to release, for example v0.5.67 (optional when dispatched --ref at the tag itself, as the zero-touch auto-release job does)"
+        required: false
         type: string
 
 permissions:
@@ -23,6 +31,13 @@ jobs:
     name: Build and publish release
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The plain tag-push path (push: tags: v*) always runs. A manual dispatch
+    # only runs the real release when mode=release; the default mode=dry-run
+    # dispatch is a no-op here (dry-run has no build-and-publish side effects
+    # to preview beyond what CI's own gating jobs already validate).
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'release')
 
     steps:
       - name: Check out repository
@@ -41,9 +56,15 @@ jobs:
               pathlib.Path("custom_components/goodvibes/manifest.json").read_text()
           )
           event_name = os.environ["GITHUB_EVENT_NAME"]
+          release_tag_input = os.environ.get("RELEASE_TAG", "")
+          # workflow_dispatch with an explicit "tag" input uses it; otherwise
+          # (including the zero-touch auto-release dispatch, which passes no
+          # "tag" input and instead dispatches --ref at the tag itself) fall
+          # back to the ref name, which is the tag for both a tag push and a
+          # dispatch made --ref refs/tags/vX.
           tag = (
-              os.environ["RELEASE_TAG"]
-              if event_name == "workflow_dispatch"
+              release_tag_input
+              if event_name == "workflow_dispatch" and release_tag_input
               else os.environ["GITHUB_REF_NAME"]
           )
           expected = f"v{manifest['version']}"

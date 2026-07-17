@@ -4,14 +4,17 @@
 
 ## 0.10.2 - 2026-07-17
 
-- Validate against `@pellux/goodvibes-sdk` 1.11.1 (release-engineering-only SDK
+- Validate against `@pellux/goodvibes-sdk` 1.11.2 (release-engineering-only SDK
   releases; the operator contract is unchanged). Re-vendor
-  `custom_components/goodvibes/generated_client.py` from the published 1.11.1
+  `custom_components/goodvibes/generated_client.py` from the published 1.11.2
   Python artifact — the only diff is the contract version label. Live daemon
   probe against the published package: status/auth/health/home-graph routes all
   return the expected shapes.
 - CI hardening: every job carries a timeout, action refs are SHA-pinned, and a
   workflow-shape test suite pins both.
+- Releases are now zero-touch: green CI on a release commit tags the release
+  and dispatches the release workflow automatically, with no human step after
+  CI goes green.
 
 ## 0.10.1 - 2026-07-16
 
