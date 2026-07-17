@@ -21,7 +21,7 @@ INTEGRATION_VERSION = "0.10.2"
 # test_version_check.py::test_contract_version_is_at_least_min_daemon_version
 # for the one place this pin is actually checked against CONTRACT_VERSION.
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
-SDK_VALIDATED_VERSION = "1.11.2"
+SDK_VALIDATED_VERSION = "1.11.3"
 
 # The daemon HTTP contract this client is written against. At connect the client
 # reads the daemon's advertised software version (GET /status -> version) and
