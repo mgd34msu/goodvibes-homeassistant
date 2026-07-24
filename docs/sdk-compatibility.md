@@ -13,13 +13,22 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.11.4` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-18.
+- **Last validated against:** `1.12.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-24.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
 every route the integration calls is intact at `1.10.1`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+The `1.12.0` pass (2026-07-24) re-vendored `custom_components/goodvibes/generated_client.py`
+byte-for-byte from the published `1.12.0` package's Python artifact; the only diff from `1.11.4`
+is the contract version label — `1.12.0` introduces declare-once product storage surfaces, the
+ask-then-retire recovery lifecycle, and a cross-process workspace-checkpoint lock, all internal
+to the daemon host with the HTTP operator contract unchanged. The pass booted a daemon from the
+published `1.12.0` SDK in an isolated home, confirmed the unauthenticated `/status` probe is
+refused (401), confirmed authenticated `/status` reports `1.12.0`, and confirmed
+`/api/homeassistant/health` serves the full capability set this integration consumes.
 
 The `1.11.4` pass (2026-07-18) re-vendored `custom_components/goodvibes/generated_client.py`
 byte-for-byte from the published `1.11.4` package's Python artifact; the only diff from `1.11.3`

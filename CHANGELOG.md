@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.10.5 - 2026-07-24
+
+- Validate against `@pellux/goodvibes-sdk` 1.12.0 (declare-once product storage
+  surfaces, ask-then-retire recovery lifecycle, cross-process checkpoint lock —
+  all daemon-internal; the operator contract is unchanged apart from its
+  version stamp). Re-vendor `generated_client.py` byte-for-byte from the
+  published 1.12.0 Python artifact (contract-version label is the only diff).
+- Rebuild the panel frontend so the embedded integration version matches
+  0.10.5.
+
 ## 0.10.4 - 2026-07-18
 
 - Validate against `@pellux/goodvibes-sdk` 1.11.4 (SDK-internal secrets keyfile
