@@ -6,6 +6,8 @@
 
 GoodVibes is a conversational assistant that runs as its own daemon; this integration is the Home Assistant side of it. It adds a `GoodVibes` conversation entity you can select as the agent in an Assist pipeline, an admin-only `GoodVibes Home` sidebar panel for browsing and feeding the daemon's Home Graph knowledge base, diagnostic sensors and repairs, an update entity, and a set of Home Assistant services for prompting, running agents, and working with Home Graph facts and pages. The daemon owns the model, routing, knowledge storage, and answer synthesis; this integration stays thin — setup, Assist plumbing, services, sensors, upload proxying, and the panel bridge.
 
+<img src="docs/assets/home-graph-map.png" alt="The GoodVibes Home panel open in the Home Assistant sidebar, on its Map tab. The header reads GoodVibes Home, ok - ready, with Refresh, Sync, and Reindex uploads buttons and a tab row of Browse, Map, Ingest, Ask, Link, Refine, Review, and Pages. A facet column on the left lists integrations found in this instance — shopping list, backup, goodvibes, google translate, met, and radio browser — plus domains, objects, entities, and integration IDs. To the right, the Home Graph Map draws a central Demo Home node linked out to Radio Browser, Shopping list, Shopping List, Home, Backup, Google Translate, and GoodVibes. A summary line reads 8 nodes, 8 edges, 16 matching records, homeassistant:demo-home." width="900">
+
 ---
 
 ## Install
@@ -92,6 +94,8 @@ Each row links to the page that documents it in full.
 | Troubleshooting | Common setup, auth, Home Graph, Assist, and upload problems | [troubleshooting.md](docs/troubleshooting.md) |
 
 Full index: [docs/README.md](docs/README.md).
+
+<img src="docs/assets/home-panel.png" alt="The GoodVibes Home panel on its Browse tab inside Home Assistant. A Home Graph card reports status ok, the knowledge space homeassistant:demo-home, the last sync timestamp, 8 sources, 8 nodes, 15 edges, 0 issues, 0 extractions, a readiness line reading ready with no open issues or active tasks, and the daemon's advertised capability list. Beside it a Filter card offers a text query and a result limit. Below, a Sources card and a Nodes card show the indexed records as formatted JSON — a Home Assistant documentation source and a Shopping List entity node." width="900">
 
 ---
 
