@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.10.6 - 2026-07-25
+
+- Validate against `@pellux/goodvibes-sdk` 1.12.1 (recovery offers respect
+  live writers; snapshot retirement acts on exactly one identified snapshot —
+  daemon-internal; the operator contract is unchanged apart from its version
+  stamp). Re-vendor `generated_client.py` byte-for-byte from the published
+  1.12.1 Python artifact (contract-version label is the only diff). Frontend
+  rebuilt so the embedded version matches 0.10.6.
+
 ## 0.10.5 - 2026-07-24
 
 - Validate against `@pellux/goodvibes-sdk` 1.12.0 (declare-once product storage
