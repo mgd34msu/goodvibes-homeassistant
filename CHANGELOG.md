@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.10.7 - 2026-07-26
+
+- Validate against `@pellux/goodvibes-sdk` 1.15.0, catching up three releases at
+  once (1.13.0, 1.13.1 and 1.14.0 published since the last pass at 1.12.1).
+  1.15.0 does change the operator contract — the config-set response gained
+  where a value was persisted, which tier that is, and whether the daemon owns
+  it — but not the part this integration consumes: `config.set` is not one of
+  the 33 methods it calls, so all consumed methods, routes and types are
+  unchanged. Re-vendor `generated_client.py` byte-for-byte from the published
+  1.15.0 Python artifact; the contract-version label is the only diff.
+- Live pass against a daemon booted from the published 1.15.0 package:
+  unauthenticated `/status` refused, authenticated `/status` reports 1.15.0, and
+  the Home Assistant health route serves the full capability set this
+  integration consumes.
+- Frontend rebuilt so the embedded version matches 0.10.7.
+
 ## 0.10.6 - 2026-07-25
 
 - Validate against `@pellux/goodvibes-sdk` 1.12.1 (recovery offers respect

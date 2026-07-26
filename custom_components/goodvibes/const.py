@@ -5,7 +5,7 @@ from __future__ import annotations
 from .generated_client import OPERATOR_ROUTES
 
 DOMAIN = "goodvibes"
-INTEGRATION_VERSION = "0.10.6"
+INTEGRATION_VERSION = "0.10.7"
 
 # The integration always targets the LATEST published @pellux/goodvibes-sdk; it
 # is a thin client over stable daemon HTTP routes, not a pinned SDK build. This
@@ -21,7 +21,7 @@ INTEGRATION_VERSION = "0.10.6"
 # test_version_check.py::test_contract_version_is_at_least_min_daemon_version
 # for the one place this pin is actually checked against CONTRACT_VERSION.
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
-SDK_VALIDATED_VERSION = "1.12.1"
+SDK_VALIDATED_VERSION = "1.15.0"
 
 # The daemon HTTP contract this client is written against. At connect the client
 # reads the daemon's advertised software version (GET /status -> version) and
