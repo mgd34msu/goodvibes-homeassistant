@@ -13,13 +13,35 @@ drift is visible without gating releases.
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.12.1` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-25.
+- **Last validated against:** `1.15.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-26.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
 every route the integration calls is intact at `1.10.1`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+The `1.15.0` pass (2026-07-26) re-vendored `custom_components/goodvibes/generated_client.py`
+byte-for-byte from the published `1.15.0` package's Python artifact; the only diff from `1.12.1`
+is the contract version label. This pass covers three SDK releases at once — the integration was
+last validated at `1.12.1`, and `1.13.0`, `1.13.1` and `1.14.0` published in between — so the
+whole span is accounted for here rather than only the newest release.
+
+`1.15.0` does change the operator contract, but not the part this integration consumes: the
+config-set response gained `persistedTo`, `tier` and `daemonOwned` alongside daemon-owned config
+scope. The generated client covers only the REST subset Home Assistant calls, and `config.set` is
+not one of the 33 consumed methods — the consumed set is `channels.*`, `control.status`,
+`homeassistant.homeGraph.*` and `tasks.*` — so all 33 methods, routes and types are unchanged.
+That is verified rather than assumed: the regenerated artifact differs from the vendored `1.12.1`
+copy only in its version label.
+
+The pass booted a daemon from the published `1.15.0` SDK in an isolated home (the same
+`bootDaemon` recipe as earlier passes, ephemeral loopback port, stopped in a `finally` block),
+confirmed the unauthenticated `/status` probe is refused (401), confirmed authenticated `/status`
+reports `running` / `1.15.0`, and confirmed `/api/homeassistant/health` serves the full capability
+set this integration consumes (`conversation-submit-wait`, `conversation-stream`,
+`conversation-cancel`, `stable-correlation`, `isolated-remote-chat-session`, `remote-session-ttl`,
+`homeassistant-event-delivery`).
 
 The `1.12.1` pass (2026-07-25) re-vendored `custom_components/goodvibes/generated_client.py`
 byte-for-byte from the published `1.12.1` package's Python artifact; the only diff from `1.12.0`
