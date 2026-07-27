@@ -6,6 +6,7 @@ This directory keeps the detailed reference material out of the quickstart READM
 - [Service reference](services.md): Home Assistant services, common fields, examples, and map filters.
 - [Conversation agent](conversation.md): how the Assist agent adopts Home Assistant's llm helper layer and what stays on the daemon.
 - [Voice: Wyoming → Assist → GoodVibes](voice-assist.md): using the conversation entity as the agent in an Assist pipeline fed by a Wyoming satellite, and what stays with Home Assistant/Wyoming.
+- [Mail and calendar](mail-calendar.md): the calendar entity and mail services backed by the daemon's accounts, the credential boundary, and what each non-ready state means.
 - [Causal provenance](causal-provenance.md): attributing a state change to its cause from the Home Assistant context chain, in the Home Graph snapshot and the `causal_chain` service.
 - [Habit mining](habits.md): consent-gated local detection of recurring patterns, surfaced as automation proposals you review and accept.
 - [Troubleshooting](troubleshooting.md): common setup, auth, Home Graph, Assist, upload, stale state, and reset problems.

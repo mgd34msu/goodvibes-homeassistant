@@ -52,6 +52,12 @@ checks the calling user's per-entity control permission for that entity.
     home_graph_browse    open (read)    Browses the Home Graph
     home_graph_map       open (read)    Reads the Home Graph map
     home_graph_export    open (read)    Exports a Home Graph space
+    send_email           admin          Sends mail via the daemon account
+    create_email_draft   admin          Writes a draft to the daemon account
+    list_inbox           open (read)    Lists inbox summaries (never marks read)
+    read_email           open (read)    Reads one message (never marks read)
+    list_calendar_events open (read)    Lists calendar events
+    get_calendar_event   open (read)    Reads one calendar event
 """
 
 from __future__ import annotations
@@ -70,18 +76,23 @@ from .const import (
     CONF_AGENT_ID,
     CONF_AREA_ID,
     CONF_ARTIFACT_ID,
+    CONF_BODY,
+    CONF_CALENDAR_ID,
     CONF_CODE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CONFIRM,
     CONF_DECISION,
     CONF_DEVICE_ID,
     CONF_DRY_RUN,
+    CONF_END,
     CONF_ENTITY_ID,
+    CONF_EVENT_ID,
     CONF_FACT_ID,
     CONF_INCLUDE_CONFIDENCE,
     CONF_INCLUDE_LINKED_OBJECTS,
     CONF_INCLUDE_SOURCES,
     CONF_INPUT,
+    CONF_IN_REPLY_TO,
     CONF_LIMIT,
     CONF_MESSAGE_ID,
     CONF_MODE,
@@ -94,12 +105,18 @@ from .const import (
     CONF_RUN_ID,
     CONF_SESSION_ID,
     CONF_SEVERITY,
+    CONF_SINCE,
     CONF_SOURCE_ID,
+    CONF_START,
     CONF_STATUS,
+    CONF_SUBJECT,
     CONF_TASK,
     CONF_TASK_ID,
     CONF_TITLE,
+    CONF_TO,
     CONF_TOOL,
+    CONF_UID,
+    CONF_UNREAD_ONLY,
     CONF_URI,
     CONF_URL,
     CONF_VALUE,
@@ -124,7 +141,9 @@ from .schemas import (
     CALL_TOOL_SCHEMA,
     CANCEL_SCHEMA,
     CAUSAL_CHAIN_SCHEMA,
+    CREATE_EMAIL_DRAFT_SCHEMA,
     DEVICE_PASSPORT_SCHEMA,
+    GET_CALENDAR_EVENT_SCHEMA,
     HABIT_PROPOSALS_SCHEMA,
     HOME_GRAPH_COMMON_SCHEMA,
     HOME_GRAPH_IMPORT_SCHEMA,
@@ -139,10 +158,14 @@ from .schemas import (
     INGEST_NOTE_SCHEMA,
     INGEST_URL_SCHEMA,
     LINK_KNOWLEDGE_SCHEMA,
+    LIST_CALENDAR_EVENTS_SCHEMA,
+    LIST_INBOX_SCHEMA,
     PROMPT_SCHEMA,
+    READ_EMAIL_SCHEMA,
     REVIEW_FACT_SCHEMA,
     ROOM_PAGE_SCHEMA,
     RUN_AGENT_SCHEMA,
+    SEND_EMAIL_SCHEMA,
     STATUS_SCHEMA,
     SYNC_HOME_GRAPH_SCHEMA,
     UNLINK_KNOWLEDGE_SCHEMA,
@@ -361,6 +384,48 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema=ACCEPT_HABIT_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_EMAIL,
+        async_send_email,
+        schema=SEND_EMAIL_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CREATE_EMAIL_DRAFT,
+        async_create_email_draft,
+        schema=CREATE_EMAIL_DRAFT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LIST_INBOX,
+        async_list_inbox,
+        schema=LIST_INBOX_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_READ_EMAIL,
+        async_read_email,
+        schema=READ_EMAIL_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LIST_CALENDAR_EVENTS,
+        async_list_calendar_events,
+        schema=LIST_CALENDAR_EVENTS_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_CALENDAR_EVENT,
+        async_get_calendar_event,
+        schema=GET_CALENDAR_EVENT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.data[DOMAIN]["services_registered"] = True
     return True
 
@@ -394,6 +459,12 @@ SERVICE_HOME_GRAPH_REINDEX = "home_graph_reindex"
 SERVICE_CAUSAL_CHAIN = "causal_chain"
 SERVICE_HABIT_PROPOSALS = "habit_proposals"
 SERVICE_ACCEPT_HABIT = "accept_habit"
+SERVICE_SEND_EMAIL = "send_email"
+SERVICE_CREATE_EMAIL_DRAFT = "create_email_draft"
+SERVICE_LIST_INBOX = "list_inbox"
+SERVICE_READ_EMAIL = "read_email"
+SERVICE_LIST_CALENDAR_EVENTS = "list_calendar_events"
+SERVICE_GET_CALENDAR_EVENT = "get_calendar_event"
 
 async def async_prompt(call: ServiceCall) -> dict[str, Any]:
     await _async_verify_admin(call)
@@ -1114,3 +1185,120 @@ async def _call_client(awaitable) -> dict[str, Any]:
         return await awaitable
     except GoodVibesClientError as err:
         raise HomeAssistantError(str(err)) from err
+
+# ---------------------------------------------------------------------------
+# Mail and calendar
+#
+# Every one of these is a pass-through to a daemon route. The daemon owns the
+# mail and calendar accounts and their credentials; Home Assistant supplies
+# only the message or the query. Sending mail and writing a draft are admin
+# operations because they act outside the home; the reads are open so
+# dashboards and non-admin users can see them, and the daemon's own read
+# routes never mark a message as read.
+#
+# When the daemon cannot serve a call, the failure is classified onto the
+# shared mail/calendar state (unsupported / needs setup / unreachable) and
+# re-raised with the concrete next step, so a user is never left with a bare
+# "unavailable" and nothing ever fails silently.
+# ---------------------------------------------------------------------------
+
+
+async def _async_mail_calendar_call(
+    runtime: GoodVibesRuntimeData, awaitable, action: str
+) -> dict[str, Any]:
+    """Await a mail/calendar daemon call, reporting honestly on failure."""
+
+    try:
+        return await awaitable
+    except GoodVibesClientError as err:
+        runtime.async_apply_mail_calendar_error(err)
+        raise HomeAssistantError(
+            runtime.mail_calendar.error_message(action)
+        ) from err
+
+
+async def async_send_email(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
+    runtime = _runtime_from_service_call(call.hass, call)
+    payload: dict[str, Any] = {
+        "to": call.data[CONF_TO],
+        "subject": call.data[CONF_SUBJECT],
+        "body": call.data[CONF_BODY],
+        # The daemon requires explicit confirmation because the send leaves the
+        # house and cannot be undone. Calling this service IS that explicit
+        # action, so it is set here rather than as a field to remember.
+        "confirm": True,
+    }
+    if in_reply_to := call.data.get(CONF_IN_REPLY_TO):
+        payload["inReplyTo"] = in_reply_to
+    return await _async_mail_calendar_call(
+        runtime, runtime.client.email_send(payload), "send the email"
+    )
+
+
+async def async_create_email_draft(call: ServiceCall) -> dict[str, Any]:
+    await _async_verify_admin(call)
+    runtime = _runtime_from_service_call(call.hass, call)
+    payload: dict[str, Any] = {
+        "to": call.data[CONF_TO],
+        "subject": call.data[CONF_SUBJECT],
+        "body": call.data[CONF_BODY],
+    }
+    if in_reply_to := call.data.get(CONF_IN_REPLY_TO):
+        payload["inReplyTo"] = in_reply_to
+    return await _async_mail_calendar_call(
+        runtime, runtime.client.email_draft_create(payload), "create the draft"
+    )
+
+
+async def async_list_inbox(call: ServiceCall) -> dict[str, Any]:
+    runtime = _runtime_from_service_call(call.hass, call)
+    payload: dict[str, Any] = {"limit": call.data[CONF_LIMIT]}
+    if since := call.data.get(CONF_SINCE):
+        payload["since"] = since
+    if call.data.get(CONF_UNREAD_ONLY):
+        payload["unreadOnly"] = True
+    return await _async_mail_calendar_call(
+        runtime, runtime.client.email_inbox_list(payload), "list the inbox"
+    )
+
+
+async def async_read_email(call: ServiceCall) -> dict[str, Any]:
+    runtime = _runtime_from_service_call(call.hass, call)
+    return await _async_mail_calendar_call(
+        runtime,
+        runtime.client.email_inbox_read(call.data[CONF_UID]),
+        "read the message",
+    )
+
+
+async def async_list_calendar_events(call: ServiceCall) -> dict[str, Any]:
+    runtime = _runtime_from_service_call(call.hass, call)
+    payload: dict[str, Any] = {}
+    # The daemon's window parameters are `from`/`to`; the service uses
+    # start/end to match Home Assistant's own calendar vocabulary.
+    if start := call.data.get(CONF_START):
+        payload["from"] = start
+    if end := call.data.get(CONF_END):
+        payload["to"] = end
+    if calendar_id := call.data.get(CONF_CALENDAR_ID):
+        payload["calendarId"] = calendar_id
+    if limit := call.data.get(CONF_LIMIT):
+        payload["limit"] = limit
+    return await _async_mail_calendar_call(
+        runtime,
+        runtime.client.calendar_events_list(payload),
+        "list calendar events",
+    )
+
+
+async def async_get_calendar_event(call: ServiceCall) -> dict[str, Any]:
+    runtime = _runtime_from_service_call(call.hass, call)
+    payload: dict[str, Any] = {}
+    if calendar_id := call.data.get(CONF_CALENDAR_ID):
+        payload["calendarId"] = calendar_id
+    return await _async_mail_calendar_call(
+        runtime,
+        runtime.client.calendar_event_get(call.data[CONF_EVENT_ID], payload),
+        "read the calendar event",
+    )

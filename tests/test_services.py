@@ -357,9 +357,11 @@ async def test_setup_services_registers_all_and_is_idempotent(hass):
 
     await svc.async_setup_services(hass)
     registered = hass.services.async_services().get(DOMAIN, {})
-    # 29 services: the 24 in the smoke list plus status and home_graph_status,
-    # plus causal_chain, habit_proposals, and accept_habit.
-    assert len(registered) == 29
+    # 35 services: the 24 in the smoke list plus status and home_graph_status,
+    # plus causal_chain, habit_proposals and accept_habit, plus the six mail
+    # and calendar services (send_email, create_email_draft, list_inbox,
+    # read_email, list_calendar_events, get_calendar_event).
+    assert len(registered) == 35
     for service in (
         "prompt",
         "status",
@@ -368,8 +370,14 @@ async def test_setup_services_registers_all_and_is_idempotent(hass):
         "causal_chain",
         "habit_proposals",
         "accept_habit",
+        "send_email",
+        "create_email_draft",
+        "list_inbox",
+        "read_email",
+        "list_calendar_events",
+        "get_calendar_event",
     ):
         assert service in registered
     # A second call is a no-op (guarded by the services_registered flag).
     await svc.async_setup_services(hass)
-    assert len(hass.services.async_services().get(DOMAIN, {})) == 29
+    assert len(hass.services.async_services().get(DOMAIN, {})) == 35

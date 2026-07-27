@@ -13,10 +13,13 @@ import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    CALENDAR_EVENT_MAX_LIMIT,
     CONF_AGENT_ID,
     CONF_ALLOW_PRIVATE_HOSTS,
     CONF_AREA_ID,
     CONF_ARTIFACT_ID,
+    CONF_BODY,
+    CONF_CALENDAR_ID,
     CONF_CODE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CONFIRM,
@@ -25,13 +28,16 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_DISPLAY_NAME,
     CONF_DRY_RUN,
+    CONF_END,
     CONF_ENTITY_ID,
+    CONF_EVENT_ID,
     CONF_FACT_ID,
     CONF_INCLUDE_CONFIDENCE,
     CONF_INCLUDE_LINKED_OBJECTS,
     CONF_INCLUDE_SOURCES,
     CONF_INPUT,
     CONF_INSTALLATION_ID,
+    CONF_IN_REPLY_TO,
     CONF_KNOWLEDGE_SPACE_ID,
     CONF_LIMIT,
     CONF_MESSAGE_ID,
@@ -48,16 +54,22 @@ from .const import (
     CONF_RUN_ID,
     CONF_SESSION_ID,
     CONF_SEVERITY,
+    CONF_SINCE,
     CONF_SOURCE_ID,
+    CONF_START,
     CONF_STATUS,
+    CONF_SUBJECT,
     CONF_TAGS,
     CONF_TARGET_ID,
     CONF_TARGET_KIND,
     CONF_TASK,
     CONF_TASK_ID,
     CONF_TITLE,
+    CONF_TO,
     CONF_TOOL,
     CONF_TOOLS,
+    CONF_UID,
+    CONF_UNREAD_ONLY,
     CONF_URI,
     CONF_URL,
     CONF_USER_ID,
@@ -65,6 +77,8 @@ from .const import (
     DEFAULT_CONVERSATION_ID,
     DEFAULT_DEVICE_ID,
     DEFAULT_DISPLAY_NAME,
+    MAIL_INBOX_DEFAULT_LIMIT,
+    MAIL_INBOX_MAX_LIMIT,
 )
 from .daemon_payloads import MAP_GENERIC_FIELDS, MAP_HA_FIELDS
 
@@ -354,5 +368,71 @@ ACCEPT_HABIT_SCHEMA = vol.Schema(
         vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
         vol.Required(CONF_PROPOSAL_ID): cv.string,
         vol.Optional(CONF_CONFIRM): cv.string,
+    }
+)
+
+# ---------------------------------------------------------------------------
+# Mail and calendar
+#
+# The daemon owns the mail and calendar accounts and every credential behind
+# them, so none of these schemas carry an account, a password or a token —
+# only the message or event the user wants acted on.
+# ---------------------------------------------------------------------------
+
+SEND_EMAIL_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(CONF_TO): cv.string,
+        vol.Required(CONF_SUBJECT): cv.string,
+        vol.Required(CONF_BODY): cv.string,
+        vol.Optional(CONF_IN_REPLY_TO): cv.string,
+    }
+)
+
+CREATE_EMAIL_DRAFT_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(CONF_TO): cv.string,
+        vol.Required(CONF_SUBJECT): cv.string,
+        vol.Required(CONF_BODY): cv.string,
+        vol.Optional(CONF_IN_REPLY_TO): cv.string,
+    }
+)
+
+LIST_INBOX_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Optional(CONF_LIMIT, default=MAIL_INBOX_DEFAULT_LIMIT): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=MAIL_INBOX_MAX_LIMIT)
+        ),
+        vol.Optional(CONF_SINCE): cv.string,
+        vol.Optional(CONF_UNREAD_ONLY, default=False): bool,
+    }
+)
+
+READ_EMAIL_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(CONF_UID): vol.Coerce(int),
+    }
+)
+
+LIST_CALENDAR_EVENTS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Optional(CONF_CALENDAR_ID): cv.string,
+        vol.Optional(CONF_START): cv.string,
+        vol.Optional(CONF_END): cv.string,
+        vol.Optional(CONF_LIMIT): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=CALENDAR_EVENT_MAX_LIMIT)
+        ),
+    }
+)
+
+GET_CALENDAR_EVENT_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(CONF_EVENT_ID): cv.string,
+        vol.Optional(CONF_CALENDAR_ID): cv.string,
     }
 )

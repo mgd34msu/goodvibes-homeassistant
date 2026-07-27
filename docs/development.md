@@ -71,15 +71,44 @@ print("markdown links ok")
 PY
 ```
 
+## Daemon Contract Validation
+
+`scripts/validate-daemon-contract.mjs` runs the live half of
+[sdk-compatibility.md](sdk-compatibility.md) against a real daemon. It installs the published SDK
+into a temporary directory, diffs the vendored `generated_client.py` against that release's own
+artifact, boots a daemon in a throwaway home on an ephemeral loopback port, probes every route the
+integration consumes, and stops the daemon in a `finally` block. It never touches a running daemon.
+
+```bash
+bun scripts/validate-daemon-contract.mjs           # against npm latest
+bun scripts/validate-daemon-contract.mjs 1.17.2    # against a pinned release
+```
+
+Requires `bun` (the daemon's HTTP transport is built on `Bun.serve`). Exit code 0 means every
+checked route and response shape held. Run it whenever the daemon SDK moves, then re-vendor
+`generated_client.py` and update `const.SDK_VALIDATED_VERSION` and `docs/sdk-compatibility.md`
+together — `test_version_check.py::test_validated_version_matches_vendored_contract` fails if the
+label and the vendored artifact disagree.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on pushes to `main`, pull requests, and manual dispatch.
 
-The CI workflow has three jobs:
+The CI workflow has four gating jobs:
 
 - `Validate integration files`: Python syntax, frontend JavaScript syntax, and release metadata consistency.
+- `Pytest`: the test suite, plus an informational SDK-version notice.
 - `Hassfest`: Home Assistant integration validation through `home-assistant/actions/hassfest`.
 - `HACS validation`: HACS integration validation through `hacs/action`.
+
+A fifth job, `Auto-release`, runs only after all four are green on a push to `main`; it tags the
+release and dispatches `release.yml`.
+
+`.github/workflows/sdk-drift.yml` runs weekly on a schedule (and on manual dispatch) and **fails**
+when `const.SDK_VALIDATED_VERSION` falls behind the published `@pellux/goodvibes-sdk`, or when it
+disagrees with the vendored contract version. It is intentionally separate from `ci.yml`: the drift
+depends on npm's publish cadence rather than on the commit, so gating pushes or the auto-release on
+it would block this repo's releases on another repo's publishes.
 
 The metadata check requires:
 

@@ -59,6 +59,11 @@ class _ConcurrentClient:
     async def home_graph_issues(self, _payload):
         return await self._tracked({"issues": []}, hg=True)
 
+    async def calendar_events_list(self, _payload):
+        # The mail/calendar probe runs in the same concurrent batch as the
+        # Home Graph reads, so it is tracked the same way.
+        return await self._tracked({"events": []}, hg=True)
+
 
 def _runtime(hass, client) -> GoodVibesRuntimeData:
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DAEMON, data=ENTRY_DATA)

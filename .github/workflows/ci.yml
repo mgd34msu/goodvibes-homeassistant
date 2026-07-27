@@ -125,8 +125,25 @@ jobs:
           )
           latest=$(npm view @pellux/goodvibes-sdk version 2>/dev/null || echo "unknown")
           echo "GoodVibes SDK — validated against: ${validated} ; latest on npm: ${latest}"
+          # Informational only, by design: this job gates the auto-release, and
+          # npm publishing on its own schedule must not block a release here.
+          # The enforcing checks live elsewhere —
+          # tests/test_version_check.py::test_validated_version_matches_vendored_contract
+          # fails the build when the claim and the vendored artifact disagree,
+          # and .github/workflows/sdk-drift.yml turns red on a schedule when the
+          # claim falls behind npm. Surfaced in the step summary here so it is
+          # visible rather than buried in the log.
           if [ "${latest}" != "unknown" ] && [ "${validated}" != "${latest}" ]; then
-            echo "::notice::@pellux/goodvibes-sdk latest is ${latest}, but the integration is validated against ${validated}. Re-validate the daemon contract and bump const.SDK_VALIDATED_VERSION."
+            echo "::notice::@pellux/goodvibes-sdk latest is ${latest}, but the integration is validated against ${validated}. Re-run 'bun scripts/validate-daemon-contract.mjs ${latest}', re-vendor generated_client.py, and refresh const.SDK_VALIDATED_VERSION."
+            {
+              echo "### GoodVibes SDK drift"
+              echo ""
+              echo "Validated against \`${validated}\`; npm latest is \`${latest}\`."
+              echo ""
+              echo "See the \`SDK drift\` workflow and \`docs/sdk-compatibility.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "GoodVibes SDK — validated pin matches npm latest (${validated})." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   hassfest:

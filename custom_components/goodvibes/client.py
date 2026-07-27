@@ -14,9 +14,15 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     ENDPOINT_AGENT_TOOLS,
+    ENDPOINT_CALENDAR_EVENT,
+    ENDPOINT_CALENDAR_EVENTS,
     ENDPOINT_CONVERSATION,
     ENDPOINT_CONVERSATION_CANCEL,
     ENDPOINT_CONVERSATION_STREAM,
+    ENDPOINT_EMAIL_DRAFTS,
+    ENDPOINT_EMAIL_INBOX,
+    ENDPOINT_EMAIL_INBOX_MESSAGE,
+    ENDPOINT_EMAIL_SEND,
     ENDPOINT_HEALTH,
     ENDPOINT_HOMEASSISTANT_STATUS,
     ENDPOINT_HOME_GRAPH_ASK,
@@ -572,6 +578,71 @@ class GoodVibesClient:
 
         path = OPERATOR_ROUTES["homeassistant.homeGraph.refinement.task.cancel"].path.format(id=quote(task_id, safe=""))
         return await self._request("POST", path, json=dict(payload))
+
+    # ------------------------------------------------------------------
+    # Mail and calendar
+    #
+    # Thin pass-throughs to the daemon's email/calendar routes, in the same
+    # shape as every other route wrapper here. There is deliberately no mail
+    # or calendar client, no OAuth handling, and no credential storage in this
+    # integration: the daemon owns the account and the secrets, and Home
+    # Assistant only asks it. A daemon that does not serve these routes answers
+    # 404, which _error_for_status turns into GoodVibesSurfaceMissingError so
+    # callers can report "not supported" rather than a generic failure.
+    # ------------------------------------------------------------------
+
+    async def email_send(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Send an email through the daemon's configured account.
+
+        The daemon requires ``confirm: true`` on this route because the send is
+        an irreversible external action; the caller supplies it.
+        """
+
+        return await self._request("POST", ENDPOINT_EMAIL_SEND, json=dict(payload))
+
+    async def email_draft_create(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Append a draft to the daemon account's Drafts folder."""
+
+        return await self._request("POST", ENDPOINT_EMAIL_DRAFTS, json=dict(payload))
+
+    async def email_inbox_list(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """List inbox message summaries. Read-only; does not mark as read."""
+
+        return await self._request("GET", _query_path(ENDPOINT_EMAIL_INBOX, payload))
+
+    async def email_inbox_read(
+        self, uid: int | str, payload: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Read one inbox message by IMAP UID. Does not mark it as read."""
+
+        path = ENDPOINT_EMAIL_INBOX_MESSAGE.format(uid=quote(str(uid), safe=""))
+        return await self._request("GET", _query_path(path, payload or {}))
+
+    async def calendar_events_list(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """List calendar events in an optional time window."""
+
+        return await self._request(
+            "GET", _query_path(ENDPOINT_CALENDAR_EVENTS, payload)
+        )
+
+    async def calendar_event_get(
+        self, event_id: str, payload: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return one calendar event in full."""
+
+        path = ENDPOINT_CALENDAR_EVENT.format(event_id=quote(str(event_id), safe=""))
+        return await self._request("GET", _query_path(path, payload or {}))
+
+    async def calendar_event_create(
+        self, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Create a calendar event on the daemon's configured calendar."""
+
+        return await self._request(
+            "POST", ENDPOINT_CALENDAR_EVENTS, json=dict(payload)
+        )
 
     async def _webhook(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """POST a payload to the daemon Home Assistant webhook."""

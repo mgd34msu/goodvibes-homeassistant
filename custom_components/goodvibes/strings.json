@@ -73,6 +73,14 @@
       },
       "home_graph_sources": {
         "name": "Home Graph sources"
+      },
+      "mail_calendar_status": {
+        "name": "Mail and calendar status"
+      }
+    },
+    "calendar": {
+      "calendar": {
+        "name": "Calendar"
       }
     },
     "update": {
