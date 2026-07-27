@@ -75,11 +75,22 @@ class GoodVibesClientError(Exception):
     instead of by scanning the message text.
     """
 
-    def __init__(self, message: str, *, status: int | None = None) -> None:
-        """Store the message and the HTTP status when one is known."""
+    def __init__(
+        self, message: str, *, status: int | None = None, code: str | None = None
+    ) -> None:
+        """Store the message, the HTTP status, and the daemon's machine code.
+
+        ``code`` is the daemon's own machine-readable error code, lifted off the
+        JSON body. It is carried because the alternative is scanning English
+        prose: the daemon says "No Google account is connected on this machine"
+        alongside ``"code": "CALENDAR_NOT_CONFIGURED"``, and only one of those
+        two is a contract. A reworded message must never change how this
+        integration classifies a failure.
+        """
 
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 class GoodVibesUnavailableError(GoodVibesClientError):
@@ -775,18 +786,52 @@ def _error_for_status(
     The status is the primary signal. A 404 can also arrive from the daemon as
     an "unknown channel action" body, and a disabled surface can be reported in
     the body text, so those phrases are treated as a missing surface too.
+
+    A 501 carrying ``NOT_INVOKABLE`` is the same class of answer as the 404:
+    the daemon knows the route but no handler is attached in the composition it
+    was built with, so the capability is not available here. It is a separate
+    status because it is a different fact — the route is real and the daemon is
+    current, which a 404 would misreport as an out-of-date daemon.
+
+    The machine ``code`` is lifted off the body whenever there is one, so
+    callers can classify on the contract rather than on the wording.
     """
 
     detail_text = str(detail or "").lower()
+    code = _error_code_from_detail(detail)
     if status in (401, 403):
-        return GoodVibesUnauthorizedError(message, status=status)
+        return GoodVibesUnauthorizedError(message, status=status, code=code)
     if (
         status == 404
+        or (status == 501 and code == DAEMON_CODE_NOT_INVOKABLE)
         or "unknown channel action" in detail_text
         or "home assistant surface is disabled" in detail_text
     ):
-        return GoodVibesSurfaceMissingError(message, status=status)
-    return GoodVibesDaemonError(message, status=status)
+        return GoodVibesSurfaceMissingError(message, status=status, code=code)
+    return GoodVibesDaemonError(message, status=status, code=code)
+
+
+def _error_code_from_detail(detail: Any) -> str | None:
+    """Lift the daemon's machine error code off a JSON error body.
+
+    Returns ``None`` for a body that is not JSON or carries no code, which is
+    the honest answer — the caller then falls back to its own heuristics rather
+    than acting on a code that was never sent.
+    """
+
+    if isinstance(detail, Mapping):
+        raw = detail.get("code")
+        return raw if isinstance(raw, str) and raw else None
+    if not isinstance(detail, str) or not detail.strip():
+        return None
+    try:
+        parsed = json_lib.loads(detail)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(parsed, Mapping):
+        raw = parsed.get("code")
+        return raw if isinstance(raw, str) and raw else None
+    return None
 
 
 def _query_path(path: str, payload: Mapping[str, Any]) -> str:

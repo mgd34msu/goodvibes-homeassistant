@@ -279,13 +279,41 @@ MAIL_CALENDAR_NEXT_STEPS = {
     ),
 }
 
+# The daemon's own machine codes for "the route exists but no account is
+# connected". These are the contract and they are checked FIRST.
+#
+# The prose fallback below used to be the only signal, and it was wrong the
+# moment the daemon started serving these routes for real: the answer is
+# "No Google account is connected on this machine", which contains none of
+# "no account", "not connected" or "not configured" as written. The classifier
+# fell through to its ready default, so a calendar with nothing behind it would
+# have reported itself ready — the exact conflation mail_calendar.py exists to
+# prevent. A code is a contract; a sentence is not.
+DAEMON_CODE_EMAIL_NOT_CONFIGURED = "EMAIL_NOT_CONFIGURED"
+DAEMON_CODE_CALENDAR_NOT_CONFIGURED = "CALENDAR_NOT_CONFIGURED"
+DAEMON_CODE_EMAIL_CREDENTIALS_MISSING = "EMAIL_CREDENTIALS_MISSING"
+MAIL_CALENDAR_NOT_CONFIGURED_CODES = frozenset(
+    {
+        DAEMON_CODE_EMAIL_NOT_CONFIGURED,
+        DAEMON_CODE_CALENDAR_NOT_CONFIGURED,
+        DAEMON_CODE_EMAIL_CREDENTIALS_MISSING,
+    }
+)
+
+# The daemon's code for "the route is real, but no handler is attached in the
+# composition this daemon was built with". Distinct from a 404: the daemon is
+# current and the route exists, so reporting it as an out-of-date daemon would
+# send someone to update something that is already up to date.
+DAEMON_CODE_NOT_INVOKABLE = "NOT_INVOKABLE"
+
 # Phrases a daemon uses to say "the route exists but no account is connected".
-# Matched case-insensitively against the error body to tell needs_setup apart
-# from a genuine daemon fault.
+# Retained as a FALLBACK only, for a daemon old enough to answer without a
+# machine code. Never extend this list to fix a classification — add the code.
 MAIL_CALENDAR_NOT_CONFIGURED_HINTS = (
     "not configured",
     "no account",
     "not connected",
+    "is connected",
     "missing credentials",
     "no credentials",
     "unconfigured",

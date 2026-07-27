@@ -9,8 +9,11 @@ The whole point of this module is to be honest about *why* mail and calendar
 are not working when they are not working, because the three reasons have three
 different fixes and are easy to conflate:
 
-* ``unsupported``  — the daemon does not serve the routes (HTTP 404). The
-  daemon build is older than the mail/calendar surface. Fix: update the daemon.
+* ``unsupported``  — the daemon does not serve the routes here. Either it is
+  older than the mail/calendar surface (HTTP 404), or it is current and the
+  route is real but no handler is attached in the composition it was built with
+  (HTTP 501 ``NOT_INVOKABLE``). Fix: update the daemon, or run one whose
+  composition wires mail and calendar.
 * ``needs_setup``  — the routes are served, but no mail or calendar account is
   connected on the daemon. Fix: connect one on the daemon host.
 * ``unavailable``  — the daemon could not be reached at all. Fix: check that it
@@ -37,6 +40,7 @@ from .client import (
 )
 from .const import (
     MAIL_CALENDAR_NEEDS_SETUP,
+    MAIL_CALENDAR_NOT_CONFIGURED_CODES,
     MAIL_CALENDAR_NEXT_STEPS,
     MAIL_CALENDAR_NOT_CONFIGURED_HINTS,
     MAIL_CALENDAR_READY,
@@ -93,10 +97,19 @@ class MailCalendarState:
 def classify_error(err: GoodVibesClientError) -> tuple[str, str]:
     """Map a daemon client error onto a mail/calendar state and its detail.
 
-    A 404 means the route is not served at all. A reachable daemon that answers
-    with a "no account configured" style body means the surface exists but has
-    nothing behind it — a different problem with a different fix, so it is not
-    collapsed into the same bucket.
+    The daemon's machine ``code`` decides this whenever there is one. That is
+    the contract; the message is prose and has already changed underneath this
+    function once. When the daemon began actually serving these routes it
+    answered "No Google account is connected on this machine" with
+    ``code: CALENDAR_NOT_CONFIGURED``, and the old substring list matched none
+    of it — so an unconfigured calendar fell through to the ready default and
+    would have reported itself ready with nothing behind it.
+
+    A 404 (or a 501 saying the route is real but unwired here) means the surface
+    is not available on this daemon at all. A reachable daemon that answers "no
+    account connected" means the surface exists with nothing behind it — a
+    different problem with a different fix, so it is not collapsed into the same
+    bucket.
     """
 
     detail = str(err)
@@ -104,7 +117,10 @@ def classify_error(err: GoodVibesClientError) -> tuple[str, str]:
         return MAIL_CALENDAR_UNAVAILABLE, detail
     if isinstance(err, GoodVibesSurfaceMissingError):
         return MAIL_CALENDAR_UNSUPPORTED, detail
+    if err.code and err.code in MAIL_CALENDAR_NOT_CONFIGURED_CODES:
+        return MAIL_CALENDAR_NEEDS_SETUP, detail
     lowered = detail.lower()
+    # Fallback for a daemon old enough to answer without a machine code.
     if any(hint in lowered for hint in MAIL_CALENDAR_NOT_CONFIGURED_HINTS):
         return MAIL_CALENDAR_NEEDS_SETUP, detail
     # A reachable daemon returning some other error is not evidence that mail
