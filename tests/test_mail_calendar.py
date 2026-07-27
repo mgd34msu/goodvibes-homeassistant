@@ -145,6 +145,65 @@ def test_an_unrelated_daemon_error_does_not_condemn_the_surface():
     assert state == MAIL_CALENDAR_READY
 
 
+@pytest.mark.parametrize(
+    "code",
+    ["EMAIL_NOT_CONFIGURED", "CALENDAR_NOT_CONFIGURED", "EMAIL_CREDENTIALS_MISSING"],
+)
+def test_the_machine_code_decides_not_the_wording(code):
+    """The daemon's code classifies it, whatever the sentence happens to say.
+
+    This is the regression that made the whole check necessary. When the daemon
+    started serving these routes for real it answered
+
+        HTTP 400 {"error": "No Google account is connected on this machine, so
+        there is no calendar to read or write. Connect one, then retry.",
+        "code": "CALENDAR_NOT_CONFIGURED"}
+
+    and the substring list of the day held "no account", "not connected" and
+    "not configured" — none of which appear in "No Google account is
+    connected". The classifier fell through to its ready default, so a calendar
+    with nothing behind it would have reported itself READY. The message here is
+    deliberately one that matches no hint at all.
+    """
+
+    state, _ = classify_error(
+        GoodVibesDaemonError(
+            "GoodVibes HTTP 400: No Google account is connected on this machine, "
+            "so there is no calendar to read or write. Connect one, then retry.",
+            status=400,
+            code=code,
+        )
+    )
+    assert state == MAIL_CALENDAR_NEEDS_SETUP
+
+
+def test_a_route_that_is_real_but_unwired_is_unsupported_not_needs_setup():
+    """501 NOT_INVOKABLE is a daemon composition fact, not a missing account.
+
+    The daemon is current and the route exists; what is absent is a handler in
+    the composition it was built with. Reporting that as needs_setup would send
+    someone to connect an account that would still not be reachable.
+    """
+
+    state, _ = classify_error(
+        GoodVibesSurfaceMissingError(
+            "GoodVibes HTTP 501: Gateway method is not invokable: email.inbox.list",
+            status=501,
+            code="NOT_INVOKABLE",
+        )
+    )
+    assert state == MAIL_CALENDAR_UNSUPPORTED
+
+
+def test_a_daemon_with_no_machine_code_still_classifies_on_the_wording():
+    """The prose fallback stays, for a daemon old enough to answer without one."""
+
+    state, _ = classify_error(
+        GoodVibesDaemonError("GoodVibes HTTP 400: mail is not configured", status=400)
+    )
+    assert state == MAIL_CALENDAR_NEEDS_SETUP
+
+
 def test_every_non_ready_state_carries_a_concrete_next_step(hass):
     """No state is ever reported without telling the user what to do."""
 

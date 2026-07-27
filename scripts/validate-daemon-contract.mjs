@@ -210,26 +210,57 @@ try {
     `HTTP ${cancel.status}: ${JSON.stringify(cancel.json?.error ?? cancel.json).slice(0, 80)}`);
 
   // --- mail + calendar ------------------------------------------------------
-  // These are declared in the operator contract but carry invokable:false in
-  // the releases validated so far, and the daemon 404s them. The integration's
-  // calendar entity and notify service degrade to a "needs setup" state on
-  // exactly that 404, so this probe records which side of the line the release
-  // under validation falls on rather than asserting either way.
-  console.log('\n== mail + calendar (informational) ==');
+  // These used to be informational, because the releases validated so far
+  // carried invokable:false and the daemon 404'd them, so there was nothing to
+  // assert. They are served now, so this asserts.
+  //
+  // What it checks is deliberately narrow, because this daemon is booted with
+  // no mail composition and no account connected — the state of a fresh
+  // machine, not a misconfiguration. So the requirement is not "these succeed";
+  // it is that every answer is one this integration can CLASSIFY:
+  //
+  //   * a not-configured machine code  -> needs_setup
+  //   * 404, or 501 NOT_INVOKABLE      -> unsupported
+  //
+  // and never a 503 ws-call-overloaded, which is what a self-dispatch loop
+  // produced before the platform fix: a capacity answer for a routing fault,
+  // which would have sent someone reading it to look at load. Anything else is
+  // an answer with no home in the classifier, and it fails here rather than
+  // surfacing as a calendar that claims to be ready with nothing behind it.
+  console.log('\n== mail + calendar ==');
   const contract = JSON.parse(
     readFileSync(join(sdkRoot, 'dist/contracts/artifacts/operator-contract.json'), 'utf8'),
   );
   const byId = Object.fromEntries(contract.operator.methods.map((m) => [m.id, m]));
+  const NOT_CONFIGURED_CODES = new Set([
+    'EMAIL_NOT_CONFIGURED', 'CALENDAR_NOT_CONFIGURED', 'EMAIL_CREDENTIALS_MISSING',
+  ]);
   for (const id of ['email.send', 'email.draft.create', 'email.inbox.list', 'email.inbox.read',
     'calendar.events.create', 'calendar.events.get', 'calendar.events.list']) {
     const entry = byId[id];
-    if (!entry) { notes.push(`${id}: absent from the operator contract`); continue; }
+    check(`${id} is present in the operator contract`, Boolean(entry));
+    if (!entry) continue;
     const { method, path } = entry.http;
     const probePath = path.replace(/\{[^}]+\}/g, '1');
     const res = await call(method, probePath, method === 'POST' ? {} : undefined);
-    const served = res.status !== 404;
-    console.log(`  ${served ? 'served    ' : 'not served'} ${id.padEnd(24)} invokable=${entry.invokable} ${method} ${path} -> HTTP ${res.status}`);
-    notes.push(`${id}: invokable=${entry.invokable}, ${method} ${path} -> HTTP ${res.status}`);
+    const code = typeof res.json?.code === 'string' ? res.json.code : null;
+    const label = `${method} ${path} -> HTTP ${res.status}${code ? ` ${code}` : ''}`;
+
+    check(`${id} is served (not a 404)`, res.status !== 404, label);
+    check(
+      `${id} never answers a routing fault as capacity`,
+      !(res.status === 503 && res.json?.error === 'ws-call-overloaded'),
+      label,
+    );
+    // An input-validation refusal (a required confirm, a missing field) is a
+    // fine answer to a probe that deliberately sends nothing; it still proves
+    // the request reached the verb rather than looping.
+    const classifiable =
+      (code && NOT_CONFIGURED_CODES.has(code))
+      || (res.status === 501 && code === 'NOT_INVOKABLE')
+      || res.status === 400;
+    check(`${id} answers something the integration can classify`, classifiable, label);
+    notes.push(`${id}: invokable=${entry.invokable}, ${label}`);
   }
 } finally {
   if (daemon) await daemon.stop();
