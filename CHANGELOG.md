@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- Validate against `@pellux/goodvibes-sdk` 1.17.2, closing a five-release drift:
+  the integration still claimed 1.15.0 while 1.16.0, 1.16.1, 1.17.0, 1.17.1 and
+  1.17.2 had published. Re-vendor `generated_client.py` byte-for-byte from the
+  published 1.17.2 Python artifact; the contract-version label is the only diff,
+  so all 33 consumed methods, routes and types are unchanged across the span.
+- Live pass against a daemon booted from the published 1.17.2 package: `/status`
+  reports `running`/`1.17.2` and refuses a bad bearer token with 401; the Home
+  Assistant health route serves all seven capabilities and all four endpoints;
+  the manifest action, Home Graph status/issues/sources/pages, and the
+  `refinement/run` triage block all return their documented shapes;
+  `conversation/cancel` validates input rather than 404ing. Nothing in the
+  integration broke — the daemon-side changes in the window (a `cluster` block on
+  `/status`, daemon-owned config tiers, surface-scoped storage) are additive or
+  internal from this integration's point of view.
+- Make the "validated against SDK X" claim enforceable, because it was enforced
+  by nothing and that is how it drifted unnoticed. CI's SDK-version step is an
+  informational notice that cannot fail; the vendored-client sync test skips
+  whenever no sibling SDK checkout exists, which is always true in CI; and the
+  live checklist existed only as prose, hand-rolled fresh each pass. Now:
+  `test_version_check.py::test_validated_version_matches_vendored_contract`
+  fails when the label and the vendored contract version disagree;
+  `scripts/validate-daemon-contract.mjs` runs the whole live checklist against a
+  daemon it boots in a throwaway home and stops in a `finally` block; and a
+  scheduled `SDK drift` workflow fails when the label falls behind npm, kept out
+  of `ci.yml` so npm's publish cadence never blocks a release here.
+- Add a calendar entity backed by the daemon's `calendar.events.*` routes, so
+  the daemon's calendar appears in Home Assistant's calendar UI and works in
+  automations, including creating events.
+- Add mail and calendar services: `send_email`, `create_email_draft`,
+  `list_inbox`, `read_email`, `list_calendar_events` and `get_calendar_event`.
+  Sending mail and writing drafts are admin-gated; the reads are open and never
+  mark a message as read.
+- Report the mail and calendar surface honestly. A daemon that does not serve
+  the routes, a daemon with no account connected, and an unreachable daemon are
+  three different conditions with three different fixes, and each surfaces as
+  itself with a concrete next step — on a new diagnostic sensor, in the calendar
+  entity's attributes, and in the error raised by any call that hits it. The
+  calendar goes unavailable rather than showing an empty week, because "no
+  events" and "never set up" are not the same statement.
+- Keep every mail and calendar credential out of this repository and out of Home
+  Assistant. The daemon owns the accounts and holds the secrets in its own
+  daemon-tier config; the config entry stores only the daemon connection. Tests
+  fail if a provider client library is imported here or if the config flow grows
+  a credential field. Verified live that daemon-owned config persists to the
+  daemon tier and is readable by a separate process after a daemon restart, so
+  setup performed on any surface is available to all of them.
+
 ## 0.10.7 - 2026-07-26
 
 - Validate against `@pellux/goodvibes-sdk` 1.15.0, catching up three releases at

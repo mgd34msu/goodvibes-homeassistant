@@ -1,0 +1,110 @@
+name: SDK drift
+
+# Turns red when the integration's "validated against SDK X" claim falls behind
+# the published @pellux/goodvibes-sdk release.
+#
+# This is deliberately NOT part of ci.yml. The drift check depends on npm's
+# publish cadence rather than on anything in a given commit, so gating pushes,
+# pull requests or the auto-release on it would block this repo's releases on an
+# unrelated repo's publishes. It runs on a schedule instead, so a stale claim
+# shows up as a red run in the Actions list rather than as an informational
+# notice buried in a passing job's log — which is how the claim sat at 1.15.0
+# while the daemon moved through 1.16.0, 1.16.1, 1.17.0, 1.17.1 and 1.17.2.
+#
+# To clear a failure, re-run the live validation and refresh the pin:
+#   bun scripts/validate-daemon-contract.mjs <new version>
+# then re-vendor generated_client.py, update const.SDK_VALIDATED_VERSION and
+# docs/sdk-compatibility.md. See docs/sdk-compatibility.md.
+
+on:
+  schedule:
+    # Weekly, Mondays 08:00 UTC.
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Validated SDK version vs npm latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Compare the validated pin against npm latest
+        run: |
+          set -euo pipefail
+
+          validated=$(python3 - <<'PY'
+          import pathlib
+          import re
+
+          text = pathlib.Path("custom_components/goodvibes/const.py").read_text()
+          match = re.search(r'^SDK_VALIDATED_VERSION = "([^"]+)"$', text, re.MULTILINE)
+          print(match.group(1) if match else "")
+          PY
+          )
+          contract=$(python3 - <<'PY'
+          import pathlib
+          import re
+
+          text = pathlib.Path("custom_components/goodvibes/generated_client.py").read_text()
+          match = re.search(r'^CONTRACT_VERSION: str = "([^"]+)"$', text, re.MULTILINE)
+          print(match.group(1) if match else "")
+          PY
+          )
+          latest=$(npm view @pellux/goodvibes-sdk version)
+
+          echo "validated against : ${validated}"
+          echo "vendored contract : ${contract}"
+          echo "npm latest        : ${latest}"
+
+          {
+            echo "| | version |"
+            echo "|---|---|"
+            echo "| Validated against | \`${validated}\` |"
+            echo "| Vendored contract | \`${contract}\` |"
+            echo "| npm latest | \`${latest}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "${validated}" ] || [ -z "${contract}" ]; then
+            echo "::error::Could not read SDK_VALIDATED_VERSION or CONTRACT_VERSION."
+            exit 1
+          fi
+
+          if [ "${validated}" != "${contract}" ]; then
+            echo "::error::const.SDK_VALIDATED_VERSION (${validated}) does not match the vendored generated_client.py contract (${contract})."
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The validation claim does not match the vendored artifact." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "${validated}" != "${latest}" ]; then
+            echo "::error::The integration is validated against ${validated} but @pellux/goodvibes-sdk latest is ${latest}. Re-run 'bun scripts/validate-daemon-contract.mjs ${latest}', re-vendor generated_client.py, and refresh const.SDK_VALIDATED_VERSION plus docs/sdk-compatibility.md."
+            {
+              echo ""
+              echo "**Drift:** validated against \`${validated}\`, but npm latest is \`${latest}\`."
+              echo ""
+              echo "To clear:"
+              echo '```'
+              echo "bun scripts/validate-daemon-contract.mjs ${latest}"
+              echo '```'
+              echo "then re-vendor \`generated_client.py\`, update \`const.SDK_VALIDATED_VERSION\` and \`docs/sdk-compatibility.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "No drift: validated against ${validated}, which is npm latest."

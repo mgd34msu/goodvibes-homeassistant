@@ -862,3 +862,152 @@ accept_habit:
       description: Type CREATE to confirm creating the automation.
       selector:
         text:
+
+send_email:
+  description: >-
+    Send an email through the mail account configured on the GoodVibes daemon.
+    The daemon owns the account and its credentials; Home Assistant never
+    stores them. The send is irreversible, so this service is admin-only.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    to:
+      required: true
+      example: someone@example.com
+      selector:
+        text:
+    subject:
+      required: true
+      selector:
+        text:
+    body:
+      required: true
+      selector:
+        text:
+          multiline: true
+    in_reply_to:
+      description: Message ID this email replies to.
+      selector:
+        text:
+
+create_email_draft:
+  description: >-
+    Save a draft to the Drafts folder of the mail account configured on the
+    GoodVibes daemon. Nothing is sent.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    to:
+      required: true
+      example: someone@example.com
+      selector:
+        text:
+    subject:
+      required: true
+      selector:
+        text:
+    body:
+      required: true
+      selector:
+        text:
+          multiline: true
+    in_reply_to:
+      description: Message ID this draft replies to.
+      selector:
+        text:
+
+list_inbox:
+  description: >-
+    List inbox message summaries from the mail account configured on the
+    GoodVibes daemon. Read-only: messages are never marked as read.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    limit:
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+    since:
+      description: Only return messages on or after this date or timestamp.
+      example: "2026-07-01"
+      selector:
+        text:
+    unread_only:
+      default: false
+      selector:
+        boolean:
+
+read_email:
+  description: >-
+    Read one inbox message in full from the mail account configured on the
+    GoodVibes daemon. Read-only: the message is not marked as read.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    uid:
+      required: true
+      description: The message UID, as returned by list_inbox.
+      selector:
+        number:
+          min: 1
+          mode: box
+
+list_calendar_events:
+  description: >-
+    List events from the calendar configured on the GoodVibes daemon. The
+    GoodVibes calendar entity shows the same events in the calendar UI; this
+    service is for automations that need the raw list.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    calendar_id:
+      description: Calendar to read. Defaults to the daemon's configured calendar.
+      selector:
+        text:
+    start:
+      description: Start of the window, as a date or timestamp.
+      example: "2026-08-01T00:00:00Z"
+      selector:
+        text:
+    end:
+      description: End of the window, as a date or timestamp.
+      example: "2026-08-31T23:59:59Z"
+      selector:
+        text:
+    limit:
+      selector:
+        number:
+          min: 1
+          max: 500
+          mode: box
+
+get_calendar_event:
+  description: >-
+    Read one event in full, including attendees and recurrence, from the
+    calendar configured on the GoodVibes daemon.
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: goodvibes
+    event_id:
+      required: true
+      selector:
+        text:
+    calendar_id:
+      description: Calendar to read. Defaults to the daemon's configured calendar.
+      selector:
+        text:

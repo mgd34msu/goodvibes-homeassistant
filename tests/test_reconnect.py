@@ -88,6 +88,10 @@ class _FakeClient:
         self._maybe_fail()
         return {"tools": [], "agent_tools": []}
 
+    async def calendar_events_list(self, _payload):
+        self._maybe_fail()
+        return {"events": []}
+
 
 def _runtime(hass, client: _FakeClient) -> GoodVibesRuntimeData:
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DAEMON, data=ENTRY_DATA)

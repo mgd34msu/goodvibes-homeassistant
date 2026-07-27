@@ -6,20 +6,88 @@ per-release "target" number to chase. What matters is the daemon contract — th
 JSON response shapes — which the integration reads directly.
 
 The single moving label is the newest npm version the daemon contract was last **validated
-against**. It lives in one place, `const.SDK_VALIDATED_VERSION`, and CI echoes it against the live
-`npm view @pellux/goodvibes-sdk version` as an informational nudge (it never fails the build) so a
-drift is visible without gating releases.
+against**. It lives in one place, `const.SDK_VALIDATED_VERSION`.
+
+## How the claim is enforced
+
+Until 2026-07-27 it was enforced by nothing, and it drifted five releases without anything going
+red. That is worth stating plainly, because it explains the drift:
+
+- CI's `SDK version nudge` step is an `echo` plus a `::notice::`. It is explicitly informational
+  and **cannot fail the build**. A notice in a passing job's log is not a gate.
+- `tests/test_generated_client_sync.py` — the one mechanical check that compares the vendored
+  client against the SDK artifact — `pytest.skip`s unless a sibling `goodvibes-sdk` checkout
+  happens to exist next to this repo. CI has no SDK checkout, so it skipped on every run.
+- `test_version_check.py::test_contract_version_is_at_least_min_daemon_version` only asserts
+  `CONTRACT_VERSION >= MIN_DAEMON_VERSION`, and that floor is `1.3.0`. It passes for every release
+  that will ever ship.
+- The live half — boot a daemon, probe the routes — existed only as prose in this file. Every pass
+  hand-rolled a throwaway script, so there was nothing to re-run and nothing to fail.
+
+Three of those four could not fail by construction. Three checks now do:
+
+1. **`test_version_check.py::test_validated_version_matches_vendored_contract`** (runs in CI, no
+   network) fails when `const.SDK_VALIDATED_VERSION` and the vendored
+   `generated_client.CONTRACT_VERSION` disagree. Claiming validation at a version whose artifact
+   is not the one vendored here is now impossible.
+2. **`scripts/validate-daemon-contract.mjs`** (`bun scripts/validate-daemon-contract.mjs [version]`)
+   is the live checklist as a runnable program: it installs the published SDK, diffs the vendored
+   client against the release artifact, boots a daemon in a throwaway home on an ephemeral port,
+   probes every route this integration consumes, checks the documented response shapes, and exits
+   non-zero on any failure. It stops the daemon in a `finally` block and never touches a running
+   one.
+3. **`.github/workflows/sdk-drift.yml`** runs weekly and **fails** when the validated pin is behind
+   `npm view @pellux/goodvibes-sdk version`. It is deliberately not part of `ci.yml`: the drift
+   depends on npm's publish cadence, not on the commit, so gating pushes or the auto-release on it
+   would block this repo's releases on another repo's publishes. A red scheduled run is visible in
+   the Actions list in a way a passing job's log notice never was.
 
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.15.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-26.
+- **Last validated against:** `1.17.2` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-27.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
 every route the integration calls is intact at `1.10.1`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+The `1.17.2` pass (2026-07-27) closed a five-release drift: the integration still claimed `1.15.0`
+while `1.16.0`, `1.16.1`, `1.17.0`, `1.17.1` and `1.17.2` had published. It re-vendored
+`custom_components/goodvibes/generated_client.py` byte-for-byte from the published `1.17.2`
+package's Python artifact; the only diff from `1.15.0` is the contract version label, so all 33
+consumed methods, routes and types are unchanged across the whole span.
+
+The pass ran `scripts/validate-daemon-contract.mjs` (new this pass) against a daemon booted from
+the published `1.17.2` SDK in an isolated home on an ephemeral loopback port, and every check
+passed. Confirmed live: `/status` returns `status: running` / `version: 1.17.2` and `401` on a bad
+bearer token; `/api/homeassistant/health` serves the full capability set this integration consumes
+(`conversation-submit-wait`, `conversation-stream`, `conversation-cancel`, `stable-correlation`,
+`isolated-remote-chat-session`, `remote-session-ttl`, `homeassistant-event-delivery`) plus all four
+advertised endpoints; the manifest action still wraps its payload as `result.device`; the Home
+Graph status, issues, sources and pages routes return their documented shapes; and
+`refinement/run` still returns the full `triage` block (`ok`, `spaceId`, `configured`, `processed`,
+`skipped`, `applied`, `reviewed`, `decisions`, `remaining`, `minConfidence`) the panel's automatic
+triage depends on. `conversation/cancel` answers `400 "sessionId or known messageId is required."`
+— the route alive and validating input, not a 404.
+
+Nothing in the integration broke across the window. The daemon-side changes in it are additive or
+internal from this integration's point of view:
+
+- **`/status` gained a `cluster` block** (`enabled`, `role`, `nodeId`, `heldSurfaceCount`, `peers`,
+  `transport`, …). The integration reads `status` and `version` off that response with `.get()` and
+  has no strict schema over it, so the extra block is inert here.
+- **Daemon-owned config tiers.** `config.set` now reports `persistedTo`, `tier` and `daemonOwned`.
+  This integration does not call `config.set`, so it is unaffected — but the tier is what makes
+  mail and calendar setup performed on any surface visible to all of them (see
+  [mail-calendar.md](mail-calendar.md)).
+- **Surface-scoped storage.** `ConfigManager` now *requires* a `surfaceRoot` when its paths are
+  derived from `homeDir`/`workingDir`; constructing one without it raises. This is an SDK-embedder
+  concern and does not touch this integration, which speaks only HTTP — but it did break the ad-hoc
+  boot recipe used by earlier validation passes, which is one more reason that recipe is now a
+  committed script rather than prose.
+- **Conversation gate and cluster settings** did not change any route this integration calls.
 
 The `1.15.0` pass (2026-07-26) re-vendored `custom_components/goodvibes/generated_client.py`
 byte-for-byte from the published `1.15.0` package's Python artifact; the only diff from `1.12.1`
@@ -176,12 +244,30 @@ Assist uses:
 
 Home Graph uses the daemon routes listed in [home-graph.md](home-graph.md#daemon-routes).
 
+Mail and calendar use the daemon routes listed in [mail-calendar.md](mail-calendar.md). They are
+**optional**: a daemon that does not serve them is a supported configuration, and the integration
+reports that state honestly rather than failing setup. As of `1.17.2` the routes are declared in
+the operator contract but carry `invokable: false` and answer `404` on a live daemon — verified,
+not assumed, by `scripts/validate-daemon-contract.mjs`, which records the served/not-served status
+of each one on every run.
+
 ## Validation Checklist
+
+Steps 1 and 2 are now automated — run them with:
+
+```bash
+bun scripts/validate-daemon-contract.mjs           # against npm latest
+bun scripts/validate-daemon-contract.mjs 1.17.2    # against a pinned release
+```
+
+That covers the version coherence check, the vendored-artifact diff, and every route and response
+shape listed above, against a real daemon it boots and stops itself. The remaining steps need a
+Home Assistant instance and stay manual.
 
 After a daemon SDK update, and after refreshing `const.SDK_VALIDATED_VERSION`:
 
-1. Check `GET /status`.
-2. Check `GET /api/homeassistant/health`.
+1. Check `GET /status`. *(automated)*
+2. Check `GET /api/homeassistant/health`. *(automated)*
 3. Restart Home Assistant after the daemon is healthy.
 4. Open the `GoodVibes Home` panel.
 5. Run `goodvibes.sync_home_graph`.

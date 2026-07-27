@@ -32,6 +32,8 @@ from .const import (
     ISSUE_DAEMON_CAPABILITIES,
     ISSUE_DAEMON_UNREACHABLE,
     ISSUE_DAEMON_VERSION,
+    MAIL_CALENDAR_READY,
+    MAIL_CALENDAR_UNSUPPORTED,
     MIN_DAEMON_VERSION,
     RECONNECT_INITIAL_DELAY_S,
     RECONNECT_MAX_DELAY_S,
@@ -40,6 +42,11 @@ from .const import (
     TERMINAL_STATUSES,
 )
 from .home_graph import build_home_graph_base_payload, default_knowledge_space_id
+from .mail_calendar import (
+    MailCalendarState,
+    async_probe as async_probe_mail_calendar,
+    classify_error as classify_mail_calendar_error,
+)
 from .version_check import DaemonContractCheck, check_daemon_contract
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +90,11 @@ class GoodVibesRuntimeData:
     home_graph_sources: dict[str, Any] = field(default_factory=dict)
     home_graph_pages: dict[str, Any] = field(default_factory=dict)
     home_graph_refinement_tasks: dict[str, Any] = field(default_factory=dict)
+    # What the daemon can currently do for mail and calendar, and why. The
+    # daemon owns those accounts and their credentials; this only records what
+    # it answered so the calendar entity, the services and the diagnostic
+    # sensor can all report the same honest reason (see mail_calendar.py).
+    mail_calendar: MailCalendarState = field(default_factory=MailCalendarState)
     status: str = "unknown"
     last_reply: str | None = None
     last_payload: dict[str, Any] = field(default_factory=dict)
@@ -269,7 +281,47 @@ class GoodVibesRuntimeData:
             # this just keeps entities unavailable and retries instead of
             # resuming normal operation against an incompatible daemon.
             self._async_mark_daemon_not_ready()
-        await self.async_refresh_home_graph()
+        # The Home Graph reads and the mail/calendar probe are independent
+        # daemon calls, so they run concurrently rather than one after the
+        # other. Neither raises: each records its own outcome.
+        await asyncio.gather(
+            self.async_refresh_home_graph(),
+            self.async_refresh_mail_calendar(),
+        )
+        async_dispatcher_send(self.hass, self.signal)
+
+    async def async_refresh_mail_calendar(self) -> None:
+        """Re-probe the daemon's mail and calendar surface.
+
+        Never raises. A daemon that does not serve the routes, or serves them
+        with no account connected, is a normal state for this integration —
+        mail and calendar are optional — so the outcome is recorded on
+        ``mail_calendar`` for the entity and sensor to report rather than being
+        allowed to fail a refresh that is mostly about other things.
+        """
+
+        self.mail_calendar = await async_probe_mail_calendar(self.client)
+        if self.mail_calendar.state == MAIL_CALENDAR_UNSUPPORTED:
+            _LOGGER.debug(
+                "GoodVibes daemon does not serve the mail and calendar routes; "
+                "the calendar entity and mail services stay unavailable."
+            )
+
+    @callback
+    def async_apply_mail_calendar_error(self, err: GoodVibesClientError) -> None:
+        """Record why a mail or calendar call failed.
+
+        Called from the entity and service handlers so a failure seen during a
+        real call updates the reported state immediately, instead of leaving a
+        stale "ready" until the next refresh.
+        """
+
+        state, detail = classify_mail_calendar_error(err)
+        self.mail_calendar.state = state
+        self.mail_calendar.detail = detail
+        self.mail_calendar.checked_at = dt_util.utcnow().isoformat()
+        if state != MAIL_CALENDAR_READY:
+            self.mail_calendar.events = []
         async_dispatcher_send(self.hass, self.signal)
 
     def _async_check_daemon_contract(

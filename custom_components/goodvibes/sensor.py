@@ -143,6 +143,18 @@ SENSOR_DESCRIPTIONS: tuple[GoodVibesSensorDescription, ...] = (
         value_fn=lambda data: _home_graph_source_count(data),
         attrs_fn=lambda data: _home_graph_source_attrs(data),
     ),
+    # Says which of "ready / needs setup / unsupported / unreachable" the
+    # daemon's mail and calendar surface is in, and carries the concrete next
+    # step for the three that are not ready. The calendar entity going
+    # unavailable is the symptom; this is where the reason lives.
+    GoodVibesSensorDescription(
+        key="mail_calendar_status",
+        translation_key="mail_calendar_status",
+        icon="mdi:email-sync",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.mail_calendar.state,
+        attrs_fn=lambda data: data.mail_calendar.as_attributes(),
+    ),
 )
 
 
