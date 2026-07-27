@@ -1,14 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 - 2026-07-27
 
-- Validate against `@pellux/goodvibes-sdk` 1.17.2, closing a five-release drift:
-  the integration still claimed 1.15.0 while 1.16.0, 1.16.1, 1.17.0, 1.17.1 and
-  1.17.2 had published. Re-vendor `generated_client.py` byte-for-byte from the
-  published 1.17.2 Python artifact; the contract-version label is the only diff,
+- Validate against `@pellux/goodvibes-sdk` 1.18.1, closing a six-release drift:
+  the integration still claimed 1.15.0 while 1.16.0, 1.16.1, 1.17.0, 1.17.1, 1.17.2,
+  1.18.0 and 1.18.1 had published. Re-vendor `generated_client.py` byte-for-byte from the
+  published 1.18.1 Python artifact; the contract-version label is the only diff,
   so all 33 consumed methods, routes and types are unchanged across the span.
-- Live pass against a daemon booted from the published 1.17.2 package: `/status`
-  reports `running`/`1.17.2` and refuses a bad bearer token with 401; the Home
+- Live pass against a daemon booted from the published 1.18.1 package: `/status`
+  reports `running`/`1.18.1` and refuses a bad bearer token with 401; the Home
   Assistant health route serves all seven capabilities and all four endpoints;
   the manifest action, Home Graph status/issues/sources/pages, and the
   `refinement/run` triage block all return their documented shapes;
@@ -41,6 +41,27 @@
   entity's attributes, and in the error raised by any call that hits it. The
   calendar goes unavailable rather than showing an empty week, because "no
   events" and "never set up" are not the same statement.
+- Mail and calendar are actually served now, and this release is validated
+  against a daemon that answers them. Through 1.17.2 the routes were cataloged
+  with `invokable: false` and answered 404, so the honest reported state was
+  "unsupported" and there was nothing to assert; the platform serves `email.*`
+  and `calendar.*` itself as of 1.18.0. The live checklist stops being
+  informational about them and asserts instead — not that the calls succeed,
+  since it boots a daemon with no account connected, but that every answer is
+  one this integration can classify, and never a capacity error standing in for
+  a routing fault.
+- Classify those failures on the daemon's machine code rather than its wording.
+  The live pass found the classifier reading English: the daemon says "No Google
+  account is connected on this machine" with `code: CALENDAR_NOT_CONFIGURED`,
+  and the substring list held "no account", "not connected" and "not
+  configured" — none of which appear in that sentence. It fell through to the
+  ready default, so a calendar with nothing behind it would have reported itself
+  READY. Codes are the contract and are checked first; the phrase list survives
+  only as a fallback for a daemon old enough to answer without one.
+- Treat `501 NOT_INVOKABLE` as a sibling of the 404 rather than as a missing
+  account. Both mean the surface is unavailable here, but only one of them means
+  the daemon is out of date: a 501 says the route is real and the daemon is
+  current, and what is absent is a handler in the composition it was built with.
 - Keep every mail and calendar credential out of this repository and out of Home
   Assistant. The daemon owns the accounts and holds the secrets in its own
   daemon-tier config; the config entry stores only the daemon connection. Tests
