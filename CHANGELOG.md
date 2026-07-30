@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.12.0 - 2026-07-30
+
+- Validate against `@pellux/goodvibes-sdk` 1.20.0, closing a four-release drift:
+  the integration still claimed 1.18.1 while 1.19.0, 1.19.1, 1.19.2 and 1.20.0
+  had published — this repo missed the entire 1.19.x train. Re-vendor
+  `generated_client.py` byte-for-byte from the published 1.20.0 Python
+  artifact; the contract-version label is the only diff, so all 33 consumed
+  methods, routes and types are unchanged across the whole span.
+- Live pass against a daemon booted from the published 1.20.0 package: `/status`
+  reports `running`/`1.20.0` and refuses a bad bearer token with 401; the Home
+  Assistant health route serves all seven capabilities and all four endpoints;
+  the manifest action, Home Graph status/issues/sources/pages, and the
+  `refinement/run` triage block all return their documented shapes;
+  `conversation/cancel` validates input rather than 404ing; mail and calendar
+  answer the same classifiable shapes as the 1.18.1 pass (`400 INVALID_INPUT`,
+  `400 CALENDAR_NOT_CONFIGURED`, `501 NOT_INVOKABLE` — never a routing fault
+  reported as capacity).
+- The SDK's 1.19.x/1.20.0 span added new operator methods this integration does
+  not consume — `occasions.*` (proactive occasion/plan tracking), `voice.wake.*`
+  (wake-word model provisioning), and several settings domains
+  (`config.get`/`config.set`, `checkin.config.*`, `mcp.config.*`,
+  `security.settings`, `settings.snapshot`). None of them touch the REST subset
+  this integration's generated client vendors (`channels.*`, `control.status`,
+  `homeassistant.homeGraph.*`, `tasks.*`, `email.*`, `calendar.events.*`), so
+  there is nothing here for Home Assistant to adapt to or gain from yet — this
+  is a validation-and-docs pass, not a feature pass. Confirmed by the
+  byte-for-byte re-vendor above: the only diff from 1.18.1 is the version
+  label.
+
 ## 0.11.0 - 2026-07-27
 
 - Validate against `@pellux/goodvibes-sdk` 1.18.1, closing a six-release drift:
