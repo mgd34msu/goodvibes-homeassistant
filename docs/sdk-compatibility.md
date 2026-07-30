@@ -45,13 +45,47 @@ Three of those four could not fail by construction. Three checks now do:
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.17.2` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-27.
+- **Last validated against:** `1.20.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-30.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
 every route the integration calls is intact at `1.10.1`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+The `1.20.0` pass (2026-07-30) closed a four-release drift: the integration still claimed `1.18.1`
+while `1.19.0`, `1.19.1`, `1.19.2` and `1.20.0` had published — the entire `1.19.x` train was
+missed. It re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte from the
+published `1.20.0` package's Python artifact; the only diff from `1.18.1` is the contract version
+label, so all 33 consumed methods, routes and types are unchanged across the whole span.
+
+`scripts/validate-daemon-contract.mjs 1.20.0` passed every check against a daemon booted from the
+published `1.20.0` SDK in an isolated home on an ephemeral loopback port: `/status` returns
+`status: running` / `version: 1.20.0` and `401` on a bad bearer token; `/api/homeassistant/health`
+serves the full capability set this integration consumes plus all four advertised endpoints; the
+manifest action still wraps its payload as `result.device`; the Home Graph status, issues, sources
+and pages routes return their documented shapes; `refinement/run` still returns the full `triage`
+block; `conversation/cancel` answers `400` (input validation, not a 404). Mail and calendar answer
+the same classifiable shapes the `1.18.1` pass first confirmed: `email.send` and
+`email.draft.create` answer `400 INVALID_INPUT`; `email.inbox.list` and `email.inbox.read` answer
+`501 NOT_INVOKABLE`; `calendar.events.create` answers `400 INVALID_INPUT`; `calendar.events.get`
+and `calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED` — never a `503 ws-call-overloaded`
+routing fault reported as capacity.
+
+The SDK's `1.19.x`/`1.20.0` span added operator methods this integration does not consume:
+`occasions.*` (proactive occasion/plan tracking — `occasions.list`, `.propose`, `.confirm`,
+`.plans.*`, `.interview.*`, `.gifts`, `.sweep`, `.state`), `voice.wake.*` (wake-word model
+provisioning and status), and several settings domains (`config.get`/`config.set`,
+`checkin.config.*`, `mcp.config.*`, `security.settings`, `settings.snapshot`). None of them are in
+the REST subset `generated_client.py` vendors (`channels.*`, `control.status`,
+`homeassistant.homeGraph.*`, `tasks.*`, `email.*`, `calendar.events.*`), so there is no adaptation
+required and nothing new for Home Assistant to surface yet — confirmed by the byte-for-byte
+re-vendor above, not merely assumed from the changelog.
+
+Pytest passed in full: 257 passed, 1 skipped (`test_generated_client_sync.py`, which skips absent a
+sibling `goodvibes-sdk` checkout — expected in this environment, the same skip every prior pass has
+recorded). `python -m compileall`, the frontend JS syntax check, `frontend`'s `npm run check`
+(built artifacts match source), and the release-metadata consistency check all passed.
 
 The `1.17.2` pass (2026-07-27) closed a five-release drift: the integration still claimed `1.15.0`
 while `1.16.0`, `1.16.1`, `1.17.0`, `1.17.1` and `1.17.2` had published. It re-vendored
@@ -246,10 +280,12 @@ Home Graph uses the daemon routes listed in [home-graph.md](home-graph.md#daemon
 
 Mail and calendar use the daemon routes listed in [mail-calendar.md](mail-calendar.md). They are
 **optional**: a daemon that does not serve them is a supported configuration, and the integration
-reports that state honestly rather than failing setup. As of `1.17.2` the routes are declared in
-the operator contract but carry `invokable: false` and answer `404` on a live daemon — verified,
-not assumed, by `scripts/validate-daemon-contract.mjs`, which records the served/not-served status
-of each one on every run.
+reports that state honestly rather than failing setup. As of `1.18.0` the daemon serves `email.*`
+and `calendar.*` itself (`invokable: true` in the operator contract); a fresh daemon with no
+account connected answers `400` with a `*_NOT_CONFIGURED` code (or `501 NOT_INVOKABLE` for the
+inbox-read routes) rather than `404` — verified, not assumed, by
+`scripts/validate-daemon-contract.mjs`, which records the served/not-served status and the
+response shape of each one on every run.
 
 ## Validation Checklist
 
@@ -257,7 +293,7 @@ Steps 1 and 2 are now automated — run them with:
 
 ```bash
 bun scripts/validate-daemon-contract.mjs           # against npm latest
-bun scripts/validate-daemon-contract.mjs 1.17.2    # against a pinned release
+bun scripts/validate-daemon-contract.mjs 1.20.0    # against a pinned release
 ```
 
 That covers the version coherence check, the vendored-artifact diff, and every route and response
