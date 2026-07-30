@@ -45,13 +45,41 @@ Three of those four could not fail by construction. Three checks now do:
 ## Current State
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.20.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-30.
+- **Last validated against:** `1.21.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-30.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it —
 every route the integration calls is intact at `1.10.1`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+The `1.21.0` pass (2026-07-30) followed the `1.20.0` pass by a single release. It re-vendored
+`custom_components/goodvibes/generated_client.py` byte-for-byte from the published `1.21.0`
+package's Python artifact; the only diff from `1.20.0` is the contract version label, so all 33
+consumed methods, routes and types are unchanged.
+
+This pass also diffed both releases' `operator-contract.json` artifacts directly rather than
+inferring from the vendored client alone: the method list is identical between `1.20.0` and
+`1.21.0` — 483 methods, none added or removed. The daemon-lifecycle work that shipped in this
+span did not touch the operator contract at all.
+
+`scripts/validate-daemon-contract.mjs 1.21.0` passed every check against a daemon booted from the
+published `1.21.0` SDK in an isolated home on an ephemeral loopback port: `/status` returns
+`status: running` / `version: 1.21.0` and `401` on a bad bearer token; `/api/homeassistant/health`
+serves the full capability set this integration consumes plus all four advertised endpoints; the
+manifest action still wraps its payload as `result.device`; the Home Graph status, issues, sources
+and pages routes return their documented shapes; `refinement/run` still returns the full `triage`
+block; `conversation/cancel` answers `400` (input validation, not a 404). Mail and calendar answer
+the same classifiable shapes the `1.20.0` pass confirmed: `email.send` and `email.draft.create`
+answer `400 INVALID_INPUT`; `email.inbox.list` and `email.inbox.read` answer `501 NOT_INVOKABLE`;
+`calendar.events.create` answers `400 INVALID_INPUT`; `calendar.events.get` and
+`calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED` — never a `503 ws-call-overloaded`
+routing fault reported as capacity.
+
+Pytest passed in full: 257 passed, 1 skipped (`test_generated_client_sync.py`, which skips absent
+a sibling `goodvibes-sdk` checkout — expected in this environment, the same skip every prior pass
+has recorded). `python -m compileall`, the frontend JS syntax check, `frontend`'s `npm run check`
+(built artifacts match source), and the release-metadata consistency check all passed.
 
 The `1.20.0` pass (2026-07-30) closed a four-release drift: the integration still claimed `1.18.1`
 while `1.19.0`, `1.19.1`, `1.19.2` and `1.20.0` had published — the entire `1.19.x` train was

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.12.1 - 2026-07-30
+
+- Validate against `@pellux/goodvibes-sdk` 1.21.0, the release immediately
+  following 1.20.0. Re-vendor `generated_client.py` byte-for-byte from the
+  published 1.21.0 Python artifact; the contract-version label is the only
+  diff, so all 33 consumed methods, routes and types are unchanged.
+- Confirmed the operator contract itself did not move at all between 1.20.0
+  and 1.21.0: comparing both releases' `operator-contract.json` artifacts
+  directly, the method list is identical (483 methods, none added or
+  removed) — not merely assumed from the vendored client's version stamp.
+- Live pass against a daemon booted from the published 1.21.0 package:
+  `/status` reports `running`/`1.21.0` and refuses a bad bearer token with
+  401; the Home Assistant health route serves all seven capabilities and all
+  four endpoints; the manifest action, Home Graph status/issues/sources/pages,
+  and the `refinement/run` triage block all return their documented shapes;
+  `conversation/cancel` validates input rather than 404ing; mail and calendar
+  answer the same classifiable shapes as the 1.20.0 pass (`400
+  INVALID_INPUT`, `400 CALENDAR_NOT_CONFIGURED`, `501 NOT_INVOKABLE` — never
+  a routing fault reported as capacity).
+- This is a validation-and-docs pass, not a feature pass: nothing in the
+  daemon-lifecycle work that shipped between 1.20.0 and 1.21.0 touches the
+  REST subset this integration consumes.
+
 ## 0.12.0 - 2026-07-30
 
 - Validate against `@pellux/goodvibes-sdk` 1.20.0, closing a four-release drift:
