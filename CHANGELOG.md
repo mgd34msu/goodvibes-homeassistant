@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.13.0 - 2026-08-01
+
+- Validate against platform contract 2.0.0. The daemon has become its own
+  product, versioned independently of the former `@pellux/goodvibes-sdk`
+  train this changelog previously tracked; `SDK_VALIDATED_VERSION` now
+  records that contract version directly. The connection shape this
+  integration relies on is unchanged for Home Assistant users: same daemon
+  URL and bearer-token setup, same 33 consumed operator methods, same
+  routes.
+- Re-vendor `generated_client.py` from the published contract 2.0.0 Python
+  artifact. Diffing against the prior vendored file, the only substantive
+  change is that `control.status`'s response type (`GET /status`) now
+  declares two additional fields, `buildVersion` and `platformVersion`,
+  alongside the existing `status` and `version` — a richer, more honest
+  version report from the daemon side. This integration does not read
+  either new field yet; its own version and capability checks
+  (`version_check.py`) still key off `status.version`, which is unchanged
+  in meaning. No method was renamed, added, or removed, and no other
+  request or response shape moved.
+- Checked explicitly for `SESSION_NOT_FOUND`, the error-code settlement
+  from this platform cycle: this integration has no conversation-session
+  error-code handling to update — it never referenced that code, and
+  nothing in the vendored client or the hand-written mail/calendar error
+  codes (`*_NOT_CONFIGURED`, `NOT_INVOKABLE`) overlaps with it.
+- Rebuilt the frontend panel assets (`goodvibes-home-panel.js`,
+  `goodvibes-icons.js`) so their build banner carries the 0.13.0 stamp;
+  no source or behavior change, version label only.
+
 ## 0.12.1 - 2026-07-30
 
 - Validate against `@pellux/goodvibes-sdk` 1.21.0, the release immediately
