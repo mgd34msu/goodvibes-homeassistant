@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.2 - 2026-08-02
+
+- Validate against platform contract 2.0.4. The re-vendored generated client
+  differs by its version stamps only — all 33 consumed methods, routes, and
+  response types are unchanged — and the live checklist was re-run against a
+  daemon booted from the published release.
+
 ## 0.13.1 - 2026-08-01
 
 - Validate against platform contract 2.0.3. The re-vendored generated client
