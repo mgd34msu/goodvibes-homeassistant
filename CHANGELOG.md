@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.3 - 2026-08-02
+
+- Validate against platform contract 2.0.7. The re-vendored generated client
+  picks up the platform's new `channel` session kind in the session schemas
+  (a Telegram conversation is filed as a chat, not a project session), and
+  the live checklist was re-run against a daemon booted from the published
+  release — all contract checks passed.
+
 ## 0.13.2 - 2026-08-02
 
 - Validate against platform contract 2.0.4. The re-vendored generated client
