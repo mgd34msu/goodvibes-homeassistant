@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.5 - 2026-08-05
+
+- Validate against platform contract 2.0.9. The re-vendored client picks up
+  the occasion acknowledgment verb and subject attribution, and the live
+  checklist was re-run against a daemon booted from the published release.
+
 ## 0.13.4 - 2026-08-05
 
 - Validate against platform contract 2.0.8. The re-vendored generated client
