@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.4 - 2026-08-05
+
+- Validate against platform contract 2.0.8. The re-vendored generated client
+  picks up the corrected profile responses (the declared `section` field and
+  nullable provenance — the fix that makes strict clients able to read the
+  profile again), and the live checklist was re-run against a daemon booted
+  from the published release.
+
 ## 0.13.3 - 2026-08-02
 
 - Validate against platform contract 2.0.7. The re-vendored generated client
