@@ -1,4 +1,4 @@
-/*! GoodVibes Home Assistant goodvibes-home-panel.js v0.13.5
+/*! GoodVibes Home Assistant goodvibes-home-panel.js v0.13.6
  * Built from frontend/src/goodvibes-home-panel.js by frontend/build.mjs — do not edit the
  * served artifact directly; edit the source and rebuild. */
 

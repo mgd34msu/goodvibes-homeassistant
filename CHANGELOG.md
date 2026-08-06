@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.6 - 2026-08-05
+
+- Validate against platform contract 2.0.10. The contract surface is
+  unchanged for this integration; the daemon behind it (1.28.12) now requires
+  the exec boundary for hosted conversational sessions, resumes event streams
+  from the position actually reached, and no longer freezes other sessions'
+  heartbeats while one hosted turn runs.
+
 ## 0.13.5 - 2026-08-05
 
 - Validate against platform contract 2.0.9. The re-vendored client picks up
