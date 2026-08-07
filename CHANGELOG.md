@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.8 - 2026-08-07
+
+- Validate against platform contract 2.0.13. The daemon behind this
+  integration (1.28.16) now measures its silence floor from the room's own
+  ambient level, the capture ceiling can be turned off, and its compiled
+  binary no longer depends on a build-order lottery at load.
+
 ## 0.13.7 - 2026-08-06
 
 - Validate against platform contract 2.0.11. The daemon behind this
