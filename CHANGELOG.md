@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.7 - 2026-08-06
+
+- Validate against platform contract 2.0.11. The daemon behind this
+  integration (1.28.13) now routes unnamed voice requests to the provider
+  the user configured — local engines first when provisioned — instead of
+  the first cloud provider on its internal list.
+
 ## 0.13.6 - 2026-08-05
 
 - Validate against platform contract 2.0.10. The contract surface is
