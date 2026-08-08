@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.9 - 2026-08-08
+
+- Validate against platform contract 2.0.14. The daemon behind this
+  integration (1.28.17) now ends post-wake capture when the speaker stops on
+  real microphones, strips markdown from spoken output, and records a
+  diagnostics receipt for every completed wake capture.
+
 ## 0.13.8 - 2026-08-07
 
 - Validate against platform contract 2.0.13. The daemon behind this
