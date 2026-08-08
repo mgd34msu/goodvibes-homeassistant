@@ -1,4 +1,6 @@
 {
+  "domain": "goodvibes",
+  "name": "GoodVibes",
   "after_dependencies": [
     "assist_pipeline",
     "conversation"
@@ -13,11 +15,9 @@
     "websocket_api"
   ],
   "documentation": "https://github.com/mgd34msu/goodvibes-homeassistant",
-  "domain": "goodvibes",
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/mgd34msu/goodvibes-homeassistant/issues",
-  "name": "GoodVibes",
   "requirements": [],
   "version": "0.13.9"
 }
