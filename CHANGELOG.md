@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.10 - 2026-08-15
+
+- Validate against platform contract 2.0.17. The daemon behind this
+  integration (1.28.19) now reads provider subscription sign-ins from the
+  shared tier (a login on any surface reaches it), requests its keep-awake
+  sleep inhibitor without ever prompting for authentication on a terminal,
+  and its edit tool schema is compatible with strict OpenAI-compatible
+  gateways.
+
 ## 0.13.9 - 2026-08-08
 
 - Validate against platform contract 2.0.14. The daemon behind this
