@@ -5,7 +5,7 @@ from __future__ import annotations
 from .generated_client import OPERATOR_ROUTES
 
 DOMAIN = "goodvibes"
-INTEGRATION_VERSION = "0.13.10"
+INTEGRATION_VERSION = "0.13.11"
 
 # The integration always targets the LATEST published @pellux/goodvibes-sdk; it
 # is a thin client over stable daemon HTTP routes, not a pinned SDK build. This
