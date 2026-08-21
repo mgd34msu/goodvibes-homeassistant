@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mgd34msu/goodvibes-homeassistant/actions/workflows/ci.yml/badge.svg)](https://github.com/mgd34msu/goodvibes-homeassistant/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.12.0-blue.svg)](https://github.com/mgd34msu/goodvibes-homeassistant)
+[![Version](https://img.shields.io/badge/version-0.13.11-blue.svg)](https://github.com/mgd34msu/goodvibes-homeassistant)
 
 GoodVibes is a conversational assistant that runs as its own daemon; this integration is the Home Assistant side of it. It adds a `GoodVibes` conversation entity you can select as the agent in an Assist pipeline, an admin-only `GoodVibes Home` sidebar panel for browsing and feeding the daemon's Home Graph knowledge base, diagnostic sensors and repairs, an update entity, and a set of Home Assistant services for prompting, running agents, and working with Home Graph facts and pages. The daemon owns the model, routing, knowledge storage, and answer synthesis; this integration stays thin: setup, Assist plumbing, services, sensors, upload proxying, and the panel bridge.
 
