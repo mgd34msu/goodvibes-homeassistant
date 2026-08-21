@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fix a NameError on daemon HTTP 501 responses: the client referenced an
+  unimported constant, so "surface missing" errors raised NameError instead
+  of the intended GoodVibesSurfaceMissingError.
+- Release tag pushes now run the full gate (hassfest, compileall, ruff,
+  pytest) against the tagged commit before publishing; the vendored
+  generated client is hash-pinned and verified in CI.
+
 ## 0.13.10 - 2026-08-15
 
 - Validate against platform contract 2.0.17. The daemon behind this

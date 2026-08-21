@@ -8,42 +8,16 @@ Run the same checks as the local CI validation job before pushing code changes:
 
 ```bash
 python -m compileall custom_components/goodvibes
+ruff check custom_components tests
+python -m pytest
 find custom_components/goodvibes/frontend -name '*.js' -print0 | xargs -0 -r -n1 node --check
-python <<'PY'
-import json
-import pathlib
-import re
-
-root = pathlib.Path("custom_components/goodvibes")
-manifest = json.loads((root / "manifest.json").read_text())
-const_py = (root / "const.py").read_text()
-hacs = json.loads(pathlib.Path("hacs.json").read_text())
-
-version_match = re.search(r'^INTEGRATION_VERSION = "([^"]+)"$', const_py, re.MULTILINE)
-repo_match = re.search(r'^UPDATE_REPOSITORY = "([^"]+)"$', const_py, re.MULTILINE)
-if version_match is None:
-    raise SystemExit("Missing INTEGRATION_VERSION in const.py")
-if repo_match is None:
-    raise SystemExit("Missing UPDATE_REPOSITORY in const.py")
-
-version = version_match.group(1)
-repository = repo_match.group(1)
-repository_url = f"https://github.com/{repository}"
-
-if manifest["version"] != version:
-    raise SystemExit(f"manifest version {manifest['version']} != const version {version}")
-if manifest["documentation"] != repository_url:
-    raise SystemExit("manifest documentation does not match UPDATE_REPOSITORY")
-if manifest["issue_tracker"] != f"{repository_url}/issues":
-    raise SystemExit("manifest issue_tracker does not match UPDATE_REPOSITORY")
-if repository.startswith("OWNER/") or "OWNER/" in const_py:
-    raise SystemExit("Repository metadata still contains placeholder OWNER")
-if not hacs.get("zip_release") or hacs.get("filename") != "goodvibes.zip":
-    raise SystemExit("hacs.json must point to goodvibes.zip release assets")
-print(f"metadata ok: {version}")
-PY
+python scripts/check_release_metadata.py
 git diff --check
 ```
+
+`ruff` comes from `requirements_test.txt`, pinned to an exact version because its
+rule behaviour changes between releases. The rule selection lives in
+`pyproject.toml` and is deliberately narrow: real errors only, no style rules.
 
 For docs-only changes, also check local Markdown links:
 
@@ -135,11 +109,14 @@ Use tags in the form `v<manifest version>`, for example `v0.5.70`.
 
 The release workflow:
 
-1. Checks out the tag.
-2. Validates the tag equals `v<manifest version>`.
-3. Builds `dist/goodvibes.zip`.
-4. Publishes a GitHub release with generated release notes.
-5. Uploads `goodvibes.zip` as the release asset.
+1. Runs the `gate` job against the tagged commit: `compileall`, `ruff check`, the release metadata check, the full pytest suite, and hassfest.
+2. Checks out the tag.
+3. Validates the tag equals `v<manifest version>`.
+4. Builds `dist/goodvibes.zip`.
+5. Publishes a GitHub release with generated release notes.
+6. Uploads `goodvibes.zip` as the release asset.
+
+Nothing is published unless the gate passes, on either entry path. This matters most for a hand-pushed tag: that starts `release.yml` directly, with no `ci.yml` run behind it, so without the gate it would publish to HACS users untested. On the zero-touch path the gate is a re-run of checks `ci.yml` already passed, which is cheap enough (the suite takes seconds) to be worth not having to prove CI ran green on that exact commit.
 
 The archive contains `custom_components/goodvibes/` and excludes `__pycache__` and `*.pyc`.
 
@@ -150,7 +127,10 @@ Use this sequence for a normal release:
 ```bash
 git status --short --branch
 python -m compileall custom_components/goodvibes
+ruff check custom_components tests
+python -m pytest
 find custom_components/goodvibes/frontend -name '*.js' -print0 | xargs -0 -r -n1 node --check
+python scripts/check_release_metadata.py
 git diff --check
 git add README.md CHANGELOG.md docs custom_components/goodvibes/manifest.json custom_components/goodvibes/const.py
 git commit -m "chore: release vX.Y.Z"

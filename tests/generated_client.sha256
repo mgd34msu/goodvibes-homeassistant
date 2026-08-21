@@ -1,0 +1,15 @@
+# SHA-256 of the vendored SDK client, checked by
+# tests/test_generated_client_sync.py and .github/workflows/sdk-drift.yml.
+#
+# custom_components/goodvibes/generated_client.py is a byte-for-byte copy of the
+# SDK's generated artifact. This repo does not run the SDK's code generator and CI
+# has no SDK checkout, so this recorded hash is the only thing standing between a
+# hand-edit of the vendored file and a shipped release.
+#
+# Refresh it ONLY after re-copying the artifact from the SDK, never to make a
+# failing check pass:
+#   sha256sum custom_components/goodvibes/generated_client.py > tests/generated_client.sha256
+# (then restore this comment header), and verify with:
+#   sha256sum -c tests/generated_client.sha256
+
+fca73922add60fabe03effbeb7bd058b2ca24a6ecb4a8dd832c2f3a3493c23ef  custom_components/goodvibes/generated_client.py

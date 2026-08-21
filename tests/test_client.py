@@ -71,6 +71,38 @@ async def test_http_error_status_maps_to_typed_exception(
     assert err.value.status == status
 
 
+async def test_501_not_invokable_maps_to_surface_missing(hass, aioclient_mock):
+    """A 501 carrying NOT_INVOKABLE is a missing surface, not a generic failure.
+
+    Regression test: no case in this module drove a real 501 through the client,
+    and the 500/502 cases above short-circuit before the code comparison, so a
+    missing import of ``DAEMON_CODE_NOT_INVOKABLE`` in client.py went unnoticed
+    while every 501 response raised NameError instead of a typed error.
+    """
+
+    aioclient_mock.get(
+        f"{DAEMON}/status",
+        status=501,
+        text='{"code": "NOT_INVOKABLE", "message": "not invokable: status"}',
+    )
+    with pytest.raises(GoodVibesSurfaceMissingError) as err:
+        await _client(hass).status()
+    assert err.value.status == 501
+    assert err.value.code == "NOT_INVOKABLE"
+
+
+async def test_501_without_the_not_invokable_code_stays_a_daemon_error(
+    hass, aioclient_mock
+):
+    """Only NOT_INVOKABLE reclassifies a 501; any other 501 is a daemon error."""
+
+    aioclient_mock.get(f"{DAEMON}/status", status=501, text="not implemented")
+    with pytest.raises(GoodVibesDaemonError) as err:
+        await _client(hass).status()
+    assert not isinstance(err.value, GoodVibesSurfaceMissingError)
+    assert err.value.status == 501
+
+
 async def test_unknown_channel_action_body_maps_to_surface_missing(
     hass, aioclient_mock
 ):

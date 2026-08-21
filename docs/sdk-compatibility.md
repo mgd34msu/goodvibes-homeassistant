@@ -16,15 +16,16 @@ red. That is worth stating plainly, because it explains the drift:
 - CI's `SDK version nudge` step is an `echo` plus a `::notice::`. It is explicitly informational
   and **cannot fail the build**. A notice in a passing job's log is not a gate.
 - `tests/test_generated_client_sync.py`, the one mechanical check that compares the vendored
-  client against the SDK artifact, `pytest.skip`s unless a sibling `goodvibes-sdk` checkout
-  happens to exist next to this repo. CI has no SDK checkout, so it skipped on every run.
+  client against the SDK artifact, `pytest.skip`ped unless a sibling `goodvibes-sdk` checkout
+  happened to exist next to this repo. CI has no SDK checkout, so it skipped on every run, and a
+  hand-edit of the vendored client could ship undetected. Fixed: see check 4 below.
 - `test_version_check.py::test_contract_version_is_at_least_min_daemon_version` only asserts
   `CONTRACT_VERSION >= MIN_DAEMON_VERSION`, and that floor is `1.3.0`. It passes for every release
   that will ever ship.
 - The live half existed only as prose in this file: booting a daemon, probing the routes. Every
   pass hand-rolled a throwaway script, so there was nothing to re-run and nothing to fail.
 
-Three of those four could not fail by construction. Three checks now do:
+Three of those four could not fail by construction. Four checks now do:
 
 1. **`test_version_check.py::test_validated_version_matches_vendored_contract`** (runs in CI, no
    network) fails when `const.SDK_VALIDATED_VERSION` and the vendored
@@ -40,7 +41,24 @@ Three of those four could not fail by construction. Three checks now do:
    `npm view @pellux/goodvibes-sdk version`. It is deliberately not part of `ci.yml`: the drift
    depends on npm's publish cadence, not on the commit, so gating pushes or the auto-release on it
    would block this repo's releases on another repo's publishes. A red scheduled run is visible in
-   the Actions list in a way a passing job's log notice never was.
+   the Actions list in a way a passing job's log notice never was. Since nobody is watching a
+   scheduled run either, it now opens (or comments on) a GitHub issue when it fails.
+4. **`tests/generated_client.sha256`** records the SHA-256 of the vendored client, and
+   `test_generated_client_sync.py::test_vendored_generated_client_matches_recorded_hash` checks it
+   on **every** run with no skip path, so it works in CI where no SDK checkout exists. This is what
+   catches a hand-edit of the vendored file, which the version-string comparisons above cannot see:
+   editing a method body changes no version string. `sdk-drift.yml` checks the same hash with
+   `sha256sum -c`. The sibling-checkout byte comparison still runs when an SDK checkout is present,
+   as belt and braces for the other direction (a vendored copy consistent with its own hash but
+   stale relative to upstream).
+
+   Refresh the hash only after re-copying the artifact from the SDK, never to clear a failure:
+
+   ```bash
+   sha256sum custom_components/goodvibes/generated_client.py > tests/generated_client.sha256
+   ```
+
+   then restore that file's comment header.
 
 ## Current state
 

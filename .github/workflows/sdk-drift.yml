@@ -24,6 +24,9 @@ on:
 
 permissions:
   contents: read
+  # Only this workflow gets it: a scheduled run has nobody watching, so it files
+  # its own report. See the "Report the failure as an issue" step.
+  issues: write
 
 concurrency:
   group: sdk-drift-${{ github.ref }}
@@ -37,12 +40,20 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "22"
+
+      - name: Verify the vendored SDK client has not been hand-edited
+        run: |
+          set -euo pipefail
+          # The version comparison below reads version strings out of the
+          # vendored file, which a hand-edit anywhere else in it would leave
+          # untouched. This checks the whole file.
+          sha256sum -c tests/generated_client.sha256
 
       - name: Compare the validated pin against npm latest
         run: |
@@ -108,3 +119,44 @@ jobs:
           fi
 
           echo "No drift: validated against ${validated}, which is npm latest."
+
+      - name: Report the failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: "SDK drift: the validated pin needs attention"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # This workflow runs on a schedule, so a red run notifies nobody and
+          # just sits in the Actions list. File it where it will be seen.
+          #
+          # Deduped by exact title so a weekly failure comments on the existing
+          # issue instead of opening a new one every Monday. Closing the issue
+          # is the signal that it was dealt with; the next failure reopens the
+          # cycle by creating a fresh one.
+          body=$(
+            printf '%s\n' \
+              "The scheduled \`SDK drift\` workflow failed." \
+              "" \
+              "Run: ${RUN_URL}" \
+              "" \
+              "One of these is true:" \
+              "" \
+              "- \`custom_components/goodvibes/generated_client.py\` no longer matches the hash recorded in \`tests/generated_client.sha256\` (the vendored client was hand-edited)." \
+              "- \`const.SDK_VALIDATED_VERSION\` disagrees with the vendored contract version." \
+              "- The validated pin has fallen behind \`@pellux/goodvibes-sdk\` on npm." \
+              "" \
+              "The run's step summary says which. See \`docs/sdk-compatibility.md\` to clear it."
+          )
+          existing=$(
+            gh issue list --state open --limit 100 --json number,title \
+              | TITLE="${TITLE}" python3 -c \
+                'import json, os, sys; print(next((str(i["number"]) for i in json.load(sys.stdin) if i["title"] == os.environ["TITLE"]), ""))'
+          )
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body "${body}"
+            echo "Commented on existing issue #${existing}."
+          else
+            gh issue create --title "${TITLE}" --body "${body}"
+          fi

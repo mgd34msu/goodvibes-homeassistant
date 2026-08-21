@@ -37,7 +37,6 @@ from .const import (
     CONF_STATUS,
     CONF_TAGS,
     CONF_TITLE,
-    CONF_URL,
     CONF_CODE,
     DOMAIN,
     INTEGRATION_VERSION,

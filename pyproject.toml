@@ -7,3 +7,18 @@
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py313"
+# generated_client.py is vendored byte-for-byte from the SDK and hash-pinned by
+# tests/test_generated_client_sync.py. A lint finding in it could not be fixed
+# without hand-editing the file, which is exactly what that hash pin forbids.
+extend-exclude = ["custom_components/goodvibes/generated_client.py"]
+
+[tool.ruff.lint]
+# Real errors only, selected explicitly rather than inherited: ruff 0.16 turned
+# nearly every stable rule on by default (413 rules across pydocstyle, naming,
+# pyupgrade and other style families), so relying on "the default" would both
+# import a style opinion this repo has not agreed to and shift again the next
+# time upstream changes its mind.
+select = ["E4", "E7", "E9", "F"]

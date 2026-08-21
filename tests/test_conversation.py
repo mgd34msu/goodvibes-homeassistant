@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
 from homeassistant.components.conversation import ConversationInput
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import Context
