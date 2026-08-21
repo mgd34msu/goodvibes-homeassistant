@@ -26,6 +26,7 @@ Honesty and boundaries
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections import deque
@@ -39,6 +40,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    DOMAIN,
     HABIT_ANALYSIS_INTERVAL_MINUTES,
     HABIT_MAX_OBSERVATIONS,
     HABIT_MIN_DISTINCT_DAYS,
@@ -394,6 +396,53 @@ def _should_include(hass: HomeAssistant, runtime: Any, entity_id: str) -> bool:
     )
 
 
+def _automations_yaml_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Return the per-hass lock serializing automations.yaml read-modify-write.
+
+    Home Assistant's own automation editor (``EditIdBasedConfigView``) guards
+    its read-modify-write of this same file with an ``asyncio.Lock``; this
+    integration writes to it too (accepted habit proposals), so it needs the
+    same guard. Stored on ``hass.data`` rather than as a module global so each
+    hass instance (real or a test's) gets its own lock.
+    """
+
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    lock = domain_data.get("automations_yaml_lock")
+    if lock is None:
+        lock = asyncio.Lock()
+        domain_data["automations_yaml_lock"] = lock
+    return lock
+
+
+def _atomic_save_yaml(path: str, data: Any) -> None:
+    """Write YAML to ``path`` atomically (runs on an executor thread).
+
+    ``homeassistant.util.yaml.save_yaml`` opens and truncates the target path
+    directly, so a crash or a concurrent reader mid-write can observe a
+    partial file. Writing to a temp file in the same directory and swapping
+    it in with ``os.replace`` (atomic on the same filesystem) means readers
+    always see either the old file or the complete new one.
+    """
+
+    import os
+    import tempfile
+
+    from homeassistant.util.yaml import save_yaml
+
+    directory = os.path.dirname(path) or "."
+    fd, temp_path = tempfile.mkstemp(prefix=".automations_yaml_", dir=directory)
+    os.close(fd)
+    try:
+        save_yaml(temp_path, data)
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
 async def async_create_automation_from_config(
     hass: HomeAssistant, config: dict[str, Any]
 ) -> str:
@@ -404,6 +453,11 @@ async def async_create_automation_from_config(
     is the same path Home Assistant's own automation editor uses. Returns the new
     automation's id. Raises :class:`HomeAssistantError` if an automation with the
     same id already exists (so accepting the same proposal twice is refused).
+
+    The read-check-append-write runs in the executor (all synchronous file
+    I/O), but is held under a per-hass lock end to end so two concurrent
+    ``accept_habit`` calls are ordered instead of both reading the file before
+    either writes and one silently clobbering the other's addition.
     """
 
     from homeassistant.exceptions import HomeAssistantError
@@ -414,7 +468,7 @@ async def async_create_automation_from_config(
     def _read_and_write() -> None:
         import os
 
-        from homeassistant.util.yaml import load_yaml, save_yaml
+        from homeassistant.util.yaml import load_yaml
 
         existing: Any = []
         if os.path.exists(path):
@@ -429,9 +483,10 @@ async def async_create_automation_from_config(
                     f"An automation with id {automation_id} already exists"
                 )
         existing.append(config)
-        save_yaml(path, existing)
+        _atomic_save_yaml(path, existing)
 
-    await hass.async_add_executor_job(_read_and_write)
+    async with _automations_yaml_lock(hass):
+        await hass.async_add_executor_job(_read_and_write)
 
     if hass.services.has_service("automation", "reload"):
         await hass.services.async_call("automation", "reload", blocking=True)

@@ -375,7 +375,7 @@ ACCEPT_HABIT_SCHEMA = vol.Schema(
 # Mail and calendar
 #
 # The daemon owns the mail and calendar accounts and every credential behind
-# them, so none of these schemas carry an account, a password or a token —
+# them, so none of these schemas carry an account, a password or a token,
 # only the message or event the user wants acted on.
 # ---------------------------------------------------------------------------
 

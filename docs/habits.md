@@ -1,9 +1,9 @@
-# Habit mining — recurring-pattern proposals, never silent rules
+# Habit mining: recurring-pattern proposals, never silent rules
 
 When you opt in, the integration keeps a bounded, in-memory record of its own
 observed state changes and periodically runs a local frequency analysis over it.
-Recurring patterns — "this controllable entity tends to change to this state at
-about this time on weekdays" — are surfaced as automation **proposals** for you
+Recurring patterns, "this controllable entity tends to change to this state at
+about this time on weekdays," are surfaced as automation **proposals** for you
 to review. Nothing is ever created silently, and no observation data leaves the
 machine.
 
@@ -13,9 +13,9 @@ Habit mining is **off by default**. Enable it in the integration's options
 (*Settings → Devices & services → GoodVibes → Configure*), which Home Assistant
 restricts to administrators:
 
-- **Enable habit mining (proposals only)** — the switch that starts the local
+- **Enable habit mining (proposals only).** The switch that starts the local
   analysis.
-- **Habit observation retention (days)** — how long an observation is kept in
+- **Habit observation retention (days).** How long an observation is kept in
   memory before it is pruned (1–60 days; default 14).
 
 ## Honest boundaries
@@ -55,8 +55,8 @@ action: goodvibes.habit_proposals
 ```
 
 Each proposal has a `proposalId`, a `description`, and the proposed `automation`
-config. To create one as a real automation — **admin-gated and
-confirmation-gated** — accept it explicitly:
+config. To create one as a real automation, **admin-gated and
+confirmation-gated**, accept it explicitly:
 
 ```yaml
 action: goodvibes.accept_habit
@@ -66,7 +66,7 @@ data:
 ```
 
 `accept_habit` appends the automation to Home Assistant's default UI automation
-store (`automations.yaml`) and reloads the `automation` integration — the same
+store (`automations.yaml`) and reloads the `automation` integration, the same
 path Home Assistant's own automation editor uses. Without `confirm: CREATE`,
 nothing is created. Accepting the same proposal twice is refused. After it is
 created, review and adjust it like any other automation before relying on it.

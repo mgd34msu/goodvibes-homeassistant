@@ -137,6 +137,11 @@ class GoodVibesRuntimeData:
     # The DataUpdateCoordinator that owns the batched refresh for this entry.
     # Set in async_setup_entry after both objects exist.
     coordinator: Any = None
+    # In-flight async_refresh() task, if any. Lets concurrent callers (the
+    # coordinator, the reconnect watchdog, and the status service) coalesce
+    # onto one refresh instead of each mutating this dataclass from its own
+    # overlapping run (see async_refresh).
+    _refresh_task: Any = field(default=None, repr=False, compare=False)
 
     @property
     def signal(self) -> str:
@@ -223,7 +228,28 @@ class GoodVibesRuntimeData:
         await self.async_refresh()
 
     async def async_refresh(self) -> None:
-        """Refresh daemon status and tool catalog.
+        """Refresh daemon status and tool catalog, coalescing concurrent callers.
+
+        Three call sites can reach this on the same runtime (the coordinator,
+        the reconnect watchdog, and the ``goodvibes.status`` service). Without
+        coordination, two overlapping calls both read and write the shared
+        fields on this dataclass, and whichever finishes second silently wins.
+        A second caller that arrives while a refresh is already in flight
+        awaits that same refresh instead of starting its own, so this really
+        is the single owner the coordinator's docstring claims it to be.
+        """
+
+        if self._refresh_task is not None:
+            await self._refresh_task
+            return
+        self._refresh_task = asyncio.ensure_future(self._async_do_refresh())
+        try:
+            await self._refresh_task
+        finally:
+            self._refresh_task = None
+
+    async def _async_do_refresh(self) -> None:
+        """Do the actual daemon refresh (see async_refresh for coalescing).
 
         The four core daemon reads (health, status, HA-surface status, tool
         catalog) are independent, so they are dispatched concurrently with

@@ -821,7 +821,7 @@ home_graph_reindex:
         text:
 
 causal_chain:
-  description: Return the causal chain for an entity's recent state changes — which automation, script, scene, service call, or user caused each change, from the Home Assistant context chain. Admin only.
+  description: Return the causal chain for an entity's recent state changes, which automation, script, scene, service call, or user caused each change, from the Home Assistant context chain. Admin only.
   fields:
     config_entry_id:
       selector:

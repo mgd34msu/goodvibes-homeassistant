@@ -27,7 +27,7 @@
 
 - Validate against platform contract 2.0.11. The daemon behind this
   integration (1.28.13) now routes unnamed voice requests to the provider
-  the user configured — local engines first when provisioned — instead of
+  the user configured, local engines first when provisioned, instead of
   the first cloud provider on its internal list.
 
 ## 0.13.6 - 2026-08-05
@@ -48,7 +48,7 @@
 
 - Validate against platform contract 2.0.8. The re-vendored generated client
   picks up the corrected profile responses (the declared `section` field and
-  nullable provenance — the fix that makes strict clients able to read the
+  nullable provenance, the fix that makes strict clients able to read the
   profile again), and the live checklist was re-run against a daemon booted
   from the published release.
 
@@ -58,20 +58,20 @@
   picks up the platform's new `channel` session kind in the session schemas
   (a Telegram conversation is filed as a chat, not a project session), and
   the live checklist was re-run against a daemon booted from the published
-  release — all contract checks passed.
+  release. All contract checks passed.
 
 ## 0.13.2 - 2026-08-02
 
 - Validate against platform contract 2.0.4. The re-vendored generated client
-  differs by its version stamps only — all 33 consumed methods, routes, and
-  response types are unchanged — and the live checklist was re-run against a
+  differs by its version stamps only: all 33 consumed methods, routes, and
+  response types are unchanged. The live checklist was re-run against a
   daemon booted from the published release.
 
 ## 0.13.1 - 2026-08-01
 
 - Validate against platform contract 2.0.3. The re-vendored generated client
-  differs from 2.0.0 by its version stamps only — all 33 consumed methods,
-  routes, and response types are unchanged — and the live checklist was
+  differs from 2.0.0 by its version stamps only: all 33 consumed methods,
+  routes, and response types are unchanged. The live checklist was
   re-run against a daemon booted from the published release.
 
 ## 0.13.0 - 2026-08-01
@@ -87,7 +87,7 @@
   artifact. Diffing against the prior vendored file, the only substantive
   change is that `control.status`'s response type (`GET /status`) now
   declares two additional fields, `buildVersion` and `platformVersion`,
-  alongside the existing `status` and `version` — a richer, more honest
+  alongside the existing `status` and `version`, a richer, more honest
   version report from the daemon side. This integration does not read
   either new field yet; its own version and capability checks
   (`version_check.py`) still key off `status.version`, which is unchanged
@@ -95,7 +95,7 @@
   request or response shape moved.
 - Checked explicitly for `SESSION_NOT_FOUND`, the error-code settlement
   from this platform cycle: this integration has no conversation-session
-  error-code handling to update — it never referenced that code, and
+  error-code handling to update. It never referenced that code, and
   nothing in the vendored client or the hand-written mail/calendar error
   codes (`*_NOT_CONFIGURED`, `NOT_INVOKABLE`) overlaps with it.
 - Rebuilt the frontend panel assets (`goodvibes-home-panel.js`,
@@ -111,7 +111,7 @@
 - Confirmed the operator contract itself did not move at all between 1.20.0
   and 1.21.0: comparing both releases' `operator-contract.json` artifacts
   directly, the method list is identical (483 methods, none added or
-  removed) — not merely assumed from the vendored client's version stamp.
+  removed), not merely assumed from the vendored client's version stamp.
 - Live pass against a daemon booted from the published 1.21.0 package:
   `/status` reports `running`/`1.21.0` and refuses a bad bearer token with
   401; the Home Assistant health route serves all seven capabilities and all
@@ -119,7 +119,7 @@
   and the `refinement/run` triage block all return their documented shapes;
   `conversation/cancel` validates input rather than 404ing; mail and calendar
   answer the same classifiable shapes as the 1.20.0 pass (`400
-  INVALID_INPUT`, `400 CALENDAR_NOT_CONFIGURED`, `501 NOT_INVOKABLE` — never
+  INVALID_INPUT`, `400 CALENDAR_NOT_CONFIGURED`, `501 NOT_INVOKABLE`, never
   a routing fault reported as capacity).
 - This is a validation-and-docs pass, not a feature pass: nothing in the
   daemon-lifecycle work that shipped between 1.20.0 and 1.21.0 touches the
@@ -129,7 +129,7 @@
 
 - Validate against `@pellux/goodvibes-sdk` 1.20.0, closing a four-release drift:
   the integration still claimed 1.18.1 while 1.19.0, 1.19.1, 1.19.2 and 1.20.0
-  had published — this repo missed the entire 1.19.x train. Re-vendor
+  had published. This repo missed the entire 1.19.x train. Re-vendor
   `generated_client.py` byte-for-byte from the published 1.20.0 Python
   artifact; the contract-version label is the only diff, so all 33 consumed
   methods, routes and types are unchanged across the whole span.
@@ -140,16 +140,16 @@
   `refinement/run` triage block all return their documented shapes;
   `conversation/cancel` validates input rather than 404ing; mail and calendar
   answer the same classifiable shapes as the 1.18.1 pass (`400 INVALID_INPUT`,
-  `400 CALENDAR_NOT_CONFIGURED`, `501 NOT_INVOKABLE` — never a routing fault
+  `400 CALENDAR_NOT_CONFIGURED`, `501 NOT_INVOKABLE`, never a routing fault
   reported as capacity).
 - The SDK's 1.19.x/1.20.0 span added new operator methods this integration does
-  not consume — `occasions.*` (proactive occasion/plan tracking), `voice.wake.*`
+  not consume: `occasions.*` (proactive occasion/plan tracking), `voice.wake.*`
   (wake-word model provisioning), and several settings domains
   (`config.get`/`config.set`, `checkin.config.*`, `mcp.config.*`,
   `security.settings`, `settings.snapshot`). None of them touch the REST subset
   this integration's generated client vendors (`channels.*`, `control.status`,
   `homeassistant.homeGraph.*`, `tasks.*`, `email.*`, `calendar.events.*`), so
-  there is nothing here for Home Assistant to adapt to or gain from yet — this
+  there is nothing here for Home Assistant to adapt to or gain from yet. This
   is a validation-and-docs pass, not a feature pass. Confirmed by the
   byte-for-byte re-vendor above: the only diff from 1.18.1 is the version
   label.
@@ -167,7 +167,7 @@
   the manifest action, Home Graph status/issues/sources/pages, and the
   `refinement/run` triage block all return their documented shapes;
   `conversation/cancel` validates input rather than 404ing. Nothing in the
-  integration broke — the daemon-side changes in the window (a `cluster` block on
+  integration broke. The daemon-side changes in the window (a `cluster` block on
   `/status`, daemon-owned config tiers, surface-scoped storage) are additive or
   internal from this integration's point of view.
 - Make the "validated against SDK X" claim enforceable, because it was enforced
@@ -191,7 +191,7 @@
 - Report the mail and calendar surface honestly. A daemon that does not serve
   the routes, a daemon with no account connected, and an unreachable daemon are
   three different conditions with three different fixes, and each surfaces as
-  itself with a concrete next step — on a new diagnostic sensor, in the calendar
+  itself with a concrete next step: on a new diagnostic sensor, in the calendar
   entity's attributes, and in the error raised by any call that hits it. The
   calendar goes unavailable rather than showing an empty week, because "no
   events" and "never set up" are not the same statement.
@@ -200,7 +200,7 @@
   with `invokable: false` and answered 404, so the honest reported state was
   "unsupported" and there was nothing to assert; the platform serves `email.*`
   and `calendar.*` itself as of 1.18.0. The live checklist stops being
-  informational about them and asserts instead — not that the calls succeed,
+  informational about them and asserts instead, not that the calls succeed,
   since it boots a daemon with no account connected, but that every answer is
   one this integration can classify, and never a capacity error standing in for
   a routing fault.
@@ -208,7 +208,7 @@
   The live pass found the classifier reading English: the daemon says "No Google
   account is connected on this machine" with `code: CALENDAR_NOT_CONFIGURED`,
   and the substring list held "no account", "not connected" and "not
-  configured" — none of which appear in that sentence. It fell through to the
+  configured", none of which appear in that sentence. It fell through to the
   ready default, so a calendar with nothing behind it would have reported itself
   READY. Codes are the contract and are checked first; the phrase list survives
   only as a fallback for a daemon old enough to answer without one.
@@ -228,9 +228,9 @@
 
 - Validate against `@pellux/goodvibes-sdk` 1.15.0, catching up three releases at
   once (1.13.0, 1.13.1 and 1.14.0 published since the last pass at 1.12.1).
-  1.15.0 does change the operator contract — the config-set response gained
+  1.15.0 does change the operator contract. The config-set response gained
   where a value was persisted, which tier that is, and whether the daemon owns
-  it — but not the part this integration consumes: `config.set` is not one of
+  it, but not the part this integration consumes: `config.set` is not one of
   the 33 methods it calls, so all consumed methods, routes and types are
   unchanged. Re-vendor `generated_client.py` byte-for-byte from the published
   1.15.0 Python artifact; the contract-version label is the only diff.
@@ -243,7 +243,7 @@
 ## 0.10.6 - 2026-07-25
 
 - Validate against `@pellux/goodvibes-sdk` 1.12.1 (recovery offers respect
-  live writers; snapshot retirement acts on exactly one identified snapshot —
+  live writers; snapshot retirement acts on exactly one identified snapshot,
   daemon-internal; the operator contract is unchanged apart from its version
   stamp). Re-vendor `generated_client.py` byte-for-byte from the published
   1.12.1 Python artifact (contract-version label is the only diff). Frontend
@@ -252,7 +252,7 @@
 ## 0.10.5 - 2026-07-24
 
 - Validate against `@pellux/goodvibes-sdk` 1.12.0 (declare-once product storage
-  surfaces, ask-then-retire recovery lifecycle, cross-process checkpoint lock —
+  surfaces, ask-then-retire recovery lifecycle, cross-process checkpoint lock,
   all daemon-internal; the operator contract is unchanged apart from its
   version stamp). Re-vendor `generated_client.py` byte-for-byte from the
   published 1.12.0 Python artifact (contract-version label is the only diff).
@@ -264,7 +264,7 @@
 - Validate against `@pellux/goodvibes-sdk` 1.11.4 (SDK-internal secrets keyfile
   hardening; the operator contract is unchanged). Re-vendor
   `custom_components/goodvibes/generated_client.py` from the published 1.11.4
-  Python artifact — the only diff is the contract version label. Live daemon
+  Python artifact. The only diff is the contract version label. Live daemon
   probe against the published package: status/auth/health/home-graph routes all
   return the expected shapes; full pytest suite (208) green.
 
@@ -273,7 +273,7 @@
 - Validate against `@pellux/goodvibes-sdk` 1.11.3 (SDK-internal fixes only; the
   operator contract is unchanged). Re-vendor
   `custom_components/goodvibes/generated_client.py` from the published 1.11.3
-  Python artifact — the only diff is the contract version label. Live daemon
+  Python artifact. The only diff is the contract version label. Live daemon
   probe against the published package: status/auth/health/home-graph routes all
   return the expected shapes; full pytest suite (208) green.
 
@@ -282,7 +282,7 @@
 - Validate against `@pellux/goodvibes-sdk` 1.11.2 (release-engineering-only SDK
   releases; the operator contract is unchanged). Re-vendor
   `custom_components/goodvibes/generated_client.py` from the published 1.11.2
-  Python artifact — the only diff is the contract version label. Live daemon
+  Python artifact. The only diff is the contract version label. Live daemon
   probe against the published package: status/auth/health/home-graph routes all
   return the expected shapes.
 - CI hardening: every job carries a timeout, action refs are SHA-pinned, and a
@@ -441,13 +441,13 @@
 - Fix the 0.6.1 release metadata: `INTEGRATION_VERSION` (which also versions
   the panel assets) was left at 0.6.0 while the manifest said 0.6.1, so the
   0.6.1 zip shipped with a version skew inside. No functional changes beyond
-  0.6.1 — install this one instead.
+  0.6.1. Install this one instead.
 
 ## 0.6.1 - 2026-07-07
 
 - Validate against `@pellux/goodvibes-sdk` 1.4.0. With a daemon at 1.4.0+
   (GoodVibes TUI 1.11.0+), cancelling an in-flight Assist reply now stops just
-  that reply — the conversation session stays open, so the next utterance
+  that reply. The conversation session stays open, so the next utterance
   keeps its context. (Older daemons closed the whole session on cancel; the
   integration's own code is unchanged either way.)
 

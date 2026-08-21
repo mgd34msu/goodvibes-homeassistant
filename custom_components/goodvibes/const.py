@@ -25,7 +25,7 @@ INTEGRATION_VERSION = "0.13.10"
 # generated artifact and re-ran the checklist together, so the two versions
 # have always coincided in practice. Enforcing it closes the hole that let the
 # label drift silently from 1.15.0 while the daemon moved to 1.17.2 across five
-# releases — a claim of "validated against X" is now impossible to make unless
+# releases, a claim of "validated against X" is now impossible to make unless
 # the artifact generated against X is actually the one vendored here.
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
 SDK_VALIDATED_VERSION = "2.0.17"
@@ -39,7 +39,7 @@ SDK_VALIDATED_VERSION = "2.0.17"
 # the oldest daemon whose Home Assistant surface speaks the contract this
 # integration depends on: the streaming conversation delta frames landed in SDK
 # 1.3.0, so that is the floor. Conversation streaming is hand-written (not an
-# operator method — see generated_client.py's header), so this floor stays
+# operator method, see generated_client.py's header), so this floor stays
 # hand-maintained for the same reason as SDK_VALIDATED_VERSION above.
 MIN_DAEMON_VERSION = "1.3.0"
 REQUIRED_DAEMON_CAPABILITIES = ("conversation-stream", "conversation-cancel")
@@ -229,7 +229,7 @@ ENDPOINT_CONVERSATION_CANCEL = "/api/homeassistant/conversation/cancel"
 # Assistant consumes, and mail/calendar were added to the contract after that
 # list was last regenerated. So the paths are hand-written here, matching the
 # contract's own `http.path` bindings exactly. Move them onto OPERATOR_ROUTES
-# once an SDK release ships them in the generated subset — the paths are the
+# once an SDK release ships them in the generated subset, the paths are the
 # same either way, this is only about where the string comes from.
 #
 # The daemon owns the accounts and the credentials for all of these. This
@@ -287,7 +287,7 @@ MAIL_CALENDAR_NEXT_STEPS = {
 # "No Google account is connected on this machine", which contains none of
 # "no account", "not connected" or "not configured" as written. The classifier
 # fell through to its ready default, so a calendar with nothing behind it would
-# have reported itself ready — the exact conflation mail_calendar.py exists to
+# have reported itself ready, the exact conflation mail_calendar.py exists to
 # prevent. A code is a contract; a sentence is not.
 DAEMON_CODE_EMAIL_NOT_CONFIGURED = "EMAIL_NOT_CONFIGURED"
 DAEMON_CODE_CALENDAR_NOT_CONFIGURED = "CALENDAR_NOT_CONFIGURED"
@@ -308,7 +308,7 @@ DAEMON_CODE_NOT_INVOKABLE = "NOT_INVOKABLE"
 
 # Phrases a daemon uses to say "the route exists but no account is connected".
 # Retained as a FALLBACK only, for a daemon old enough to answer without a
-# machine code. Never extend this list to fix a classification — add the code.
+# machine code. Never extend this list to fix a classification, add the code.
 MAIL_CALENDAR_NOT_CONFIGURED_HINTS = (
     "not configured",
     "no account",

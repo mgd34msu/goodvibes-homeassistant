@@ -69,7 +69,7 @@ for (const name of ENTRIES) {
     if (current !== built) {
       stale = true;
       console.error(
-        `Stale built artifact: ${name} — the committed file no longer matches ` +
+        `Stale built artifact: ${name}. The committed file no longer matches ` +
           `what frontend/build.mjs produces from frontend/src/${name}. Run ` +
           `"npm run build" in frontend/ and commit the result.`
       );

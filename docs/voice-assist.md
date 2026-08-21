@@ -27,7 +27,7 @@ by Home Assistant and Wyoming; GoodVibes handles the conversation turn.
 3. **Select GoodVibes as the conversation agent.** In that pipeline's
    *Conversation agent* dropdown, pick the **GoodVibes** entity
    (`conversation.goodvibes`). It is listed automatically once the integration is
-   set up — the conversation entity registers itself as a selectable agent and
+   set up. The conversation entity registers itself as a selectable agent and
    advertises support for every language (`*`) and for controlling Home
    Assistant.
 4. **Assign the pipeline to the satellite.** On the satellite device, set its
@@ -54,5 +54,5 @@ parts of the voice stack that Home Assistant and Wyoming already own:
   than duplicating that machinery.
 
 If you need those capabilities, configure them on the Wyoming device and the
-Assist pipeline — they compose with GoodVibes as the agent, and reimplementing
+Assist pipeline. They compose with GoodVibes as the agent, and reimplementing
 them inside this integration would only fight the platform.

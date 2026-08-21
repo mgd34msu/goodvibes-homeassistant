@@ -124,7 +124,7 @@ jobs:
           PY
           )
           latest=$(npm view @pellux/goodvibes-sdk version 2>/dev/null || echo "unknown")
-          echo "GoodVibes SDK — validated against: ${validated} ; latest on npm: ${latest}"
+          echo "GoodVibes SDK, validated against: ${validated} ; latest on npm: ${latest}"
           # Informational only, by design: this job gates the auto-release, and
           # npm publishing on its own schedule must not block a release here.
           # The enforcing checks live elsewhere —
@@ -143,7 +143,7 @@ jobs:
               echo "See the \`SDK drift\` workflow and \`docs/sdk-compatibility.md\`."
             } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "GoodVibes SDK — validated pin matches npm latest (${validated})." >> "$GITHUB_STEP_SUMMARY"
+            echo "GoodVibes SDK, validated pin matches npm latest (${validated})." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   hassfest:
@@ -221,7 +221,7 @@ jobs:
           # Idempotent no-op if the tag already exists on the remote (a re-run,
           # or a manual tag already pushed): do not re-tag or re-dispatch.
           if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q "refs/tags/${TAG}"; then
-            echo "Tag ${TAG} already exists on origin — nothing to do."
+            echo "Tag ${TAG} already exists on origin: nothing to do."
             exit 0
           fi
           git config user.name "GoodVibes CI"

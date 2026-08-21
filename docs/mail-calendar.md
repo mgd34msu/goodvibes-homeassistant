@@ -1,7 +1,7 @@
-# Mail and Calendar
+# Mail and calendar
 
 The GoodVibes daemon owns the mail and calendar accounts. This integration presents them the way
-Home Assistant expects — a calendar entity, services, and a diagnostic sensor — and holds no
+Home Assistant expects: a calendar entity, services, and a diagnostic sensor. It holds no
 credentials of its own.
 
 ## The credential boundary
@@ -13,8 +13,8 @@ This is the whole design, and it is not negotiable:
   import `imaplib`, `smtplib`, `caldav`, or any Google or Microsoft client library, and a test
   (`tests/test_mail_calendar.py::test_the_repo_contains_no_mail_or_calendar_credential_handling`)
   fails if one ever appears.
-- **The Home Assistant config entry holds only the daemon connection** — daemon URL, daemon token,
-  webhook secret — plus Home Assistant-side toggles. A second test asserts the config flow never
+- **The Home Assistant config entry holds only the daemon connection**: daemon URL, daemon token,
+  webhook secret, plus Home Assistant-side toggles. A second test asserts the config flow never
   grows a mail or calendar credential field.
 - **The daemon owns the secrets**, in its own daemon-tier config, as `*Ref` handles into its secret
   store (`email.passwordRef`, `calendar.google.clientSecretRef`, `google.oauth.refreshToken`, and
@@ -37,7 +37,7 @@ A single `calendar.*` entity backed by the daemon's calendar. Events appear in H
 calendar UI and work in automations like any other calendar. It supports creating events
 (`CalendarEntityFeature.CREATE_EVENT`), which maps to `calendar.events.create`.
 
-The entity is **unavailable**, not empty, when the daemon cannot serve the calendar — see below.
+The entity is **unavailable**, not empty, when the daemon cannot serve the calendar. See below.
 An empty calendar means "no events"; that is a different statement from "this was never set up",
 and the two never look alike.
 
@@ -56,7 +56,7 @@ Sending mail and writing a draft act outside the house, so they are admin-gated 
 other writing service in this integration is. The reads are open so dashboards and non-admin users
 can use them; the daemon's read routes use `EXAMINE`/`BODY.PEEK` and never mark a message as read.
 
-`send_email` and event creation set the daemon's required `confirm: true` themselves — calling the
+`send_email` and event creation set the daemon's required `confirm: true` themselves. Calling the
 service *is* the explicit user action that flag is asking about, so it is not a field the user has
 to remember to tick.
 
@@ -108,17 +108,17 @@ Stated explicitly, because these were considered and declined rather than overlo
 ## Current daemon status
 
 As of the SDK release this integration is validated against (`1.20.0`), all seven mail and calendar
-routes are `invokable: true` in the operator contract, and a live daemon serves every one of them —
-they stopped answering a blanket `404` as of `1.18.0`. What a fresh daemon with no mail or calendar
+routes are `invokable: true` in the operator contract, and a live daemon serves every one of them.
+They stopped answering a blanket `404` as of `1.18.0`. What a fresh daemon with no mail or calendar
 account connected actually returns still varies by route: `email.send`, `email.draft.create`,
 `calendar.events.create` and `calendar.events.list`/`.get` answer `400` with a `*_NOT_CONFIGURED`
 machine code (`EMAIL_NOT_CONFIGURED`, `CALENDAR_NOT_CONFIGURED`, `EMAIL_CREDENTIALS_MISSING`),
 which this integration classifies as `needs_setup`. The inbox-read routes
-(`email.inbox.list`/`.read`) still answer `501 NOT_INVOKABLE` in this daemon build — the route is
-real but no handler is attached in the composition it was built with — which `classify_error`
+(`email.inbox.list`/`.read`) still answer `501 NOT_INVOKABLE` in this daemon build. The route is
+real but no handler is attached in the composition it was built with, which `classify_error`
 treats the same as a 404: `unsupported`, not `needs_setup`, because the fix is updating or
 recomposing the daemon rather than connecting an account. Both classifications, and `unavailable`
-for an unreachable daemon, carry the concrete next step in `const.MAIL_CALENDAR_NEXT_STEPS` — the
+for an unreachable daemon, carry the concrete next step in `const.MAIL_CALENDAR_NEXT_STEPS`: the
 honest state, and exactly what this surface is built to say.
 
 `scripts/validate-daemon-contract.mjs` prints the served/not-served status and the response shape

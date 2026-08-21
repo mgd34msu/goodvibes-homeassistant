@@ -1,10 +1,10 @@
-# Service Reference
+# Service reference
 
 Home Assistant service selectors and full field metadata live in [custom_components/goodvibes/services.yaml](../custom_components/goodvibes/services.yaml). This page explains how the services are grouped and how to use the common fields.
 
 Most services accept `config_entry_id`. Omit it when there is only one GoodVibes config entry. Include it when multiple daemon entries are installed.
 
-## Conversation and Daemon Services
+## Conversation and daemon services
 
 | Service | Purpose |
 | --- | --- |
@@ -54,7 +54,7 @@ data:
   session_id: ha-chat-sess-1234
 ```
 
-## Home Graph Services
+## Home Graph services
 
 | Service | Purpose |
 | --- | --- |
@@ -80,7 +80,7 @@ data:
 | `goodvibes.home_graph_reset` | Preview or reset one daemon-owned knowledge space. |
 | `goodvibes.home_graph_reindex` | Reindex and semantically enrich existing Home Graph uploads without reuploading files. |
 
-## Ingest Examples
+## Ingest examples
 
 Sync current Home Assistant context:
 
@@ -122,7 +122,7 @@ data:
 
 For browser file uploads, use the `GoodVibes Home` sidebar panel. Browser uploads are multipart requests to Home Assistant, then Home Assistant forwards them to the daemon.
 
-## Linking Fields
+## Linking fields
 
 Use `target_kind`, `target_id`, and optional `relation` when the daemon needs a hint or when manually correcting a link.
 
@@ -187,7 +187,7 @@ data:
   relation: source_for
 ```
 
-## Ask, Pages, and Packets
+## Ask, pages, and packets
 
 Ask a source-backed question:
 
@@ -264,7 +264,7 @@ Accepted review actions:
 
 `fact_id` is accepted as a compatibility alias for `issue_id`. `decision` is accepted as a compatibility alias for `action`.
 
-## Map Filters
+## Map filters
 
 Example visual map request:
 
@@ -310,7 +310,7 @@ Home Assistant filter fields:
 
 Comma-separated string fields are passed to the daemon as filters. The integration does not compute the graph layout or apply map filters locally.
 
-## Reindex, Export, Import, and Reset
+## Reindex, export, import, and reset
 
 Reindex existing uploads after a daemon SDK update:
 

@@ -9,7 +9,7 @@ Start with the daemon health checks the config flow uses:
 
 If the daemon SDK was upgraded or restarted while Home Assistant was running, restart Home Assistant after the daemon reports healthy. That clears stale daemon clients and stale Home Graph state inside the integration runtime.
 
-## Common Problems
+## Common problems
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ If the daemon SDK was upgraded or restarted while Home Assistant was running, re
 | Sources are present but not linked to the right object | Source was ingested without a target hint, auto-link confidence was low, or the wrong graph object was selected | Use Review/Link in the sidebar or `goodvibes.link_knowledge` with `target_kind`, `target_id`, and `relation`. |
 | Need to recover from bad ingest/link/page data | The selected Home Graph space is contaminated by historical data | Export for diagnosis, run `goodvibes.home_graph_reset` with `dry_run: true`, then destructive reset with `confirm: RESET`, sync, reingest/relink, reindex, and retest. |
 
-## Credential Checks
+## Credential checks
 
 The daemon config needs the Home Assistant long-lived access token:
 
@@ -49,7 +49,7 @@ The Home Assistant integration config needs:
 
 The webhook secret and Home Assistant long-lived access token are not substitutes for the daemon bearer token. The first request from Home Assistant to the daemon must include an actual bearer token in the `Authorization` header.
 
-## Assist Checks
+## Assist checks
 
 Assist uses:
 
@@ -70,7 +70,7 @@ If Assist returns an error:
 
 Use `goodvibes.cancel` with `session_id` or `message_id` when an active Assist turn needs to be cancelled.
 
-## Upload Checks
+## Upload checks
 
 Use the `GoodVibes Home` sidebar for normal browser file uploads. That path uses multipart upload to Home Assistant, then forwards the temporary file to the daemon.
 
@@ -86,7 +86,7 @@ For large files, check:
 
 URL, note, artifact, import, reindex, and refinement calls can run up to one hour. Sync-generated pages, packets, and exports can run up to ten minutes.
 
-## Reset Recovery
+## Reset recovery
 
 Use reset when the daemon-owned knowledge space has bad historical ingest, links, generated pages, or review state that should not be preserved.
 

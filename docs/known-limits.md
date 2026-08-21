@@ -1,8 +1,8 @@
-# Known Limits
+# Known limits
 
 These limits describe the current integration and daemon contract. They are operational constraints, not intended product boundaries.
 
-## Thin Client Boundary
+## Thin client boundary
 
 The integration does not store, search, or repair Home Graph data locally. The daemon owns:
 
@@ -19,7 +19,7 @@ The integration does not store, search, or repair Home Graph data locally. The d
 
 If Home Graph answers, pages, issues, or map output look wrong, fix or reset the daemon-owned knowledge space rather than adding local Home Assistant inference.
 
-## Upload Size and Timeouts
+## Upload size and timeouts
 
 The GoodVibes SDK (validated against `1.3.0`) defaults daemon artifact storage to `512 MiB` through `storage.artifacts.maxBytes`. This integration also refuses a panel upload larger than `512 MiB` before buffering it to local disk, so an oversized file is rejected up front instead of filling the temporary filesystem.
 
@@ -35,7 +35,7 @@ Use the sidebar multipart upload path for browser uploads. Do not base64 large P
 
 URL, note, artifact, import, reindex, and refinement calls allow up to one hour for daemon extraction/indexing. Sync-generated pages, packets, and exports allow up to ten minutes.
 
-## Stale Daemon Clients
+## Stale daemon clients
 
 After upgrading or restarting the GoodVibes daemon SDK during live validation, restart Home Assistant after the daemon reports healthy. This forces the integration to reopen its daemon client.
 
@@ -46,7 +46,7 @@ Symptoms of stale runtime state include:
 - Ask, Pages, or Map showing stale behavior after an SDK upgrade.
 - Upload or reindex calls using old timeout or response expectations.
 
-## Home Graph Reset Versus Import
+## Home Graph reset versus import
 
 Export/import are for backup and transfer. They are not a reset substitute.
 
@@ -54,7 +54,7 @@ Use `goodvibes.home_graph_reset` when recovering from bad historical ingest, bad
 
 Do not manually delete SDK database rows from the integration side.
 
-## Release Delivery
+## Release delivery
 
 The Home Assistant update entity installs GitHub release assets named `goodvibes.zip`. A commit pushed to `main` is not automatically a release.
 
@@ -66,19 +66,19 @@ Release delivery requires:
 
 Docs-only commits can remain unreleased unless the documentation should be included in a new release asset.
 
-## Home Assistant Restart Required After Update
+## Home Assistant restart required after update
 
 After installing an integration update through Home Assistant, restart Home Assistant so new Python modules and frontend files load.
 
 Reloading the config entry is not enough for all Python and frontend changes.
 
-## Browser Token Exposure
+## Browser token exposure
 
 The browser panel must not receive the daemon bearer token. Browser requests go through Home Assistant-authenticated websocket and upload endpoints, and Home Assistant forwards daemon calls server-side.
 
 Any feature requiring direct browser-to-daemon calls needs a separate scoped browser-safe daemon credential flow before it can be implemented safely.
 
-## Service Schema Detail
+## Service schema detail
 
 The human-readable service guide summarizes behavior. Home Assistant selector-level field definitions live in `custom_components/goodvibes/services.yaml`.
 

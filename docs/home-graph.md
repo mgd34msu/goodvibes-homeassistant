@@ -1,4 +1,4 @@
-# Home Graph Reference
+# Home Graph reference
 
 Home Graph is owned by the GoodVibes SDK and daemon. The Home Assistant integration gathers Home Assistant context, forwards service and panel calls, and renders daemon responses. It does not store graph data locally, parse uploaded files, synthesize answers, rank snippets, generate pages, or compute map layouts.
 
@@ -8,7 +8,7 @@ Default knowledge space:
 homeassistant:<installationId>
 ```
 
-## Daemon Routes
+## Daemon routes
 
 The integration targets these daemon Home Graph routes (latest SDK, validated against `1.3.0`):
 
@@ -42,7 +42,7 @@ The integration targets these daemon Home Graph routes (latest SDK, validated ag
 
 All Home Graph routes use normal daemon auth. Mutating routes require a daemon token with admin privileges.
 
-## Sidebar Panel
+## Sidebar panel
 
 The `GoodVibes Home` sidebar panel talks to Home Assistant, not directly to the daemon:
 
@@ -225,11 +225,11 @@ data:
 
 When the Review tab or panel refresh loads open issues, it calls `/api/homeassistant/home-graph/refinement/run` with a `triage` body in small background batches; the daemon's own LLM triage loop classifies each issue and, above its confidence threshold, applies `reject` decisions automatically through `facts/review`. Uncertain cases remain visible for manual review.
 
-Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision — derived daemon-side, not by the integration.
+Review payloads include semantic facts such as `batteryPowered: false`, `batteryType: "none"`, or `manualRequired: false` when those facts are implied by the selected decision, derived daemon-side, not by the integration.
 
 The daemon persists a per-issue decision cache so unchanged open issues are not reclassified after a page refresh or Home Assistant restart. Use `Re-run triage` to force a fresh classification. A daemon with no configured triage LLM, or one that predates server-side triage, reports that honestly instead of running a local fallback engine.
 
-## Reindex and Refinement
+## Reindex and refinement
 
 Example reindex after a daemon SDK update:
 
@@ -248,7 +248,7 @@ The Refine tab lists daemon-owned task records from `/api/homeassistant/home-gra
 
 Ask answers may include `answer.refinementTaskIds`; the panel renders those IDs so the matching tasks can be inspected. The latest refinement run summary displays SDK budget fields such as `candidateGaps`, `processedGaps`, `requestedLimit`, `effectiveLimit`, `truncated`, and `budgetExhausted`.
 
-## Export, Import, and Reset
+## Export, import, and reset
 
 Example reset preview:
 

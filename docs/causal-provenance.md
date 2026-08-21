@@ -1,4 +1,4 @@
-# Causal provenance — "why did the light turn on at 3am?"
+# Causal provenance: "why did the light turn on at 3am?"
 
 Home Assistant threads a **context** through everything it does. Every state
 change, service call, automation run, and script run carries a context with an
@@ -22,7 +22,7 @@ For each tracked state change, the attributed cause is one of:
 | `script`                | A script run caused the change.                                         |
 | `scene`                 | A scene being applied (`scene.turn_on`) caused the change.              |
 | `service_call`          | A service call caused it, and no automation/script/scene was above it.  |
-| `user`                  | The change's context carries a `user_id` — a person did it.             |
+| `user`                  | The change's context carries a `user_id`, a person did it.              |
 | `device_or_integration` | A **root** context with no parent and no user: the entity/integration reported the change itself (a device report or a poll). |
 | `unknown`               | The change has a parent context this tracker never captured (for example, it happened before Home Assistant started). The chain is broken, so guessing is refused. |
 
@@ -31,7 +31,7 @@ integration produced a `device_or_integration` change in the context, so the
 integration does not invent one; and a broken chain is reported as `unknown`
 rather than attributed to the nearest thing that happens to be lying around.
 
-The indexes are recent-history caches bounded by count — not a full audit log —
+The indexes are recent-history caches bounded by count, not a full audit log,
 and they start empty when the integration (re)starts.
 
 ## In the Home Graph snapshot

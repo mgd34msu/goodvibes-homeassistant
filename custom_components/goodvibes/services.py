@@ -124,13 +124,16 @@ from .const import (
     ISSUE_HABIT_PROPOSALS,
 )
 from .daemon_payloads import (
+    base_payload as _base_payload,
     copy_optional as _copy_optional,
+    copy_optional_any as _copy_optional_any,
     copy_tags_and_private_hosts as _copy_tags_and_private_hosts,
     ensure_home_graph_enabled as _ensure_home_graph_enabled,
     home_graph_payload as _home_graph_payload,
     link_payload as _knowledge_link_payload,
     map_payload as _map_payload,
     prompt_payload as _prompt_payload,
+    required_text as _required_text,
 )
 from .data import GoodVibesRuntimeData
 from .habits import async_create_automation_from_config
@@ -594,8 +597,16 @@ async def async_sync_home_graph_context(
     runtime: GoodVibesRuntimeData,
     data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Sync current Home Assistant context ahead of a Home Graph action.
+
+    Shared by the services and the sidebar panel's websocket actions (see
+    frontend.py), so both surfaces build the same payload the same way. Built
+    on ``daemon_payloads.base_payload``, which accepts either the services'
+    snake_case fields or the panel's camelCase ones.
+    """
+
     _ensure_home_graph_enabled(runtime)
-    base_payload = runtime.home_graph_base_payload(data or {})
+    base_payload = _base_payload(runtime, data or {})
     snapshot = await async_build_home_graph_snapshot(
         runtime.hass,
         runtime.entry,
@@ -618,18 +629,31 @@ async def async_regenerate_home_graph_pages(
         runtime.home_graph_last_error = str(err)
         async_dispatcher_send(runtime.hass, runtime.signal)
 
+async def async_ingest_url_action(
+    runtime: GoodVibesRuntimeData, data: dict[str, Any]
+) -> dict[str, Any]:
+    """Ingest a URL into the Home Graph.
+
+    Shared core for the ``ingest_url`` service and the sidebar panel's
+    websocket action, so the two surfaces build and send the same payload
+    instead of each keeping its own copy of this logic.
+    """
+
+    await async_sync_home_graph_context(runtime, data)
+    payload = {
+        **_home_graph_payload(runtime, data),
+        "url": _required_text(data, CONF_URL, "url"),
+    }
+    _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
+    _copy_tags_and_private_hosts(data, payload)
+    response = await _call_client(runtime.client.home_graph_ingest_url(payload))
+    runtime.async_apply_home_graph_response(response)
+    return response
+
 async def async_ingest_url(call: ServiceCall) -> dict[str, Any]:
     await _async_verify_admin(call)
     runtime = _runtime_from_service_call(call.hass, call)
-    await async_sync_home_graph_context(runtime, call.data)
-    payload = {
-        **_home_graph_payload(runtime, call.data),
-        "url": call.data[CONF_URL],
-    }
-    _copy_optional(call.data, payload, CONF_TITLE, "title")
-    _copy_tags_and_private_hosts(call.data, payload)
-    response = await _call_client(runtime.client.home_graph_ingest_url(payload))
-    runtime.async_apply_home_graph_response(response)
+    response = await async_ingest_url_action(runtime, call.data)
     await async_regenerate_home_graph_pages(runtime, call.data)
     return response
 

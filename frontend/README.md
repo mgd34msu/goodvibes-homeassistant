@@ -3,7 +3,7 @@
 The GoodVibes Home Assistant integration ships a custom sidebar panel. Its
 frontend assets are **authored in `src/`** and **built** into the integration's
 served directory (`../custom_components/goodvibes/frontend/`) by a reproducible
-esbuild step — they are not hand-edited bundles.
+esbuild step. They are not hand-edited bundles.
 
 ## Layout
 

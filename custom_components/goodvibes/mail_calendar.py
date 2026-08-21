@@ -9,14 +9,14 @@ The whole point of this module is to be honest about *why* mail and calendar
 are not working when they are not working, because the three reasons have three
 different fixes and are easy to conflate:
 
-* ``unsupported``  — the daemon does not serve the routes here. Either it is
+* ``unsupported`` , the daemon does not serve the routes here. Either it is
   older than the mail/calendar surface (HTTP 404), or it is current and the
   route is real but no handler is attached in the composition it was built with
   (HTTP 501 ``NOT_INVOKABLE``). Fix: update the daemon, or run one whose
   composition wires mail and calendar.
-* ``needs_setup``  — the routes are served, but no mail or calendar account is
+* ``needs_setup`` , the routes are served, but no mail or calendar account is
   connected on the daemon. Fix: connect one on the daemon host.
-* ``unavailable``  — the daemon could not be reached at all. Fix: check that it
+* ``unavailable`` , the daemon could not be reached at all. Fix: check that it
   is running and that the URL and token are right.
 
 Every one of those carries the concrete next step with it (see

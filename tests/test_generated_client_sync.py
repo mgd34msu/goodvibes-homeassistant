@@ -43,7 +43,7 @@ def test_vendored_generated_client_matches_sdk_artifact():
     if not SDK_ARTIFACT_PATH.exists():
         pytest.skip(
             "SDK checkout not found at "
-            f"{SDK_ARTIFACT_PATH} — this repo does not vendor the SDK, so the "
+            f"{SDK_ARTIFACT_PATH}: this repo does not vendor the SDK, so the "
             "sync check only runs when a sibling goodvibes-sdk checkout is "
             "present locally. CI for this repo has no SDK checkout."
         )

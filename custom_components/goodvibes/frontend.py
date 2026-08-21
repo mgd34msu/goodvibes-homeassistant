@@ -63,7 +63,10 @@ from .daemon_payloads import (
     string_list as _string_list,
     truthy as _truthy,
 )
-from .home_graph import async_build_home_graph_snapshot
+from .services import (
+    async_ingest_url_action,
+    async_sync_home_graph_context,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,7 +89,7 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024
 WS_HOME_GRAPH_CALL = "goodvibes/home_graph/call"
 # Home Graph issue triage is now a server-side mode of the daemon's
 # `refinement/run` verb (SDK decision record
-# 2026-07-07-home-graph-issue-triage.md) — these are just the request
+# 2026-07-07-home-graph-issue-triage.md), these are just the request
 # defaults this integration sends; the daemon owns the actual triage loop,
 # confidence gate, and decision cache.
 TRIAGE_DEFAULT_LIMIT = 25
@@ -249,7 +252,7 @@ class GoodVibesHomeGraphUploadView(HomeAssistantView):
                 payload["allowPrivateHosts"] = _truthy(
                     _first_value(fields, CONF_ALLOW_PRIVATE_HOSTS, "allowPrivateHosts")
                 )
-            await _async_sync_home_graph_context(hass, runtime, fields)
+            await async_sync_home_graph_context(runtime, fields)
             response = await runtime.client.home_graph_upload_artifact(
                 payload,
                 temp_path,
@@ -268,6 +271,390 @@ class GoodVibesHomeGraphUploadView(HomeAssistantView):
                 await hass.async_add_executor_job(_remove_file, temp_path)
 
 
+async def _action_status(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    await runtime.async_refresh_home_graph()
+    return _status_payload(runtime)
+
+
+async def _action_sync(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    response = await async_sync_home_graph_context(runtime, data)
+    await runtime.async_refresh_home_graph()
+    return response
+
+
+async def _action_sources(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    response = await runtime.client.home_graph_sources(
+        _query_payload(runtime, data, {CONF_LIMIT, "limit"})
+    )
+    runtime.home_graph_sources = response
+    async_dispatcher_send(hass, runtime.signal)
+    return response
+
+
+async def _action_pages(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _query_payload(runtime, data, {CONF_LIMIT, "limit"})
+    include_markdown = _first_value(
+        data,
+        "includeMarkdown",
+        "include_markdown",
+        default=True,
+    )
+    payload["includeMarkdown"] = _truthy(include_markdown)
+    response = await runtime.client.home_graph_pages(payload)
+    runtime.home_graph_pages = response
+    async_dispatcher_send(hass, runtime.signal)
+    return response
+
+
+async def _action_issues(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _query_payload(
+        runtime,
+        data,
+        {
+            CONF_STATUS,
+            "status",
+            CONF_SEVERITY,
+            "severity",
+            CONF_CODE,
+            "code",
+            CONF_LIMIT,
+            "limit",
+        },
+    )
+    payload.setdefault(CONF_STATUS, "open")
+    response = await runtime.client.home_graph_issues(payload)
+    runtime.home_graph_issues = response
+    async_dispatcher_send(hass, runtime.signal)
+    return response
+
+
+async def _action_browse(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _query_payload(runtime, data, {"limit"})
+    return await runtime.client.home_graph_browse(payload)
+
+
+async def _action_map(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    return await runtime.client.home_graph_map(_map_payload(runtime, data))
+
+
+async def _action_export(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    return await runtime.client.home_graph_export(_base_payload(runtime, data))
+
+
+async def _action_import(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = {
+        **_base_payload(runtime, data),
+        "data": _required_object(data, "data"),
+    }
+    response = await runtime.client.home_graph_import(payload)
+    runtime.async_apply_home_graph_response(response)
+    await runtime.async_refresh_home_graph()
+    return response
+
+
+async def _action_reset(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    dry_run = _truthy(data.get("dryRun") or data.get("dry_run"))
+    confirm = str(data.get("confirm") or "").strip()
+    if confirm != "RESET" and not dry_run:
+        raise HomeAssistantError("Type RESET to reset the Home Graph space.")
+    payload = _base_payload(runtime, data)
+    if dry_run:
+        payload["dryRun"] = True
+    response = await runtime.client.home_graph_reset(payload)
+    if not dry_run:
+        runtime.async_apply_home_graph_response(response)
+        await runtime.async_refresh_home_graph()
+    return response
+
+
+async def _action_reindex(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    response = await runtime.client.home_graph_reindex(_base_payload(runtime, data))
+    runtime.async_apply_home_graph_response(response)
+    await runtime.async_refresh_home_graph()
+    return response
+
+
+async def _action_refinement_tasks(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _query_payload(
+        runtime,
+        data,
+        {"limit", "state", "subjectId", "gapId"},
+    )
+    response = await runtime.client.home_graph_refinement_tasks(payload)
+    runtime.home_graph_refinement_tasks = response
+    async_dispatcher_send(hass, runtime.signal)
+    return response
+
+
+async def _action_refinement_task(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    task_id = _required_text(data, "id", "taskId", "task_id")
+    payload = _base_payload(runtime, data)
+    return await runtime.client.home_graph_refinement_task(task_id, payload)
+
+
+async def _action_refinement_run(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _base_payload(runtime, data)
+    for source_key, payload_key in (
+        ("gapIds", "gapIds"),
+        ("gap_ids", "gapIds"),
+        ("sourceIds", "sourceIds"),
+        ("source_ids", "sourceIds"),
+    ):
+        if source_key in data:
+            values = _string_list(data[source_key])
+            if values:
+                payload[payload_key] = values
+    if "limit" in data:
+        try:
+            payload["limit"] = max(1, int(data["limit"]))
+        except (TypeError, ValueError):
+            payload["limit"] = data["limit"]
+    if "force" in data:
+        payload["force"] = _truthy(data["force"])
+    response = await runtime.client.home_graph_refinement_run(payload)
+    runtime.async_apply_home_graph_response(response)
+    runtime.home_graph_refinement_tasks = await runtime.client.home_graph_refinement_tasks(
+        _query_payload(runtime, {"limit": 100}, {"limit"})
+    )
+    await runtime.async_refresh_home_graph()
+    async_dispatcher_send(hass, runtime.signal)
+    return response
+
+
+async def _action_refinement_cancel(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    task_id = _required_text(data, "id", "taskId", "task_id")
+    response = await runtime.client.home_graph_refinement_cancel(
+        task_id,
+        _base_payload(runtime, data),
+    )
+    runtime.home_graph_refinement_tasks = await runtime.client.home_graph_refinement_tasks(
+        _query_payload(runtime, {"limit": 100}, {"limit"})
+    )
+    await runtime.async_refresh_home_graph()
+    async_dispatcher_send(hass, runtime.signal)
+    return response
+
+
+async def _action_ask(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    if not runtime.home_graph_last_sync_at:
+        await async_sync_home_graph_context(runtime, data)
+    payload = {
+        **_base_payload(runtime, data),
+        "query": _required_text(data, CONF_QUERY, "query"),
+        **_query_payload(runtime, data, {CONF_LIMIT, "limit", CONF_MODE, "mode"}),
+        "includeSources": _truthy(
+            _first_value(data, CONF_INCLUDE_SOURCES, "includeSources", default=True)
+        ),
+        "includeConfidence": _truthy(
+            _first_value(
+                data,
+                CONF_INCLUDE_CONFIDENCE,
+                "includeConfidence",
+                default=False,
+            )
+        ),
+        "includeLinkedObjects": _truthy(
+            _first_value(
+                data,
+                CONF_INCLUDE_LINKED_OBJECTS,
+                "includeLinkedObjects",
+                default=True,
+            )
+        ),
+    }
+    response = await runtime.client.home_graph_ask(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+async def _action_ingest_url(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    # The panel and the ``ingest_url`` service send the identical daemon
+    # payload, so this is a straight call into that shared implementation
+    # rather than a second copy of it (see services.async_ingest_url_action).
+    return await async_ingest_url_action(runtime, data)
+
+
+async def _action_ingest_note(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    await async_sync_home_graph_context(runtime, data)
+    payload = {
+        **_home_graph_payload(runtime, data),
+        "body": _required_text(data, "body", "note"),
+    }
+    _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
+    _copy_optional_any(data, payload, ("category",), "category")
+    _copy_tags_and_private_hosts(data, payload, private_hosts=False)
+    response = await runtime.client.home_graph_ingest_note(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+async def _action_ingest_artifact(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    await async_sync_home_graph_context(runtime, data)
+    payload = _artifact_payload(runtime, data)
+    response = await runtime.client.home_graph_ingest_artifact(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+async def _do_link_action(
+    runtime: Any, data: dict[str, Any], *, unlink: bool
+) -> dict[str, Any]:
+    """Shared body for the ``link``/``unlink`` actions (same payload shape)."""
+
+    payload = _link_payload(runtime, data)
+    call = runtime.client.home_graph_unlink if unlink else runtime.client.home_graph_link
+    response = await call(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+async def _action_link(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    return await _do_link_action(runtime, data, unlink=False)
+
+
+async def _action_unlink(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    return await _do_link_action(runtime, data, unlink=True)
+
+
+async def _action_review(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _review_payload(runtime, data)
+    response = await runtime.client.home_graph_review_fact(payload)
+    runtime.async_apply_home_graph_response(response)
+    await runtime.async_refresh_home_graph()
+    return response
+
+
+async def _action_triage_issues(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    return await _async_triage_home_graph_issues(runtime, data)
+
+
+async def _action_device_passport(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _base_payload(runtime, data)
+    _copy_optional_any(data, payload, (CONF_DEVICE_ID, "deviceId"), "deviceId")
+    response = await runtime.client.home_graph_device_passport(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+async def _action_room_page(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = _base_payload(runtime, data)
+    _copy_optional_any(data, payload, (CONF_AREA_ID, "areaId"), "areaId")
+    _copy_optional_any(data, payload, ("roomId",), "roomId")
+    _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
+    response = await runtime.client.home_graph_room_page(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+async def _action_packet(
+    hass: HomeAssistant, runtime: Any, data: dict[str, Any]
+) -> dict[str, Any]:
+    payload = {
+        **_base_payload(runtime, data),
+        "packetKind": _required_text(data, "packetKind", CONF_PACKET_TYPE),
+    }
+    for key in (
+        CONF_AREA_ID,
+        CONF_DEVICE_ID,
+        CONF_ENTITY_ID,
+        CONF_TITLE,
+        "roomId",
+        "sharingProfile",
+    ):
+        _copy_optional_any(data, payload, (key,), _camel_key(key))
+    if metadata := _parse_jsonish(data.get("metadata")):
+        payload["metadata"] = metadata
+    response = await runtime.client.home_graph_packet(payload)
+    runtime.async_apply_home_graph_response(response)
+    return response
+
+
+# One dispatch table entry per action instead of a branch to scan past to
+# find it. Every handler shares the same (hass, runtime, data) -> response
+# shape, so adding an action means adding one entry here, not growing a
+# 500-line chain. Keys match SUPPORTED_ACTIONS (the websocket schema's
+# vol.In allowlist) except "reset", which the schema has never allowed
+# through and is left exactly as unreachable via this path as it already was.
+_ACTION_HANDLERS: dict[str, Any] = {
+    "status": _action_status,
+    "sync": _action_sync,
+    "sources": _action_sources,
+    "pages": _action_pages,
+    "issues": _action_issues,
+    "browse": _action_browse,
+    "map": _action_map,
+    "export": _action_export,
+    "import": _action_import,
+    "reset": _action_reset,
+    "reindex": _action_reindex,
+    "refinement_tasks": _action_refinement_tasks,
+    "refinement_task": _action_refinement_task,
+    "refinement_run": _action_refinement_run,
+    "refinement_cancel": _action_refinement_cancel,
+    "ask": _action_ask,
+    "ingest_url": _action_ingest_url,
+    "ingest_note": _action_ingest_note,
+    "ingest_artifact": _action_ingest_artifact,
+    "link": _action_link,
+    "unlink": _action_unlink,
+    "review": _action_review,
+    "triage_issues": _action_triage_issues,
+    "device_passport": _action_device_passport,
+    "room_page": _action_room_page,
+    "packet": _action_packet,
+}
+
+
 async def _handle_home_graph_action(
     hass: HomeAssistant,
     runtime: Any,
@@ -277,261 +664,10 @@ async def _handle_home_graph_action(
     """Execute a Home Graph action for the frontend panel."""
 
     _ensure_home_graph_enabled(runtime)
-    if action == "status":
-        await runtime.async_refresh_home_graph()
-        return _status_payload(runtime)
-    if action == "sync":
-        base_payload = _base_payload(runtime, data)
-        snapshot = await async_build_home_graph_snapshot(
-            hass,
-            runtime.entry,
-            base_payload["installationId"],
-            base_payload.get("knowledgeSpaceId"),
-            include_unexposed=runtime.include_unexposed_entities,
-        )
-        response = await runtime.client.home_graph_sync(snapshot)
-        runtime.async_apply_home_graph_response(response, sync=True)
-        await runtime.async_refresh_home_graph()
-        return response
-    if action == "sources":
-        response = await runtime.client.home_graph_sources(
-            _query_payload(runtime, data, {CONF_LIMIT, "limit"})
-        )
-        runtime.home_graph_sources = response
-        async_dispatcher_send(hass, runtime.signal)
-        return response
-    if action == "pages":
-        payload = _query_payload(runtime, data, {CONF_LIMIT, "limit"})
-        include_markdown = _first_value(
-            data,
-            "includeMarkdown",
-            "include_markdown",
-            default=True,
-        )
-        payload["includeMarkdown"] = _truthy(include_markdown)
-        response = await runtime.client.home_graph_pages(payload)
-        runtime.home_graph_pages = response
-        async_dispatcher_send(hass, runtime.signal)
-        return response
-    if action == "issues":
-        payload = _query_payload(
-            runtime,
-            data,
-            {
-                CONF_STATUS,
-                "status",
-                CONF_SEVERITY,
-                "severity",
-                CONF_CODE,
-                "code",
-                CONF_LIMIT,
-                "limit",
-            },
-        )
-        payload.setdefault(CONF_STATUS, "open")
-        response = await runtime.client.home_graph_issues(payload)
-        runtime.home_graph_issues = response
-        async_dispatcher_send(hass, runtime.signal)
-        return response
-    if action == "browse":
-        payload = _query_payload(runtime, data, {"limit"})
-        return await runtime.client.home_graph_browse(payload)
-    if action == "map":
-        return await runtime.client.home_graph_map(_map_payload(runtime, data))
-    if action == "export":
-        return await runtime.client.home_graph_export(_base_payload(runtime, data))
-    if action == "import":
-        payload = {
-            **_base_payload(runtime, data),
-            "data": _required_object(data, "data"),
-        }
-        response = await runtime.client.home_graph_import(payload)
-        runtime.async_apply_home_graph_response(response)
-        await runtime.async_refresh_home_graph()
-        return response
-    if action == "reset":
-        dry_run = _truthy(data.get("dryRun") or data.get("dry_run"))
-        confirm = str(data.get("confirm") or "").strip()
-        if confirm != "RESET" and not dry_run:
-            raise HomeAssistantError("Type RESET to reset the Home Graph space.")
-        payload = _base_payload(runtime, data)
-        if dry_run:
-            payload["dryRun"] = True
-        response = await runtime.client.home_graph_reset(payload)
-        if not dry_run:
-            runtime.async_apply_home_graph_response(response)
-            await runtime.async_refresh_home_graph()
-        return response
-    if action == "reindex":
-        response = await runtime.client.home_graph_reindex(_base_payload(runtime, data))
-        runtime.async_apply_home_graph_response(response)
-        await runtime.async_refresh_home_graph()
-        return response
-    if action == "refinement_tasks":
-        payload = _query_payload(
-            runtime,
-            data,
-            {"limit", "state", "subjectId", "gapId"},
-        )
-        response = await runtime.client.home_graph_refinement_tasks(payload)
-        runtime.home_graph_refinement_tasks = response
-        async_dispatcher_send(hass, runtime.signal)
-        return response
-    if action == "refinement_task":
-        task_id = _required_text(data, "id", "taskId", "task_id")
-        payload = _base_payload(runtime, data)
-        response = await runtime.client.home_graph_refinement_task(task_id, payload)
-        return response
-    if action == "refinement_run":
-        payload = _base_payload(runtime, data)
-        for source_key, payload_key in (
-            ("gapIds", "gapIds"),
-            ("gap_ids", "gapIds"),
-            ("sourceIds", "sourceIds"),
-            ("source_ids", "sourceIds"),
-        ):
-            if source_key in data:
-                values = _string_list(data[source_key])
-                if values:
-                    payload[payload_key] = values
-        if "limit" in data:
-            try:
-                payload["limit"] = max(1, int(data["limit"]))
-            except (TypeError, ValueError):
-                payload["limit"] = data["limit"]
-        if "force" in data:
-            payload["force"] = _truthy(data["force"])
-        response = await runtime.client.home_graph_refinement_run(payload)
-        runtime.async_apply_home_graph_response(response)
-        runtime.home_graph_refinement_tasks = await runtime.client.home_graph_refinement_tasks(
-            _query_payload(runtime, {"limit": 100}, {"limit"})
-        )
-        await runtime.async_refresh_home_graph()
-        async_dispatcher_send(hass, runtime.signal)
-        return response
-    if action == "refinement_cancel":
-        task_id = _required_text(data, "id", "taskId", "task_id")
-        response = await runtime.client.home_graph_refinement_cancel(
-            task_id,
-            _base_payload(runtime, data),
-        )
-        runtime.home_graph_refinement_tasks = await runtime.client.home_graph_refinement_tasks(
-            _query_payload(runtime, {"limit": 100}, {"limit"})
-        )
-        await runtime.async_refresh_home_graph()
-        async_dispatcher_send(hass, runtime.signal)
-        return response
-    if action == "ask":
-        if not runtime.home_graph_last_sync_at:
-            await _async_sync_home_graph_context(hass, runtime, data)
-        payload = {
-            **_base_payload(runtime, data),
-            "query": _required_text(data, CONF_QUERY, "query"),
-            **_query_payload(runtime, data, {CONF_LIMIT, "limit", CONF_MODE, "mode"}),
-            "includeSources": _truthy(
-                _first_value(data, CONF_INCLUDE_SOURCES, "includeSources", default=True)
-            ),
-            "includeConfidence": _truthy(
-                _first_value(
-                    data,
-                    CONF_INCLUDE_CONFIDENCE,
-                    "includeConfidence",
-                    default=False,
-                )
-            ),
-            "includeLinkedObjects": _truthy(
-                _first_value(
-                    data,
-                    CONF_INCLUDE_LINKED_OBJECTS,
-                    "includeLinkedObjects",
-                    default=True,
-                )
-            ),
-        }
-        response = await runtime.client.home_graph_ask(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action == "ingest_url":
-        await _async_sync_home_graph_context(hass, runtime, data)
-        payload = {
-            **_home_graph_payload(runtime, data),
-            "url": _required_text(data, CONF_URL, "url"),
-        }
-        _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
-        _copy_tags_and_private_hosts(data, payload)
-        response = await runtime.client.home_graph_ingest_url(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action == "ingest_note":
-        await _async_sync_home_graph_context(hass, runtime, data)
-        payload = {
-            **_home_graph_payload(runtime, data),
-            "body": _required_text(data, "body", "note"),
-        }
-        _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
-        _copy_optional_any(data, payload, ("category",), "category")
-        _copy_tags_and_private_hosts(data, payload, private_hosts=False)
-        response = await runtime.client.home_graph_ingest_note(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action == "ingest_artifact":
-        await _async_sync_home_graph_context(hass, runtime, data)
-        payload = _artifact_payload(runtime, data)
-        response = await runtime.client.home_graph_ingest_artifact(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action in {"link", "unlink"}:
-        payload = _link_payload(runtime, data)
-        call = (
-            runtime.client.home_graph_link
-            if action == "link"
-            else runtime.client.home_graph_unlink
-        )
-        response = await call(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action == "review":
-        payload = _review_payload(runtime, data)
-        response = await runtime.client.home_graph_review_fact(payload)
-        runtime.async_apply_home_graph_response(response)
-        await runtime.async_refresh_home_graph()
-        return response
-    if action == "triage_issues":
-        return await _async_triage_home_graph_issues(runtime, data)
-    if action == "device_passport":
-        payload = _base_payload(runtime, data)
-        _copy_optional_any(data, payload, (CONF_DEVICE_ID, "deviceId"), "deviceId")
-        response = await runtime.client.home_graph_device_passport(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action == "room_page":
-        payload = _base_payload(runtime, data)
-        _copy_optional_any(data, payload, (CONF_AREA_ID, "areaId"), "areaId")
-        _copy_optional_any(data, payload, ("roomId",), "roomId")
-        _copy_optional_any(data, payload, (CONF_TITLE, "title"), "title")
-        response = await runtime.client.home_graph_room_page(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    if action == "packet":
-        payload = {
-            **_base_payload(runtime, data),
-            "packetKind": _required_text(data, "packetKind", CONF_PACKET_TYPE),
-        }
-        for key in (
-            CONF_AREA_ID,
-            CONF_DEVICE_ID,
-            CONF_ENTITY_ID,
-            CONF_TITLE,
-            "roomId",
-            "sharingProfile",
-        ):
-            _copy_optional_any(data, payload, (key,), _camel_key(key))
-        if metadata := _parse_jsonish(data.get("metadata")):
-            payload["metadata"] = metadata
-        response = await runtime.client.home_graph_packet(payload)
-        runtime.async_apply_home_graph_response(response)
-        return response
-    raise HomeAssistantError(f"Unsupported Home Graph action: {action}")
+    handler = _ACTION_HANDLERS.get(action)
+    if handler is None:
+        raise HomeAssistantError(f"Unsupported Home Graph action: {action}")
+    return await handler(hass, runtime, data)
 
 
 def _status_payload(runtime: Any) -> dict[str, Any]:
@@ -642,26 +778,6 @@ def _triage_unsupported_result(reason: str) -> dict[str, Any]:
         "decisions": [],
         "remaining": None,
     }
-
-
-async def _async_sync_home_graph_context(
-    hass: HomeAssistant,
-    runtime: Any,
-    data: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Send current Home Assistant context before source classification."""
-
-    base_payload = _base_payload(runtime, data or {})
-    snapshot = await async_build_home_graph_snapshot(
-        hass,
-        runtime.entry,
-        base_payload["installationId"],
-        base_payload.get("knowledgeSpaceId"),
-        include_unexposed=runtime.include_unexposed_entities,
-    )
-    response = await runtime.client.home_graph_sync(snapshot)
-    runtime.async_apply_home_graph_response(response, sync=True)
-    return response
 
 
 def _runtime_from_data(hass: HomeAssistant, data: dict[str, Any]) -> Any:

@@ -93,7 +93,7 @@ def _find_unpinned_branch_refs(workflow: dict, filename: str) -> list[str]:
             if _SHA_RE.match(ref) or _VERSION_TAG_RE.match(ref):
                 continue
             hits.append(
-                f"{filename}: job '{job_id}' step uses '{action}@{ref}' — "
+                f"{filename}: job '{job_id}' step uses '{action}@{ref}': "
                 "a moving branch ref must be pinned to a full commit SHA"
             )
     return hits
@@ -168,7 +168,7 @@ def test_auto_release_needs_covers_every_other_ci_job():
 
     missing = other_job_ids - needs_set
     assert not missing, (
-        f"ci.yml: auto-release does not wait on every other job — missing "
+        f"ci.yml: auto-release does not wait on every other job: missing "
         f"{sorted(missing)}"
     )
 

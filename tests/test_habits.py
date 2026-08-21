@@ -7,9 +7,12 @@ creation are exercised separately.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
@@ -19,6 +22,7 @@ from custom_components.goodvibes.habits import (
     GoodVibesHabitMiner,
     HabitObservationStore,
     Observation,
+    _automations_yaml_lock,
     async_create_automation_from_config,
     detect_habits,
     state_to_service,
@@ -189,3 +193,82 @@ async def test_create_automation_writes_and_reloads(hass, tmp_path):
     # Accepting the same proposal twice is refused.
     with pytest.raises(HomeAssistantError):
         await async_create_automation_from_config(hass, config)
+
+
+def _automation_config(automation_id: str) -> dict:
+    return {
+        "id": automation_id,
+        "alias": f"GoodVibes habit: {automation_id}",
+        "trigger": [{"platform": "time", "at": "07:00:00"}],
+        "condition": [{"condition": "time", "weekday": ["mon"]}],
+        "action": [{"service": "light.turn_on", "target": {"entity_id": "light.kitchen"}}],
+        "mode": "single",
+    }
+
+
+def test_automations_yaml_lock_is_reused_per_hass():
+    """The same hass gets the same lock across calls, not a fresh one each time."""
+
+    hass = SimpleNamespace(data={})
+    lock = _automations_yaml_lock(hass)
+    assert isinstance(lock, asyncio.Lock)
+    assert _automations_yaml_lock(hass) is lock
+
+    other_hass = SimpleNamespace(data={})
+    assert _automations_yaml_lock(other_hass) is not lock
+
+
+async def test_concurrent_accept_habit_does_not_lose_an_automation(hass, tmp_path):
+    """Two proposals accepted back-to-back both survive, none silently dropped.
+
+    Widens the read-modify-write race window with a slowed ``load_yaml`` so
+    the two executor jobs would genuinely overlap without the lock added for
+    this fix (see async_create_automation_from_config / _automations_yaml_lock).
+    """
+
+    hass.config.config_dir = str(tmp_path)
+
+    real_load_yaml = load_yaml
+
+    def _slow_load_yaml(path):
+        result = real_load_yaml(path)
+        time.sleep(0.05)
+        return result
+
+    config_a = _automation_config("goodvibes_habit_a")
+    config_b = _automation_config("goodvibes_habit_b")
+
+    with patch("homeassistant.util.yaml.load_yaml", side_effect=_slow_load_yaml):
+        results = await asyncio.gather(
+            async_create_automation_from_config(hass, config_a),
+            async_create_automation_from_config(hass, config_b),
+        )
+
+    assert set(results) == {"goodvibes_habit_a", "goodvibes_habit_b"}
+    stored = load_yaml(hass.config.path("automations.yaml"))
+    assert {item["id"] for item in stored} == {
+        "goodvibes_habit_a",
+        "goodvibes_habit_b",
+    }
+
+
+async def test_atomic_write_leaves_original_file_intact_on_failure(hass, tmp_path):
+    """A write failure never leaves automations.yaml half-written or replaced."""
+
+    hass.config.config_dir = str(tmp_path)
+    await async_create_automation_from_config(hass, _automation_config("existing"))
+    path = Path(hass.config.path("automations.yaml"))
+    original_bytes = path.read_bytes()
+
+    with patch("homeassistant.util.yaml.save_yaml", side_effect=OSError("disk full")):
+        with pytest.raises(OSError):
+            await async_create_automation_from_config(hass, _automation_config("new_one"))
+
+    # The original file is untouched: the failed write went to a temp file
+    # that was never swapped in.
+    assert path.read_bytes() == original_bytes
+    leftovers = [
+        entry for entry in Path(tmp_path).iterdir()
+        if entry.name.startswith(".automations_yaml_")
+    ]
+    assert leftovers == []

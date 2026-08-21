@@ -1,8 +1,8 @@
-# Development and Release
+# Development and release
 
 This repository packages the Home Assistant side of the GoodVibes daemon surface. The daemon and SDK own routing, models, Home Graph storage, answer synthesis, generated pages, packets, artifacts, and map layout. Keep integration changes scoped to Home Assistant setup, services, sensors, repairs, Assist plumbing, event handling, upload proxying, and the sidebar bridge.
 
-## Local Checks
+## Local checks
 
 Run the same checks as the local CI validation job before pushing code changes:
 
@@ -71,7 +71,7 @@ print("markdown links ok")
 PY
 ```
 
-## Daemon Contract Validation
+## Daemon contract validation
 
 `scripts/validate-daemon-contract.mjs` runs the live half of
 [sdk-compatibility.md](sdk-compatibility.md) against a real daemon. It installs the published SDK
@@ -87,7 +87,7 @@ bun scripts/validate-daemon-contract.mjs 1.17.2    # against a pinned release
 Requires `bun` (the daemon's HTTP transport is built on `Bun.serve`). Exit code 0 means every
 checked route and response shape held. Run it whenever the daemon SDK moves, then re-vendor
 `generated_client.py` and update `const.SDK_VALIDATED_VERSION` and `docs/sdk-compatibility.md`
-together — `test_version_check.py::test_validated_version_matches_vendored_contract` fails if the
+together. `test_version_check.py::test_validated_version_matches_vendored_contract` fails if the
 label and the vendored artifact disagree.
 
 ## CI
@@ -117,7 +117,7 @@ The metadata check requires:
 - Repository metadata does not contain placeholder `OWNER/` values.
 - `hacs.json` points to `goodvibes.zip` release assets.
 
-## Version Updates
+## Version updates
 
 When preparing a new integration release, update these together:
 
@@ -129,7 +129,7 @@ When preparing a new integration release, update these together:
 
 Use tags in the form `v<manifest version>`, for example `v0.5.70`.
 
-## Release Workflow
+## Release workflow
 
 `.github/workflows/release.yml` publishes releases from tags matching `v*` or from manual dispatch with a `tag` input.
 
@@ -143,7 +143,7 @@ The release workflow:
 
 The archive contains `custom_components/goodvibes/` and excludes `__pycache__` and `*.pyc`.
 
-## Manual Release Steps
+## Manual release steps
 
 Use this sequence for a normal release:
 
@@ -163,13 +163,13 @@ Only create the tag after the version metadata matches. The release workflow rej
 
 For docs-only updates, do not bump the version or create a tag unless the docs should ship as a new release asset.
 
-## Update Entity
+## Update entity
 
 The integration exposes a Home Assistant update entity backed by GitHub releases. The update entity expects release archives named `goodvibes.zip` and installs the archive contents into `custom_components/goodvibes`.
 
 After installing an update through Home Assistant, restart Home Assistant so Python and frontend files are reloaded.
 
-## Pull Request Review Focus
+## Pull request review focus
 
 Review integration changes for these boundaries:
 

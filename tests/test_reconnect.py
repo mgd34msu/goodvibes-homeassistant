@@ -195,7 +195,7 @@ async def test_version_probe_failure_on_reconnect_keeps_retrying(hass):
     client.version = "1.0.0"
     await _advance(hass, RECONNECT_INITIAL_DELAY_S)
 
-    # Reachable, so the generic "unreachable" issue is honestly cleared — but
+    # Reachable, so the generic "unreachable" issue is honestly cleared, but
     # the connection does not resume normal operation, because the
     # version-specific issue already says the real reason.
     assert runtime.daemon_connected is False

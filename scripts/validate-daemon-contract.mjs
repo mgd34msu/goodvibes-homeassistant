@@ -38,9 +38,9 @@ const notes = [];
 
 function check(label, condition, detail) {
   if (condition) {
-    console.log(`  ok    ${label}${detail ? ` — ${detail}` : ''}`);
+    console.log(`  ok    ${label}${detail ? `: ${detail}` : ''}`);
   } else {
-    console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ''}`);
+    console.log(`  FAIL  ${label}${detail ? `: ${detail}` : ''}`);
     failures.push(label);
   }
 }
@@ -148,7 +148,7 @@ try {
   const health = await call('GET', '/api/homeassistant/health');
   check('GET /api/homeassistant/health returns 200', health.status === 200);
   const caps = health.json?.capabilities ?? [];
-  // const.REQUIRED_DAEMON_CAPABILITIES — the ones the integration hard-requires.
+  // const.REQUIRED_DAEMON_CAPABILITIES, the ones the integration hard-requires.
   for (const cap of ['conversation-stream', 'conversation-cancel']) {
     check(`health advertises required capability ${cap}`, caps.includes(cap));
   }
@@ -215,7 +215,7 @@ try {
   // assert. They are served now, so this asserts.
   //
   // What it checks is deliberately narrow, because this daemon is booted with
-  // no mail composition and no account connected — the state of a fresh
+  // no mail composition and no account connected, the state of a fresh
   // machine, not a misconfiguration. So the requirement is not "these succeed";
   // it is that every answer is one this integration can CLASSIFY:
   //

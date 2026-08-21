@@ -10,7 +10,7 @@ to attribute events to their cause.
 This module builds a small, bounded, in-memory index of that chain so the
 integration can answer "why did the light turn on at 3am":
 
-* It listens for the bus events whose context *identifies a cause* — an
+* It listens for the bus events whose context *identifies a cause*, an
   automation run (``automation_triggered``), a script run (``script_started``),
   and a service call (``call_service``) — and records, keyed by that context's
   id, what the cause was.
