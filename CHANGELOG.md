@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.13.11 - 2026-08-21
 
+- Validate against platform contract 2.0.18 (sdk release with the payments
+  gateway exports, the desktop-app wake surface, and hardened release
+  machinery). The vendored operator client is regenerated from that contract
+  and hash-pinned.
 - Fix a NameError on daemon HTTP 501 responses: the client referenced an
   unimported constant, so "surface missing" errors raised NameError instead
   of the intended GoodVibesSurfaceMissingError.
