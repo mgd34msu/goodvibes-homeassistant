@@ -63,13 +63,54 @@ Three of those four could not fail by construction. Four checks now do:
 ## Current state
 
 - **Target:** latest `@pellux/goodvibes-sdk`.
-- **Last validated against:** `1.21.0` (`const.SDK_VALIDATED_VERSION`), validated 2026-07-30.
+- **Last validated against:** `2.0.19` (`const.SDK_VALIDATED_VERSION`), validated 2026-08-21.
 
 Because the integration calls raw daemon HTTP routes rather than the SDK operator-method catalog,
 the SDK's `1.0` breaking renames (which reshaped the operator method catalog) did not touch it.
 Every route the integration calls is intact at `1.10.1`. A pin-forward to a newer SDK is therefore
 a validation-and-docs pass, not a code rewrite; the only real risk is response-shape drift inside
 JSON bodies, which the checks below and the test suite guard against.
+
+Between the `1.21.0` pass and this one, `CHANGELOG.md` records the pin moving through `2.0.0`,
+`2.0.3`, `2.0.4`, `2.0.7`, `2.0.8`, `2.0.9`, and `2.0.10`, each entry stating that the live checklist
+was re-run against a published daemon, then through `2.0.11`, `2.0.13`, `2.0.14`, `2.0.17`, and
+`2.0.18` with no such statement. Those five releases' changelog entries name a contract target and
+describe the daemon behavior change but do not record `scripts/validate-daemon-contract.mjs`
+actually being run. This documentation was also never updated across that whole span, which is why
+`Last validated against` above still read `1.21.0` until this entry. State it plainly as a records
+gap. Nothing here claims those five pins were checked live and passed, only that the pin moved.
+
+The `2.0.19` pass (2026-08-21) validated against daemon `1.28.21`, the first published release
+serving contract `2.0.19`. It re-vendored `custom_components/goodvibes/generated_client.py`
+byte-for-byte from the published `2.0.19` package's Python artifact and refreshed
+`tests/generated_client.sha256` to match; the only diff from `2.0.18` is the contract version
+label, so all 33 consumed methods, routes and types are unchanged.
+
+`scripts/validate-daemon-contract.mjs 2.0.19` passed every check against a daemon booted from the
+published `2.0.19` SDK package in an isolated home on an ephemeral loopback port:
+
+- `const.SDK_VALIDATED_VERSION` and the vendored contract label both read `2.0.19` and both
+  matched the version under probe.
+- `generated_client.py` is byte-identical to the release artifact.
+- `/status` returns `status: running` / `version: 2.0.19` and `401` on a bad bearer token.
+- `/api/homeassistant/health` serves the full capability set this integration consumes plus all
+  four advertised endpoints.
+- The manifest action still wraps its payload as `result.device`.
+- The Home Graph status, issues, sources and pages routes return their documented shapes;
+  `home-graph/status` reports `readiness.state=empty` on the fresh, sourceless daemon.
+- `refinement/run` still returns the full `triage` block, with `configured: true`.
+- `conversation/cancel` answers `400 "sessionId or known messageId is required."`, the route alive
+  and validating input rather than returning a 404.
+- Mail and calendar answer the same classifiable shapes prior passes confirmed: `email.send` and
+  `email.draft.create` answer `400 INVALID_INPUT`; `email.inbox.list` and `email.inbox.read` answer
+  `501 NOT_INVOKABLE`; `calendar.events.create` answers `400 INVALID_INPUT`; `calendar.events.get`
+  and `calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED`, never a `503 ws-call-overloaded`
+  routing fault reported as capacity.
+
+Pytest passed in full: 279 passed, no skips. `python -m compileall`, `ruff check`, the frontend
+build-matches-source check (`npm run check`, after rebuilding the frontend bundle for the
+`0.13.12` version banner), `git diff --check`, and the release-metadata consistency check all
+passed.
 
 The `1.21.0` pass (2026-07-30) followed the `1.20.0` pass by a single release. It re-vendored
 `custom_components/goodvibes/generated_client.py` byte-for-byte from the published `1.21.0`

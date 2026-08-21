@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.12 - 2026-08-21
+
+- Validate against platform contract 2.0.19, published by daemon 1.28.21. The
+  re-vendored client differs from 2.0.18 by its contract-version label only;
+  all 33 consumed methods, routes, and types are unchanged. Live pass against
+  a daemon booted from the published 1.28.21 package: `/status` reports
+  `running`/`2.0.19` and refuses a bad bearer token with 401, the health
+  route serves every capability and endpoint this integration reads, the
+  manifest action still wraps its payload as `result.device`, the Home Graph
+  routes and `refinement/run` return their documented shapes, and mail and
+  calendar answer the same classifiable shapes prior passes confirmed. All
+  contract checks passed.
+- Backfill `docs/sdk-compatibility.md`, which had not been updated since the
+  1.21.0 pass: the 2.0.11 through 2.0.18 contract pins moved without a
+  recorded live validation run behind any of them, a records gap rather than
+  a claim those five passed a check that was never run.
+
 ## 0.13.11 - 2026-08-21
 
 - Validate against platform contract 2.0.18 (sdk release with the payments
