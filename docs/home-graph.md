@@ -43,6 +43,8 @@ one per `client.py` method:
 
 All Home Graph routes use normal daemon auth. Mutating routes require a daemon token with admin privileges.
 
+An earlier version of this table also listed `POST /api/artifacts` and `POST /api/knowledge/ingest/artifact`. Checked against the `goodvibes-sdk` checkout: both are real daemon routes (`artifacts.create` and `knowledge.ingest.artifact` in the operator contract), but neither is Home Graph-scoped or Home-Assistant-scoped. `POST /api/artifacts` is the daemon's generic artifact-storage primitive (`packages/sdk/src/platform/control-plane/method-catalog-media.ts`); `POST /api/knowledge/ingest/artifact` ingests into the daemon's generic structured knowledge store (`packages/sdk/src/platform/control-plane/method-catalog-knowledge.ts`), a different store from Home Graph. The daemon's own `/api/homeassistant/home-graph/ingest/artifact` handler (`packages/sdk/src/platform/daemon/http/home-graph-routes.ts`) reuses the same underlying artifact-store primitive internally for uploads, then calls `homeGraphService.ingestArtifact`, not `knowledge.ingest.artifact`. So the two dropped routes were never this integration's path; they belong to an unrelated daemon subsystem, and the table above is the complete and accurate route list this integration actually calls.
+
 ## Sidebar panel
 
 The `GoodVibes Home` sidebar panel talks to Home Assistant, not directly to the daemon:

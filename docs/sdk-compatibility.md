@@ -112,6 +112,18 @@ build-matches-source check (`npm run check`, after rebuilding the frontend bundl
 `0.13.12` version banner), `git diff --check`, and the release-metadata consistency check all
 passed.
 
+A follow-up docs sweep (2026-08-21) checked two routes that used to appear in
+[home-graph.md](home-graph.md)'s daemon route list, `POST /api/artifacts` and
+`POST /api/knowledge/ingest/artifact`, against the `goodvibes-sdk` checkout, since nothing in this
+repo's client code calls either. Both are real routes (`artifacts.create` and
+`knowledge.ingest.artifact`), but neither is Home Graph-scoped: they are the daemon's generic
+artifact-storage primitive and its generic structured-knowledge-store ingest, a different store
+from Home Graph. This integration's `/api/homeassistant/home-graph/ingest/artifact` reuses the
+same underlying artifact-store primitive internally for uploads but calls
+`homeGraphService.ingestArtifact`, not `knowledge.ingest.artifact`. The two routes were never this
+integration's path; the route list in home-graph.md is complete without them, and that file now
+carries this same note next to the table.
+
 The `1.21.0` pass (2026-07-30) followed the `1.20.0` pass by a single release. It re-vendored
 `custom_components/goodvibes/generated_client.py` byte-for-byte from the published `1.21.0`
 package's Python artifact; the only diff from `1.20.0` is the contract version label, so all 33
