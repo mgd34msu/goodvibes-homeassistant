@@ -126,44 +126,13 @@ For browser file uploads, use the `GoodVibes Home` sidebar panel. Browser upload
 
 Use `target_kind`, `target_id`, and optional `relation` when the daemon needs a hint or when manually correcting a link.
 
-Common `target_kind` values:
-
-- `ha_entity`
-- `ha_device`
-- `ha_area`
-- `ha_room`
-- `ha_automation`
-- `ha_script`
-- `ha_scene`
-- `ha_label`
-- `ha_integration`
-- `ha_device_passport`
-- `ha_maintenance_item`
-- `ha_troubleshooting_case`
-- `ha_purchase`
-- `ha_network_node`
-
-Compatibility values accepted by the service schema:
-
-- `entity`
-- `device`
-- `area`
-- `automation`
-- `script`
-- `scene`
-
-Common `relation` values:
-
-- `has_manual`
-- `has_receipt`
-- `has_warranty`
-- `uses_battery`
-- `has_issue`
-- `fixed_by`
-- `controls`
-- `located_in`
-- `connected_via`
-- `source_for`
+Every accepted `target_kind` (the nine synced registry kinds, `ha_room`, the
+generated `ha_device_passport`, and the recordable inventory kinds), which id
+each one expects, and what every `relation` value means are documented once,
+in the authoritative tables in [home-graph.md](./home-graph.md#linking). The
+older `entity`, `device`, `area`, `automation`, `script`, and `scene` strings
+remain accepted for compatibility, and `relation` may be omitted so the daemon
+classifies the link itself.
 
 Manual link example:
 

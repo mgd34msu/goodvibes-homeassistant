@@ -117,33 +117,57 @@ URL, note, artifact, import, reindex, and refinement calls allow up to one hour 
 
 Use `target_kind`, `target_id`, and optional `relation` when overriding ingest behavior, manually linking/correcting knowledge, or attaching a known object-specific source such as a manual to a device. General notes and sources can omit these fields and let the daemon classify and link automatically.
 
-Common target kinds:
+`target_kind` names which kind of graph object the link points at, and
+`target_id` carries that object's id. Most links target the synced registry
+kinds; the last five rows are objects the daemon itself records or that you
+record deliberately. This table is the authoritative reference in this repo;
+`services.md` links here instead of repeating it.
 
-- `ha_entity`: Home Assistant `entity_id`, such as `binary_sensor.front_door`.
-- `ha_device`: Home Assistant device registry id.
-- `ha_area`: Home Assistant area id.
-- `ha_room`: daemon/Home Graph room id when available.
-- `ha_automation`: automation entity id or daemon-supported automation id.
-- `ha_script`: script entity id.
-- `ha_scene`: scene entity id.
-- `ha_label`: Home Assistant label id.
-- `ha_integration`: Home Assistant integration/config entry id.
-- `ha_device_passport`, `ha_maintenance_item`, `ha_troubleshooting_case`, `ha_purchase`, and `ha_network_node`: SDK-owned Home Graph ids.
+| Target kind | What it represents | Which id to pass |
+| --- | --- | --- |
+| `ha_entity` | One synced entity | The Home Assistant `entity_id`, such as `binary_sensor.front_door` |
+| `ha_device` | A synced device | The device registry id |
+| `ha_area` | A synced area | The area id |
+| `ha_room` | A room recorded in the graph itself, distinct from an area | The daemon's room id when one exists |
+| `ha_automation` | A synced automation | The automation entity id |
+| `ha_script` | A synced script | The script entity id |
+| `ha_scene` | A synced scene | The scene entity id |
+| `ha_label` | A synced label | The label id |
+| `ha_integration` | An installed integration | The integration/config entry id |
+| `ha_device_passport` | The generated living device profile for one device | The daemon-owned Home Graph id |
+| `ha_maintenance_item` | A maintenance task or schedule entry you record | The daemon-owned Home Graph id |
+| `ha_troubleshooting_case` | A recorded troubleshooting episode | The daemon-owned Home Graph id |
+| `ha_purchase` | A purchase record for something in the home | The daemon-owned Home Graph id |
+| `ha_network_node` | A router, switch, access point, or other network element you record | The daemon-owned Home Graph id |
 
-The older `entity`, `device`, `area`, `automation`, `script`, and `scene` strings remain accepted by the service schema for compatibility.
+The service selector also offers generic `source` and `node` kinds for linking
+by raw daemon record id, and the older `entity`, `device`, `area`,
+`automation`, `script`, and `scene` strings remain accepted for compatibility.
 
-Common relations:
+`relation` says what the link means. Omitting it is always safe: the daemon
+classifies manuals, receipts, and warranties on its own during ingest, and
+plain links default to `source_for`. Supply a relation when you want to state
+the meaning explicitly.
 
-- `has_manual`
-- `has_receipt`
-- `has_warranty`
-- `uses_battery`
-- `has_issue`
-- `fixed_by`
-- `controls`
-- `located_in`
-- `connected_via`
-- `source_for`
+| Relation | What it means | When to supply it |
+| --- | --- | --- |
+| `source_for` | The general "this backs that" link from a source to an object | Rarely needed; it is the default when `relation` is omitted |
+| `has_manual` | The source is the object's manual | Only to override the daemon's own manual classification |
+| `has_receipt` | The source is a purchase receipt | Only to override the automatic receipt classification |
+| `has_warranty` | The source is warranty documentation | Only to override the automatic warranty classification |
+| `located_in` | The object sits in an area or room | The daemon writes this during sync; supply it for manual placement corrections |
+| `belongs_to_device` | An entity or object belongs to a device | The daemon writes this during sync; supply it for manual corrections |
+| `connected_via` | The object reaches Home Assistant through an integration | The daemon writes this during sync; supply it for manual corrections |
+| `has_issue` | The object has a recorded problem | When linking a note or source that documents a problem |
+| `fixed_by` | A problem was resolved by this source | When recording what fixed an issue |
+| `controls` | One object drives another, such as an automation controlling a light | When recording control relationships the registries do not express |
+| `uses_battery` | The device runs on a battery worth tracking | When recording battery dependencies |
+| `part_of_network` | The object is part of the home network | When building out network topology around `ha_network_node` objects |
+| `mentioned_by` | A source mentions the object without being about it | When a document references an object in passing |
+
+One further relation, `repairs_gap`, appears on edges the daemon writes itself
+when an ingested source repairs a recorded knowledge gap. It is not a value to
+supply on a link call.
 
 Example link after ingest:
 
