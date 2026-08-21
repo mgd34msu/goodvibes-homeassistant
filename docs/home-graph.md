@@ -10,35 +10,36 @@ homeassistant:<installationId>
 
 ## Daemon routes
 
-The integration targets these daemon Home Graph routes (latest SDK, validated against `1.3.0`):
+The integration targets these daemon Home Graph routes (latest SDK, validated against `1.3.0`),
+one per `client.py` method:
 
-- `POST /api/artifacts`
-- `POST /api/knowledge/ingest/artifact`
-- `GET /api/homeassistant/home-graph/status`
-- `POST /api/homeassistant/home-graph/sync`
-- `POST /api/homeassistant/home-graph/ingest/url`
-- `POST /api/homeassistant/home-graph/ingest/note`
-- `POST /api/homeassistant/home-graph/ingest/artifact`
-- `POST /api/homeassistant/home-graph/link`
-- `POST /api/homeassistant/home-graph/unlink`
-- `POST /api/homeassistant/home-graph/ask`
-- `POST /api/homeassistant/home-graph/device-passport`
-- `POST /api/homeassistant/home-graph/room-page`
-- `POST /api/homeassistant/home-graph/packet`
-- `GET /api/homeassistant/home-graph/issues`
-- `POST /api/homeassistant/home-graph/facts/review`
-- `GET /api/homeassistant/home-graph/sources`
-- `GET /api/homeassistant/home-graph/pages`
-- `GET /api/homeassistant/home-graph/refinement/tasks`
-- `GET /api/homeassistant/home-graph/refinement/tasks/{id}`
-- `POST /api/homeassistant/home-graph/refinement/run`
-- `POST /api/homeassistant/home-graph/refinement/tasks/{id}/cancel`
-- `GET /api/homeassistant/home-graph/browse`
-- `GET` or `POST /api/homeassistant/home-graph/map`
-- `POST /api/homeassistant/home-graph/export`
-- `POST /api/homeassistant/home-graph/import`
-- `POST /api/homeassistant/home-graph/reset`
-- `POST /api/homeassistant/home-graph/reindex`
+| Route | What it does |
+| --- | --- |
+| `GET /api/homeassistant/home-graph/status` | Return daemon Home Graph status. |
+| `POST /api/homeassistant/home-graph/sync` | Submit a Home Graph snapshot sync. |
+| `POST /api/homeassistant/home-graph/ingest/url` | Ingest a URL into Home Graph. |
+| `POST /api/homeassistant/home-graph/ingest/note` | Ingest a note into Home Graph. |
+| `POST /api/homeassistant/home-graph/ingest/artifact` | Ingest an artifact, document, or photo (also the target for multipart browser uploads). |
+| `POST /api/homeassistant/home-graph/link` | Link a Home Graph source or node to a Home Assistant object. |
+| `POST /api/homeassistant/home-graph/unlink` | Unlink a Home Graph source or node from a Home Assistant object. |
+| `POST /api/homeassistant/home-graph/ask` | Ask a source-backed Home Graph question. |
+| `POST /api/homeassistant/home-graph/device-passport` | Refresh or retrieve a Home Graph device passport. |
+| `POST /api/homeassistant/home-graph/room-page` | Generate or refresh a Home Graph room page. |
+| `POST /api/homeassistant/home-graph/packet` | Generate a scoped Home Graph packet. |
+| `GET /api/homeassistant/home-graph/issues` | List Home Graph issues. |
+| `POST /api/homeassistant/home-graph/facts/review` | Review a Home Graph fact. |
+| `GET /api/homeassistant/home-graph/sources` | List Home Graph sources. |
+| `GET /api/homeassistant/home-graph/pages` | List daemon-rendered Home Graph generated pages. |
+| `GET /api/homeassistant/home-graph/refinement/tasks` | List Home Graph refinement tasks. |
+| `GET /api/homeassistant/home-graph/refinement/tasks/{id}` | Return one Home Graph refinement task. |
+| `POST /api/homeassistant/home-graph/refinement/run` | Run Home Graph refinement. |
+| `POST /api/homeassistant/home-graph/refinement/tasks/{id}/cancel` | Cancel a queued or active Home Graph refinement task. |
+| `GET /api/homeassistant/home-graph/browse` | Browse Home Graph nodes and links. |
+| `GET` or `POST /api/homeassistant/home-graph/map` | Return the daemon-rendered Home Graph visual map. |
+| `POST /api/homeassistant/home-graph/export` | Request a daemon-owned Home Graph export. |
+| `POST /api/homeassistant/home-graph/import` | Request a daemon-owned Home Graph import. |
+| `POST /api/homeassistant/home-graph/reset` | Request a daemon-owned Home Graph space reset. |
+| `POST /api/homeassistant/home-graph/reindex` | Repair missing or weak Home Graph source extraction. |
 
 All Home Graph routes use normal daemon auth. Mutating routes require a daemon token with admin privileges.
 
@@ -52,7 +53,37 @@ The `GoodVibes Home` sidebar panel talks to Home Assistant, not directly to the 
 
 The browser never receives the daemon token.
 
-Panel actions include status/readiness, sync, source/node/edge/issue browsing, visual map, URL/note/reference/file ingest, source-backed questions, link/unlink, review/forget, reindex, SDK refinement task browsing/runs/cancellation, LLM triage of open review issues, generated page inventory, direct page refresh tools, packets, export/import, and reset.
+Every action the panel can send over `goodvibes/home_graph/call` dispatches to one handler in
+`frontend.py`'s `ACTION_HANDLERS` table:
+
+| Action | What it does |
+| --- | --- |
+| `status` | Refresh and return Home Graph readiness/status. |
+| `sync` | Send the Home Assistant context snapshot to the daemon (see Workflow below). |
+| `sources` | List Home Graph sources. |
+| `pages` | List generated pages, optionally with markdown. |
+| `issues` | List Home Graph issues (defaults to `status: open`). |
+| `browse` | Browse nodes and links. |
+| `map` | Return the daemon-rendered visual map for the given filters. |
+| `export` | Export the daemon-owned knowledge space. |
+| `import` | Import a previously exported knowledge space. |
+| `reset` | Preview or perform a destructive reset (typed `RESET` required unless `dry_run`). |
+| `reindex` | Reindex and semantically enrich existing uploads without reuploading files. |
+| `refinement_tasks` | List refinement task records. |
+| `refinement_task` | Return one refinement task by ID. |
+| `refinement_run` | Run refinement, broad or targeted by gap/source IDs. |
+| `refinement_cancel` | Cancel a queued or active refinement task. |
+| `ask` | Ask a source-backed question; syncs first if nothing has synced yet this session. |
+| `ingest_url` | Ingest a URL. |
+| `ingest_note` | Ingest a note; syncs context first. |
+| `ingest_artifact` | Ingest an existing artifact, daemon-local path, or URI. |
+| `link` | Link a source or node to a Home Assistant object. |
+| `unlink` | Remove a link between a source/node and a Home Assistant object. |
+| `review` | Review, resolve, edit, reject, accept, or forget an issue, source, or node. |
+| `triage_issues` | Run the daemon's LLM triage over open review issues in the background. |
+| `device_passport` | Refresh or retrieve a device passport. |
+| `room_page` | Generate or refresh a room page. |
+| `packet` | Generate a scoped packet (see [services.md](services.md#ask-pages-and-packets) for the packet types). |
 
 The normal ingest UI only asks for the source. Title, tags, target, relation, and metadata are advanced overrides for corrections, unusual cases, or linking a known manual/source to a specific Home Assistant graph object.
 
@@ -67,7 +98,19 @@ The normal ingest UI only asks for the source. Title, tags, target, relation, an
 
 The integration starts a background sync after setup. The sidebar and ingest services sync automatically before ingest. Ask calls also sync automatically if the integration has not sent a snapshot since Home Assistant startup.
 
-The snapshot sent by `goodvibes.sync_home_graph` includes entities, devices, areas, automations, scripts, scenes, labels where available, integrations, helper metadata, selected current state attributes, integration documentation/source candidates, source registry metadata, and bounded page automation for device passports and room pages.
+`async_build_home_graph_snapshot` (`home_graph.py`) assembles what `goodvibes.sync_home_graph`
+sends:
+
+| Snapshot content | What it carries |
+| --- | --- |
+| Entities | Registry entities exposed to assistants (or all of them, with "include entities not exposed to assistants"), each with its state, a filtered set of current attributes, and registry metadata. |
+| Devices | Devices that own at least one included entity. |
+| Areas | Areas resolved from included entities or their devices. |
+| Automations, scripts, scenes | The subset of the entities above in those three domains. |
+| Labels | Home Assistant labels, when the label registry has any. |
+| Integrations | One record per configured integration domain: entry count and state, plus documentation, source, and issue-tracker URLs when the integration's manifest/repo metadata supplies them. |
+| Helper metadata | Entities in a fixed set of helper domains (`input_boolean`, `input_number`, `counter`, and the rest of `HELPER_DOMAINS`), singled out under `metadata.helpers`. |
+| Bounded page automation | Default hints for generating device passports and room pages (`pageAutomation`). |
 
 ## Ingest
 
@@ -230,9 +273,37 @@ data:
   area_ids: living_room,kitchen
 ```
 
-Map filters are sent to the daemon, not applied locally. Supported generic service fields include `query`, `record_kinds`, `ids`, `linked_to_ids`, `node_kinds`, `source_types`, `source_statuses`, `node_statuses`, `issue_codes`, `issue_statuses`, `issue_severities`, `edge_relations`, `tags`, and `min_confidence`.
+Map filters are sent to the daemon, not applied locally. Field descriptions below are from
+`services.yaml`, the same source `services.md`'s copy of these tables draws from.
 
-Supported Home Assistant fields include `object_kinds`, `entity_ids`, `device_ids`, `area_ids`, `integration_ids`, `integration_domains`, `domains`, `device_classes`, and `labels`.
+| Generic field | What it filters |
+| --- | --- |
+| `query` | Free-text search across matched records. |
+| `record_kinds` | Comma-separated record kinds such as `source`, `node`, `issue`. |
+| `ids` | Comma-separated source, node, or issue IDs. |
+| `linked_to_ids` | Comma-separated record IDs to show directly linked records. |
+| `node_kinds` | Comma-separated node kinds. |
+| `source_types` | Comma-separated source types. |
+| `source_statuses` | Comma-separated source statuses. |
+| `node_statuses` | Comma-separated node statuses. |
+| `issue_codes` | Comma-separated issue codes. |
+| `issue_statuses` | Comma-separated issue statuses. |
+| `issue_severities` | Comma-separated issue severities. |
+| `edge_relations` | Comma-separated edge relations. |
+| `tags` | Comma-separated tags or labels. |
+| `min_confidence` | Minimum confidence, `0`-`1`. |
+
+| Home Assistant field | What it filters |
+| --- | --- |
+| `object_kinds` | Comma-separated Home Assistant object kinds. |
+| `entity_ids` | Comma-separated Home Assistant entity IDs. |
+| `device_ids` | Comma-separated Home Assistant device IDs. |
+| `area_ids` | Comma-separated Home Assistant area IDs. |
+| `integration_ids` | Comma-separated Home Assistant integration IDs. |
+| `integration_domains` | Comma-separated Home Assistant integration domains. |
+| `domains` | Comma-separated Home Assistant entity domains. |
+| `device_classes` | Comma-separated Home Assistant device classes. |
+| `labels` | Comma-separated Home Assistant labels. |
 
 The sidebar Map tab uses `facets.homeAssistant` counts from the daemon for filter drilldowns. To keep the first view usable, the panel defaults to a smaller graph, leaves sources/pages off until selected, and hides unlabeled raw technical IDs from the primary chip lists while preserving selected exact IDs as removable filters.
 
@@ -264,13 +335,22 @@ data: {}
 
 If older manuals were uploaded before searchable extraction or old PDF parsing was available, run `goodvibes.home_graph_reindex` once after updating the daemon to the latest SDK, then retry Home Graph Ask. No reupload is required. If older manuals were not linked to the right object, re-link them from Review/Link or reingest them.
 
-The reindex response includes `ok`, `spaceId`, `scanned`, `reparsed`, `skipped`, `failed`, `sources`, `failures`, `changedSourceCount`, `forcedSourceCount`, `skippedGeneratedPageArtifactCount`, `refreshedGeneratedPageCount`, `generatedPagePolicyVersion`, optional `coalesced`, optional auto-link results, optional generated page summary, optional `qualityIssues`, and optional semantic counts.
+The reindex response is a daemon-owned payload this integration forwards to the panel as-is,
+with no local per-field parsing to verify field meaning against; `client.py`'s
+`home_graph_reindex` returns the daemon's JSON body unchanged. As of the SDK version this
+integration is validated against, that body carries `ok`, `spaceId`, `scanned`, `reparsed`,
+`skipped`, `failed`, `sources`, `failures`, `changedSourceCount`, `forcedSourceCount`,
+`skippedGeneratedPageArtifactCount`, `refreshedGeneratedPageCount`, `generatedPagePolicyVersion`,
+optional `coalesced`, optional auto-link results, optional generated page summary, optional
+`qualityIssues`, and optional semantic counts.
 
-The latest SDK may also return `semantic.selfImprovement`, refinement task IDs, `truncated`, and `budgetExhausted`. Broad repair work may be queued or coalesced for asynchronous refinement instead of completed inside the reindex request.
+The latest SDK may also return `semantic.selfImprovement`, refinement task IDs, `truncated`, and
+`budgetExhausted`. Broad repair work may be queued or coalesced for asynchronous refinement
+instead of completed inside the reindex request.
 
 The Refine tab lists daemon-owned task records from `/api/homeassistant/home-graph/refinement/tasks`, including lifecycle state, trigger, priority, blocked reason, trace, retry timing such as `nextRepairAttemptAt`, and metadata. It can call `/api/homeassistant/home-graph/refinement/run` for broad or targeted gap/source refinement and `/api/homeassistant/home-graph/refinement/tasks/{id}/cancel` for active task cancellation.
 
-Ask answers may include `answer.refinementTaskIds`; the panel renders those IDs so the matching tasks can be inspected. The latest refinement run summary displays SDK budget fields such as `candidateGaps`, `processedGaps`, `requestedLimit`, `effectiveLimit`, `truncated`, and `budgetExhausted`.
+Ask answers may include `answer.refinementTaskIds`; the panel renders those IDs so the matching tasks can be inspected. The refinement run response is likewise forwarded unparsed (`client.py`'s `home_graph_refinement_run`), so these budget field names come from the daemon's own summary rather than local field-by-field handling: `candidateGaps`, `processedGaps`, `requestedLimit`, `effectiveLimit`, `truncated`, and `budgetExhausted`.
 
 ## Export, import, and reset
 

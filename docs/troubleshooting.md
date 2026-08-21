@@ -40,12 +40,15 @@ The daemon config needs the Home Assistant long-lived access token:
 }
 ```
 
-The Home Assistant integration config needs:
+The Home Assistant integration config needs the same four fields the config flow collects (see the
+[Setup](../README.md#setup) table in the README for the authoritative description of each):
 
-- Daemon URL
-- Daemon bearer token or session token
-- Home Assistant webhook secret
-- Event type, usually `goodvibes_message`
+| Field | What it's for |
+| --- | --- |
+| Daemon URL | Base URL of the GoodVibes daemon. |
+| Daemon bearer token or session token | Authenticates Home Assistant's requests to the daemon. |
+| Home Assistant webhook secret | Shared secret protecting `/webhook/homeassistant`. |
+| Home Assistant event type | Event bus type the daemon publishes to; default `goodvibes_message`. |
 
 The webhook secret and Home Assistant long-lived access token are not substitutes for the daemon bearer token. The first request from Home Assistant to the daemon must include an actual bearer token in the `Authorization` header.
 

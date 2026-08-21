@@ -6,16 +6,18 @@ These limits describe the current integration and daemon contract. They are oper
 
 The integration does not store, search, or repair Home Graph data locally. The daemon owns:
 
-- Knowledge storage
-- Artifact storage and extraction
-- Source classification
-- Semantic enrichment
-- Fact and issue generation
-- Answer synthesis
-- Generated pages
-- Packets
-- Visual map layout
-- Export, import, reset, and reindex behavior
+| Capability | Covered in |
+| --- | --- |
+| Knowledge storage | [home-graph.md](home-graph.md) (Daemon routes, Workflow) |
+| Artifact storage and extraction | [home-graph.md](home-graph.md#ingest) |
+| Source classification | [home-graph.md](home-graph.md#workflow) |
+| Semantic enrichment | [home-graph.md](home-graph.md#reindex-and-refinement) |
+| Fact and issue generation | [home-graph.md](home-graph.md#review) |
+| Answer synthesis | [home-graph.md](home-graph.md#ask) |
+| Generated pages | [home-graph.md](home-graph.md#pages) |
+| Packets | [services.md](services.md#ask-pages-and-packets) |
+| Visual map layout | [home-graph.md](home-graph.md#map) |
+| Export, import, reset, and reindex behavior | [home-graph.md](home-graph.md#export-import-and-reset) |
 
 If Home Graph answers, pages, issues, or map output look wrong, fix or reset the daemon-owned knowledge space rather than adding local Home Assistant inference.
 
@@ -82,4 +84,10 @@ Any feature requiring direct browser-to-daemon calls needs a separate scoped bro
 
 The human-readable service guide summarizes behavior. Home Assistant selector-level field definitions live in `custom_components/goodvibes/services.yaml`.
 
-When service fields change, update both the schema and docs. The integration should continue accepting documented compatibility aliases such as `url` for artifact URI, `fact_id` for `issue_id`, and `decision` for `action`.
+When service fields change, update both the schema and docs. The integration should continue accepting these documented compatibility aliases (from `services.yaml`):
+
+| Alias | Canonical field |
+| --- | --- |
+| `url` | `uri` (the artifact URI) |
+| `fact_id` | `issue_id` |
+| `decision` | `action` |

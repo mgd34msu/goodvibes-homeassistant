@@ -194,15 +194,14 @@ data:
   packet_type: pet_sitter
 ```
 
-Supported packet types:
+`packet_type` is sent to the daemon as `packetKind` verbatim (`services.yaml`'s selector has no
+per-option description, and `generated_client.py` types `packetKind` as a plain string); the
+daemon, not this integration, defines what each kind actually contains, so a table claiming to
+explain each one would assert something this repo does not implement or verify. The accepted
+selector values are:
 
-- `guest_guide`
-- `pet_sitter`
-- `hvac_notes`
-- `electrician_notes`
-- `network_closet`
-- `emergency_sheet`
-- `house_sitter`
+`guest_guide`, `pet_sitter`, `hvac_notes`, `electrician_notes`, `network_closet`,
+`emergency_sheet`, `house_sitter`.
 
 ## Review
 
@@ -223,13 +222,10 @@ data:
   action: resolve
 ```
 
-Accepted review actions:
-
-- `accept`
-- `reject`
-- `resolve`
-- `edit`
-- `forget`
+`action` is forwarded to the daemon's `reviewHomeGraphFact` route unchanged; this repo has no
+per-action handling to verify a meaning against (`async_review_fact` in `services.py` only checks
+that `action` or `decision` was supplied, then passes the payload through). The accepted selector
+values are `accept`, `reject`, `resolve`, `edit`, and `forget`.
 
 `fact_id` is accepted as a compatibility alias for `issue_id`. `decision` is accepted as a compatibility alias for `action`.
 
@@ -248,34 +244,38 @@ data:
   area_ids: living_room,kitchen
 ```
 
-Generic filter fields:
+Generic filter fields (descriptions from `services.yaml`):
 
-- `query`
-- `record_kinds`
-- `ids`
-- `linked_to_ids`
-- `node_kinds`
-- `source_types`
-- `source_statuses`
-- `node_statuses`
-- `issue_codes`
-- `issue_statuses`
-- `issue_severities`
-- `edge_relations`
-- `tags`
-- `min_confidence`
+| Field | What it filters |
+| --- | --- |
+| `query` | Free-text search across matched records. |
+| `record_kinds` | Comma-separated record kinds such as `source`, `node`, `issue`. |
+| `ids` | Comma-separated source, node, or issue IDs. |
+| `linked_to_ids` | Comma-separated record IDs to show directly linked records. |
+| `node_kinds` | Comma-separated node kinds. |
+| `source_types` | Comma-separated source types. |
+| `source_statuses` | Comma-separated source statuses. |
+| `node_statuses` | Comma-separated node statuses. |
+| `issue_codes` | Comma-separated issue codes. |
+| `issue_statuses` | Comma-separated issue statuses. |
+| `issue_severities` | Comma-separated issue severities. |
+| `edge_relations` | Comma-separated edge relations. |
+| `tags` | Comma-separated tags or labels. |
+| `min_confidence` | Minimum confidence, `0`-`1`. |
 
 Home Assistant filter fields:
 
-- `object_kinds`
-- `entity_ids`
-- `device_ids`
-- `area_ids`
-- `integration_ids`
-- `integration_domains`
-- `domains`
-- `device_classes`
-- `labels`
+| Field | What it filters |
+| --- | --- |
+| `object_kinds` | Comma-separated Home Assistant object kinds. |
+| `entity_ids` | Comma-separated Home Assistant entity IDs. |
+| `device_ids` | Comma-separated Home Assistant device IDs. |
+| `area_ids` | Comma-separated Home Assistant area IDs. |
+| `integration_ids` | Comma-separated Home Assistant integration IDs. |
+| `integration_domains` | Comma-separated Home Assistant integration domains. |
+| `domains` | Comma-separated Home Assistant entity domains. |
+| `device_classes` | Comma-separated Home Assistant device classes. |
+| `labels` | Comma-separated Home Assistant labels. |
 
 Comma-separated string fields are passed to the daemon as filters. The integration does not compute the graph layout or apply map filters locally.
 
