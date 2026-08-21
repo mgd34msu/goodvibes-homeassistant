@@ -109,17 +109,22 @@ Stated explicitly, because these were considered and declined rather than overlo
 
 As of the SDK release this integration is validated against (`1.20.0`), all seven mail and calendar
 routes are `invokable: true` in the operator contract, and a live daemon serves every one of them.
-They stopped answering a blanket `404` as of `1.18.0`. What a fresh daemon with no mail or calendar
-account connected actually returns still varies by route: `email.send`, `email.draft.create`,
-`calendar.events.create` and `calendar.events.list`/`.get` answer `400` with a `*_NOT_CONFIGURED`
-machine code (`EMAIL_NOT_CONFIGURED`, `CALENDAR_NOT_CONFIGURED`, `EMAIL_CREDENTIALS_MISSING`),
-which this integration classifies as `needs_setup`. The inbox-read routes
-(`email.inbox.list`/`.read`) still answer `501 NOT_INVOKABLE` in this daemon build. The route is
-real but no handler is attached in the composition it was built with, which `classify_error`
-treats the same as a 404: `unsupported`, not `needs_setup`, because the fix is updating or
-recomposing the daemon rather than connecting an account. Both classifications, and `unavailable`
-for an unreachable daemon, carry the concrete next step in `const.MAIL_CALENDAR_NEXT_STEPS`: the
-honest state, and exactly what this surface is built to say.
+They stopped answering a blanket `404` as of `1.18.0`.
+
+What a fresh daemon with no mail or calendar account connected actually returns still varies by
+route:
+
+- `email.send`, `email.draft.create`, `calendar.events.create` and `calendar.events.list`/`.get`
+  answer `400` with a `*_NOT_CONFIGURED` machine code (`EMAIL_NOT_CONFIGURED`,
+  `CALENDAR_NOT_CONFIGURED`, `EMAIL_CREDENTIALS_MISSING`), which this integration classifies as
+  `needs_setup`.
+- The inbox-read routes (`email.inbox.list`/`.read`) still answer `501 NOT_INVOKABLE` in this
+  daemon build. The route is real but no handler is attached in the composition it was built with,
+  which `classify_error` treats the same as a 404: `unsupported`, not `needs_setup`, because the
+  fix is updating or recomposing the daemon rather than connecting an account.
+
+Both classifications, and `unavailable` for an unreachable daemon, carry the concrete next step in
+`const.MAIL_CALENDAR_NEXT_STEPS`: the honest state, and exactly what this surface is built to say.
 
 `scripts/validate-daemon-contract.mjs` prints the served/not-served status and the response shape
 of each route on every run, so any future change to this classification is visible the moment it

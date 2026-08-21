@@ -82,17 +82,23 @@ inferring from the vendored client alone: the method list is identical between `
 span did not touch the operator contract at all.
 
 `scripts/validate-daemon-contract.mjs 1.21.0` passed every check against a daemon booted from the
-published `1.21.0` SDK in an isolated home on an ephemeral loopback port: `/status` returns
-`status: running` / `version: 1.21.0` and `401` on a bad bearer token; `/api/homeassistant/health`
-serves the full capability set this integration consumes plus all four advertised endpoints; the
-manifest action still wraps its payload as `result.device`; the Home Graph status, issues, sources
-and pages routes return their documented shapes; `refinement/run` still returns the full `triage`
-block; `conversation/cancel` answers `400` (input validation, not a 404). Mail and calendar answer
-the same classifiable shapes the `1.20.0` pass confirmed: `email.send` and `email.draft.create`
-answer `400 INVALID_INPUT`; `email.inbox.list` and `email.inbox.read` answer `501 NOT_INVOKABLE`;
-`calendar.events.create` answers `400 INVALID_INPUT`; `calendar.events.get` and
-`calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED`, never a `503 ws-call-overloaded`
-routing fault reported as capacity.
+published `1.21.0` SDK in an isolated home on an ephemeral loopback port:
+
+- `/status` returns `status: running` / `version: 1.21.0` and `401` on a bad bearer token.
+- `/api/homeassistant/health` serves the full capability set this integration consumes plus all
+  four advertised endpoints.
+- The manifest action still wraps its payload as `result.device`.
+- The Home Graph status, issues, sources and pages routes return their documented shapes.
+- `refinement/run` still returns the full `triage` block.
+- `conversation/cancel` answers `400` (input validation, not a 404).
+
+Mail and calendar answer the same classifiable shapes the `1.20.0` pass confirmed:
+
+- `email.send` and `email.draft.create` answer `400 INVALID_INPUT`.
+- `email.inbox.list` and `email.inbox.read` answer `501 NOT_INVOKABLE`.
+- `calendar.events.create` answers `400 INVALID_INPUT`.
+- `calendar.events.get` and `calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED`, never a
+  `503 ws-call-overloaded` routing fault reported as capacity.
 
 Pytest passed in full: 257 passed, 1 skipped (`test_generated_client_sync.py`, which skips absent
 a sibling `goodvibes-sdk` checkout, expected in this environment, the same skip every prior pass
@@ -106,24 +112,33 @@ published `1.20.0` package's Python artifact; the only diff from `1.18.1` is the
 label, so all 33 consumed methods, routes and types are unchanged across the whole span.
 
 `scripts/validate-daemon-contract.mjs 1.20.0` passed every check against a daemon booted from the
-published `1.20.0` SDK in an isolated home on an ephemeral loopback port: `/status` returns
-`status: running` / `version: 1.20.0` and `401` on a bad bearer token; `/api/homeassistant/health`
-serves the full capability set this integration consumes plus all four advertised endpoints; the
-manifest action still wraps its payload as `result.device`; the Home Graph status, issues, sources
-and pages routes return their documented shapes; `refinement/run` still returns the full `triage`
-block; `conversation/cancel` answers `400` (input validation, not a 404). Mail and calendar answer
-the same classifiable shapes the `1.18.1` pass first confirmed: `email.send` and
-`email.draft.create` answer `400 INVALID_INPUT`; `email.inbox.list` and `email.inbox.read` answer
-`501 NOT_INVOKABLE`; `calendar.events.create` answers `400 INVALID_INPUT`; `calendar.events.get`
-and `calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED`, never a `503 ws-call-overloaded`
-routing fault reported as capacity.
+published `1.20.0` SDK in an isolated home on an ephemeral loopback port:
+
+- `/status` returns `status: running` / `version: 1.20.0` and `401` on a bad bearer token.
+- `/api/homeassistant/health` serves the full capability set this integration consumes plus all
+  four advertised endpoints.
+- The manifest action still wraps its payload as `result.device`.
+- The Home Graph status, issues, sources and pages routes return their documented shapes.
+- `refinement/run` still returns the full `triage` block.
+- `conversation/cancel` answers `400` (input validation, not a 404).
+
+Mail and calendar answer the same classifiable shapes the `1.18.1` pass first confirmed:
+
+- `email.send` and `email.draft.create` answer `400 INVALID_INPUT`.
+- `email.inbox.list` and `email.inbox.read` answer `501 NOT_INVOKABLE`.
+- `calendar.events.create` answers `400 INVALID_INPUT`.
+- `calendar.events.get` and `calendar.events.list` answer `400 CALENDAR_NOT_CONFIGURED`, never a
+  `503 ws-call-overloaded` routing fault reported as capacity.
 
 The SDK's `1.19.x`/`1.20.0` span added operator methods this integration does not consume:
-`occasions.*` (proactive occasion/plan tracking: `occasions.list`, `.propose`, `.confirm`,
-`.plans.*`, `.interview.*`, `.gifts`, `.sweep`, `.state`), `voice.wake.*` (wake-word model
-provisioning and status), and several settings domains (`config.get`/`config.set`,
-`checkin.config.*`, `mcp.config.*`, `security.settings`, `settings.snapshot`). None of them are in
-the REST subset `generated_client.py` vendors (`channels.*`, `control.status`,
+
+- `occasions.*` (proactive occasion/plan tracking: `occasions.list`, `.propose`, `.confirm`,
+  `.plans.*`, `.interview.*`, `.gifts`, `.sweep`, `.state`).
+- `voice.wake.*` (wake-word model provisioning and status).
+- Several settings domains (`config.get`/`config.set`, `checkin.config.*`, `mcp.config.*`,
+  `security.settings`, `settings.snapshot`).
+
+None of them are in the REST subset `generated_client.py` vendors (`channels.*`, `control.status`,
 `homeassistant.homeGraph.*`, `tasks.*`, `email.*`, `calendar.events.*`), so there is no adaptation
 required and nothing new for Home Assistant to surface yet, confirmed by the byte-for-byte
 re-vendor above, not merely assumed from the changelog.
@@ -141,16 +156,23 @@ consumed methods, routes and types are unchanged across the whole span.
 
 The pass ran `scripts/validate-daemon-contract.mjs` (new this pass) against a daemon booted from
 the published `1.17.2` SDK in an isolated home on an ephemeral loopback port, and every check
-passed. Confirmed live: `/status` returns `status: running` / `version: 1.17.2` and `401` on a bad
-bearer token; `/api/homeassistant/health` serves the full capability set this integration consumes
-(`conversation-submit-wait`, `conversation-stream`, `conversation-cancel`, `stable-correlation`,
-`isolated-remote-chat-session`, `remote-session-ttl`, `homeassistant-event-delivery`) plus all four
-advertised endpoints; the manifest action still wraps its payload as `result.device`; the Home
-Graph status, issues, sources and pages routes return their documented shapes; and
-`refinement/run` still returns the full `triage` block (`ok`, `spaceId`, `configured`, `processed`,
-`skipped`, `applied`, `reviewed`, `decisions`, `remaining`, `minConfidence`) the panel's automatic
-triage depends on. `conversation/cancel` answers `400 "sessionId or known messageId is required."`
-The route is alive and validating input, not returning a 404.
+passed.
+
+Confirmed live:
+
+- `/status` returns `status: running` / `version: 1.17.2` and `401` on a bad bearer token.
+- `/api/homeassistant/health` serves the full capability set this integration consumes
+  (`conversation-submit-wait`, `conversation-stream`, `conversation-cancel`, `stable-correlation`,
+  `isolated-remote-chat-session`, `remote-session-ttl`, `homeassistant-event-delivery`) plus all
+  four advertised endpoints.
+- The manifest action still wraps its payload as `result.device`.
+- The Home Graph status, issues, sources and pages routes return their documented shapes.
+- `refinement/run` still returns the full `triage` block (`ok`, `spaceId`, `configured`,
+  `processed`, `skipped`, `applied`, `reviewed`, `decisions`, `remaining`, `minConfidence`) the
+  panel's automatic triage depends on.
+
+`conversation/cancel` answers `400 "sessionId or known messageId is required."` The route is alive
+and validating input, not returning a 404.
 
 Nothing in the integration broke across the window. The daemon-side changes in it are additive or
 internal from this integration's point of view:
@@ -212,24 +234,32 @@ The `1.11.4` pass (2026-07-18) re-vendored `custom_components/goodvibes/generate
 byte-for-byte from the published `1.11.4` package's Python artifact; the only diff from `1.11.3`
 is the contract version label. `1.11.4` hardens the SDK-internal secrets keyfile handling and
 does not touch the operator contract, so all 33 consumed methods, routes, and types are
-unchanged. The pass booted a daemon from the published `1.11.4` SDK (same isolated-home
-`bootDaemon` recipe as the `1.11.3` pass) and probed the routes this integration reads directly:
-`/status` returned `status: running`/`version: 1.11.4` and `401` on a bad bearer token;
-`/api/homeassistant/health` capabilities include `conversation-stream` and `conversation-cancel`;
-both home-graph routes returned `ok`. This repo's full pytest suite (208 tests) passed against
-the re-vendored client.
+unchanged.
+
+The pass booted a daemon from the published `1.11.4` SDK (same isolated-home `bootDaemon` recipe
+as the `1.11.3` pass) and probed the routes this integration reads directly:
+
+- `/status` returned `status: running`/`version: 1.11.4` and `401` on a bad bearer token.
+- `/api/homeassistant/health` capabilities include `conversation-stream` and `conversation-cancel`.
+- Both home-graph routes returned `ok`.
+
+This repo's full pytest suite (208 tests) passed against the re-vendored client.
 
 The `1.11.3` pass (2026-07-17) re-vendored `custom_components/goodvibes/generated_client.py`
 byte-for-byte from the published `1.11.3` package's Python artifact; the only diff from `1.11.2`
 is the contract version label (`CONTRACT_VERSION = "1.11.3"`). `1.11.3` fixes SDK-internal
 logging/publish behavior and adds a transcript-rendering export, none of which touches the
-operator contract, so all 33 consumed methods, routes, and types are unchanged. The pass booted a
-daemon from the published `1.11.3` SDK (`bootDaemon` from `@pellux/goodvibes-sdk/daemon`, isolated
-home and working directories, ephemeral loopback port, stopped in a `finally` block) and probed
-the routes this integration reads directly: `/status` returned `status: running`/`version: 1.11.3`
-and `401` on a bad bearer token; `/api/homeassistant/health` capabilities include
-`conversation-stream` and `conversation-cancel`; `/api/homeassistant/home-graph/status` returned
-`ok` and `readiness`; `/api/homeassistant/home-graph/issues` returned `ok` with an issue list.
+operator contract, so all 33 consumed methods, routes, and types are unchanged.
+
+The pass booted a daemon from the published `1.11.3` SDK (`bootDaemon` from
+`@pellux/goodvibes-sdk/daemon`, isolated home and working directories, ephemeral loopback port,
+stopped in a `finally` block) and probed the routes this integration reads directly:
+
+- `/status` returned `status: running`/`version: 1.11.3` and `401` on a bad bearer token.
+- `/api/homeassistant/health` capabilities include `conversation-stream` and `conversation-cancel`.
+- `/api/homeassistant/home-graph/status` returned `ok` and `readiness`.
+- `/api/homeassistant/home-graph/issues` returned `ok` with an issue list.
+
 The conversation/stream/cancel deep exercise was not repeated. The contract those routes bind to
 is byte-for-byte identical to the fully-exercised `1.10.1` pass. This repo's full pytest suite
 (208 tests) passed against the re-vendored client.
@@ -239,16 +269,20 @@ from the published `1.11.2` package's Python artifact; the only diff from `1.10.
 label itself (`Contract product version: 1.11.2`, `CONTRACT_VERSION = "1.11.2"`). The SDK's
 `1.11.0`/`1.11.1`/`1.11.2` releases are release-engineering only (shared CI/CD toolchain + reusable
 workflows) and did not touch the operator contract, so all 33 consumed methods, routes, and types
-are unchanged. This pass also booted a daemon from the published `1.11.2` SDK (`bootDaemon` from
+are unchanged.
+
+This pass also booted a daemon from the published `1.11.2` SDK (`bootDaemon` from
 `@pellux/goodvibes-sdk/daemon`, isolated home and working directories, ephemeral loopback port,
-stopped in a `finally` block) and probed the routes this integration reads directly: `/status`
-returned `status`/`version: 1.11.2` and `401` on a bad bearer token; `/api/homeassistant/health`
-capabilities include `conversation-stream` and `conversation-cancel`;
-`/api/homeassistant/home-graph/status` returned `ok`, the graph counts, and `readiness`;
-`/api/homeassistant/home-graph/issues` returned `ok`/`spaceId`/`issues`. The conversation/stream/
-cancel deep exercise was not repeated this pass. The contract those routes bind to is
-byte-for-byte identical to the fully-exercised `1.10.1` pass. This repo's full pytest suite passed
-against the re-vendored client.
+stopped in a `finally` block) and probed the routes this integration reads directly:
+
+- `/status` returned `status`/`version: 1.11.2` and `401` on a bad bearer token.
+- `/api/homeassistant/health` capabilities include `conversation-stream` and `conversation-cancel`.
+- `/api/homeassistant/home-graph/status` returned `ok`, the graph counts, and `readiness`.
+- `/api/homeassistant/home-graph/issues` returned `ok`/`spaceId`/`issues`.
+
+The conversation/stream/cancel deep exercise was not repeated this pass. The contract those routes
+bind to is byte-for-byte identical to the fully-exercised `1.10.1` pass. This repo's full pytest
+suite passed against the re-vendored client.
 
 The 2026-07-16 pass re-vendored `custom_components/goodvibes/generated_client.py` byte-for-byte
 from the published `1.10.1` package's own generated Python artifact
@@ -257,19 +291,25 @@ from the published `1.10.1` package's own generated Python artifact
 (`Contract product version: 1.10.1` and `CONTRACT_VERSION = "1.10.1"`); the operator contract's
 REST subset this client depends on (33 methods) and all its route bindings and types are
 byte-for-byte unchanged, so 1.10.1 (a patch release adding type aliases and export subpaths only)
-did not touch the HA-consumed method set at all. This pass also booted a daemon from the published
-`1.10.1` SDK (isolated home directory, isolated working directory, ephemeral loopback port, Home
-Assistant surface enabled, composed via the SDK's own published `bootDaemon` factory from
-`@pellux/goodvibes-sdk/daemon`, stopped in a `finally` block) and re-ran the validation checklist
-against it: `/status` (including a bad-token `401`, reporting `version: 1.10.1`),
-`/api/homeassistant/health` (capabilities include `conversation-stream` and `conversation-cancel`),
-the manifest action, and the Home Graph status/sync/ask/pages/map/reindex/issues/refinement-run
-routes all returned the expected shapes, and the conversation, conversation/stream, and
-conversation/cancel routes returned the expected results, including a full streamed frame envelope
-(`delta` frames followed by a terminal `final` frame) and a real assistant reply. This repo's full
-local check recipe from `docs/development.md` (`python -m compileall`, the frontend JS syntax
-check, the release-metadata consistency check, `git diff --check`, and the full `pytest` suite)
-passed against it, including the response-shape assertions below and
+did not touch the HA-consumed method set at all.
+
+This pass also booted a daemon from the published `1.10.1` SDK (isolated home directory, isolated
+working directory, ephemeral loopback port, Home Assistant surface enabled, composed via the SDK's
+own published `bootDaemon` factory from `@pellux/goodvibes-sdk/daemon`, stopped in a `finally`
+block) and re-ran the validation checklist against it:
+
+- `/status` (including a bad-token `401`, reporting `version: 1.10.1`).
+- `/api/homeassistant/health` (capabilities include `conversation-stream` and
+  `conversation-cancel`).
+- The manifest action, and the Home Graph status/sync/ask/pages/map/reindex/issues/refinement-run
+  routes, all returned the expected shapes.
+- The conversation, conversation/stream, and conversation/cancel routes returned the expected
+  results, including a full streamed frame envelope (`delta` frames followed by a terminal `final`
+  frame) and a real assistant reply.
+
+This repo's full local check recipe from `docs/development.md` (`python -m compileall`, the
+frontend JS syntax check, the release-metadata consistency check, `git diff --check`, and the full
+`pytest` suite) passed against it, including the response-shape assertions below and
 `test_version_check.py::test_contract_version_is_at_least_min_daemon_version`.
 
 After upgrading or restarting the daemon SDK during live validation, restart Home Assistant once
