@@ -12,4 +12,4 @@
 # (then restore this comment header), and verify with:
 #   sha256sum -c tests/generated_client.sha256
 
-fc2ab65ae5fd9a2c682099fa2f66742ce036d90a563baa7ef4221e1c46331e7e  custom_components/goodvibes/generated_client.py
+d39e956122589d96e7ca15469c7ef7fa4e560888d821cdd0c64da7bdcabc2137  custom_components/goodvibes/generated_client.py

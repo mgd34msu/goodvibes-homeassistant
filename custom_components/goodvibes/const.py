@@ -28,7 +28,7 @@ INTEGRATION_VERSION = "0.13.12"
 # releases, a claim of "validated against X" is now impossible to make unless
 # the artifact generated against X is actually the one vendored here.
 SDK_PACKAGE = "@pellux/goodvibes-sdk"
-SDK_VALIDATED_VERSION = "2.0.19"
+SDK_VALIDATED_VERSION = "2.0.20"
 
 # The daemon HTTP contract this client is written against. At connect the client
 # reads the daemon's advertised software version (GET /status -> version) and
