@@ -3,8 +3,8 @@
 When the user opts in (off by default, enabled through the admin-only options
 flow), the integration keeps a bounded, in-memory record of its *own* observed
 state changes and periodically runs a local frequency analysis over that record.
-Recurring patterns — "this controllable entity tends to change to this state at
-about this time on weekdays" — are surfaced as automation **proposals** for the
+Recurring patterns, "this controllable entity tends to change to this state at
+about this time on weekdays", are surfaced as automation **proposals** for the
 user to review. Nothing is ever created silently, and no observation data leaves
 the machine.
 

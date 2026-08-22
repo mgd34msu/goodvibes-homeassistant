@@ -160,7 +160,7 @@ def test_the_machine_code_decides_not_the_wording(code):
         "code": "CALENDAR_NOT_CONFIGURED"}
 
     and the substring list of the day held "no account", "not connected" and
-    "not configured" — none of which appear in "No Google account is
+    "not configured", none of which appear in "No Google account is
     connected". The classifier fell through to its ready default, so a calendar
     with nothing behind it would have reported itself READY. The message here is
     deliberately one that matches no hint at all.

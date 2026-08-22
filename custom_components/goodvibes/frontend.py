@@ -707,7 +707,7 @@ async def _async_triage_home_graph_issues(
     no local classification logic left in this integration. An older daemon
     that does not recognize the ``triage`` input (HTTP 404) or that reports no
     configured triage LLM (``configured: false``) is not papered over with a
-    local fallback engine — it is reported honestly as unsupported so the
+    local fallback engine. It is reported honestly as unsupported so the
     panel can say so and the run is skipped.
     """
 
@@ -761,7 +761,7 @@ async def _async_triage_home_graph_issues(
 def _triage_unsupported_result(reason: str) -> dict[str, Any]:
     """Return an honest "server-side triage unavailable" outcome.
 
-    No local re-implementation of the retired Python triage engine — just a
+    No local re-implementation of the retired Python triage engine, just a
     plain result the panel can present, with every count at zero so it reads
     the same as a batch that found nothing to do.
     """
@@ -807,8 +807,8 @@ async def _read_multipart_upload(
     """Read a multipart browser upload into a temporary file.
 
     The multipart chunks are read on the event loop (``read_chunk`` is async),
-    but every disk operation — creating the temp file, writing each chunk, and
-    cleaning up on error — is handed to an executor thread so the loop is never
+    but every disk operation (creating the temp file, writing each chunk, and
+    cleaning up on error) is handed to an executor thread so the loop is never
     blocked on I/O. An oversized upload is refused as soon as it crosses the cap
     instead of being buffered to disk in full first.
     """

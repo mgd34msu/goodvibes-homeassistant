@@ -17,7 +17,7 @@ codebase and is re-expressed here in this repo's own vocabulary):
   vocabulary, so the "Wave <digits>" pattern excludes anything preceded
   by ``Z-``/``z-``.
 * Bluetooth/BLE MAC address strings such as ``"A4:C1:38:2B:11:7F"`` start
-  with a capital letter, two hex digits, and a colon — the same opening
+  with a capital letter, two hex digits, and a colon, the same opening
   as a "finding-id title" string. The title form therefore requires
   whitespace after the colon, which titles have and MAC addresses do not.
 * Lettered finding ids are only banned in three unambiguous shapes
@@ -127,7 +127,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 def find_internal_identifiers(text: str) -> list[tuple[int, str, str]]:
     """Return (line number, matched token, pattern description) per hit.
 
-    At most one hit is reported per line — enough to locate and fix it.
+    At most one hit is reported per line, enough to locate and fix it.
     """
 
     hits: list[tuple[int, str, str]] = []

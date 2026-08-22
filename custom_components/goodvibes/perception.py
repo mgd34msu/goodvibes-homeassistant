@@ -3,7 +3,7 @@
 When enabled in the options flow, the integration watches the state of a chosen
 set of entities. A meaningful state change (the state value itself changing, not
 just an attribute) starts an attributed GoodVibes daemon session that carries the
-triggering context — which entity changed, its old and new value, and the area —
+triggering context: which entity changed, its old and new value, and the area,
 so the daemon can react to something happening in the home.
 
 Boundaries and safeguards

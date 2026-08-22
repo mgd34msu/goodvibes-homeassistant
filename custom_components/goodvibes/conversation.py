@@ -178,7 +178,7 @@ class GoodVibesConversationEntity(ConversationEntity):
         """Assemble the turn's system prompt through Home Assistant's llm helper.
 
         This routes the config entry's chosen Assist LLM API and custom prompt
-        through ``chat_log.async_provide_llm_data`` — the same helper a
+        through ``chat_log.async_provide_llm_data``, the same helper a
         first-class conversation agent uses. When an LLM API is selected, the
         prompt Home Assistant assembles lists only the entities exposed to
         assistants (``async_should_expose``), so the instructions handed to the

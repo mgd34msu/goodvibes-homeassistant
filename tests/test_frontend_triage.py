@@ -4,7 +4,7 @@
 loop with a Store-backed decision cache (see
 docs/triage-engine-comparison.md). It is now a thin proxy onto the daemon's
 ``POST /home-graph/refinement/run`` ``triage`` mode (SDK decision record
-2026-07-07-home-graph-issue-triage.md) — the daemon owns the triage prompt,
+2026-07-07-home-graph-issue-triage.md). The daemon owns the triage prompt,
 confidence gate, and decision cache. These tests cover the capability gate
 (happy path, an unconfigured daemon, and an older daemon that 404s on the
 ``triage`` input) and that panel-supplied options are forwarded correctly.

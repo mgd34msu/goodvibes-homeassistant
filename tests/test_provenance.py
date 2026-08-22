@@ -1,7 +1,7 @@
 """Tests for the causal-provenance tracker.
 
 The tracker indexes the Home Assistant context chain so a state change can be
-attributed to its cause — an automation, script, scene, service call, or user —
+attributed to its cause (an automation, script, scene, service call, or user)
 and is honest about what the chain cannot tell it (device/integration-originated
 changes and broken chains).
 """

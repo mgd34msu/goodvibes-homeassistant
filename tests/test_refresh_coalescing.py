@@ -3,7 +3,7 @@
 data.py:488's reconnect watchdog, services.py's ``goodvibes.status`` handler,
 and the coordinator can all call ``runtime.async_refresh()`` on the same
 runtime. Without coordination, two overlapping calls each read the daemon and
-then write the shared dataclass fields, and whichever finishes last wins —
+then write the shared dataclass fields, and whichever finishes last wins,
 a torn/duplicated refresh a maintainer would not see without forcing the
 overlap. These tests force that overlap directly with an ``asyncio.Event``
 gate on the fake client, rather than relying on timing.

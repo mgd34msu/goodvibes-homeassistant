@@ -260,7 +260,7 @@ class GoodVibesRuntimeData:
         This is also the daemon-connection probe: a connection failure here
         (as opposed to an error response from a reachable daemon) marks the
         connection down, raises the honest repair issue, and starts the
-        reconnect watchdog. This method never raises a client error itself —
+        reconnect watchdog. This method never raises a client error itself.
         callers (setup, the coordinator, the reconnect watchdog) can always
         await it and read the outcome off ``daemon_connected``/``status``.
         """
@@ -320,8 +320,8 @@ class GoodVibesRuntimeData:
         """Re-probe the daemon's mail and calendar surface.
 
         Never raises. A daemon that does not serve the routes, or serves them
-        with no account connected, is a normal state for this integration —
-        mail and calendar are optional — so the outcome is recorded on
+        with no account connected, is a normal state for this integration.
+        Mail and calendar are optional, so the outcome is recorded on
         ``mail_calendar`` for the entity and sensor to report rather than being
         allowed to fail a refresh that is mostly about other things.
         """
@@ -437,7 +437,7 @@ class GoodVibesRuntimeData:
 
         Distinct from an unreachable daemon: the connection itself is fine, so
         this does not raise ISSUE_DAEMON_UNREACHABLE (that would be
-        dishonest) — the version/capability issues already say why. Entities
+        dishonest). The version/capability issues already say why. Entities
         still report unavailable and the reconnect watchdog keeps retrying,
         because this client cannot safely operate against an incompatible
         daemon.
@@ -501,11 +501,11 @@ class GoodVibesRuntimeData:
         batched core refresh with its version/capability probe). A failure
         here runs straight back through async_refresh's own
         _async_mark_daemon_unreachable/_async_mark_daemon_not_ready, which
-        schedules the next attempt at the (already-doubled) backoff delay —
-        this method does not need to schedule retries itself. On success it
+        schedules the next attempt at the (already-doubled) backoff delay.
+        This method does not need to schedule retries itself. On success it
         runs ``on_daemon_reconnected`` (set by async_setup_entry) to redo the
-        rest of what setup does against the daemon — currently the device
-        registry refresh and the Home Graph sync — so reconnecting is
+        rest of what setup does against the daemon, currently the device
+        registry refresh and the Home Graph sync, so reconnecting is
         equivalent to a fresh setup and needs no action from the user.
         """
 

@@ -117,8 +117,8 @@ async def async_build_home_graph_snapshot(
     Home Assistant :class:`~homeassistant.core.Context` and returns the causal
     provenance for that state (which automation/script/user/integration caused
     it, chained where Home Assistant supplies parent contexts). That provenance
-    travels on each entity so the registered/synced graph — and therefore the
-    daemon's grounding ``ask`` path — can answer cause questions. Older daemons
+    travels on each entity so the registered/synced graph, and therefore the
+    daemon's grounding ``ask`` path, can answer cause questions. Older daemons
     ignore the extra field.
     """
 

@@ -27,7 +27,7 @@ def test_validated_version_matches_vendored_contract():
     Before this check existed the label was enforced by nothing: CI's only
     SDK-version step is an informational ``::notice::`` that never fails, and
     ``test_generated_client_sync.py`` skips whenever no sibling SDK checkout is
-    present — which is always the case in CI. That let the label sit at 1.15.0
+    present, which is always the case in CI. That let the label sit at 1.15.0
     through five SDK releases while the daemon moved to 1.17.2. Bumping one of
     these two without the other now fails here instead of shipping a false
     compatibility claim.
@@ -48,7 +48,7 @@ def test_contract_version_is_at_least_min_daemon_version():
     MIN_DAEMON_VERSION is hand-maintained (see const.py) because it covers
     hand-written surfaces the generated client does not, but it still must
     describe a daemon no newer than the one the mechanical REST subset was
-    generated against — otherwise the floor would claim compatibility with a
+    generated against, otherwise the floor would claim compatibility with a
     contract version this client was never checked against.
     """
 

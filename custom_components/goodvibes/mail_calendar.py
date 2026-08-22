@@ -3,7 +3,7 @@
 The daemon owns the mail and calendar accounts and every credential behind
 them. This integration holds none: it calls the daemon's ``email.*`` and
 ``calendar.events.*`` routes and presents the results the way Home Assistant
-expects — a calendar entity, services, and a diagnostic sensor.
+expects: a calendar entity, services, and a diagnostic sensor.
 
 The whole point of this module is to be honest about *why* mail and calendar
 are not working when they are not working, because the three reasons have three
@@ -102,12 +102,12 @@ def classify_error(err: GoodVibesClientError) -> tuple[str, str]:
     function once. When the daemon began actually serving these routes it
     answered "No Google account is connected on this machine" with
     ``code: CALENDAR_NOT_CONFIGURED``, and the old substring list matched none
-    of it — so an unconfigured calendar fell through to the ready default and
+    of it, so an unconfigured calendar fell through to the ready default and
     would have reported itself ready with nothing behind it.
 
     A 404 (or a 501 saying the route is real but unwired here) means the surface
     is not available on this daemon at all. A reachable daemon that answers "no
-    account connected" means the surface exists with nothing behind it — a
+    account connected" means the surface exists with nothing behind it, a
     different problem with a different fix, so it is not collapsed into the same
     bucket.
     """

@@ -9,7 +9,7 @@ payloads stay small.
 To keep that registered graph from going stale, this watcher re-syncs it when
 the home's structure changes: an entity, device, or area registry entry is
 added, removed, or renamed. Registry updates (not high-frequency state changes)
-are the right granularity — the snapshot's structure is what the daemon indexes.
+are the right granularity. The snapshot's structure is what the daemon indexes.
 The re-syncs are coalesced through a :class:`~homeassistant.helpers.debounce.Debouncer`
 so a burst of registry writes (for example, a newly added integration creating
 many entities at once) produces a single refresh after things settle.

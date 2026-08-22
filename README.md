@@ -139,7 +139,7 @@ python -m compileall custom_components/goodvibes
 find custom_components/goodvibes/frontend -name '*.js' -print0 | xargs -0 -r -n1 node --check
 ```
 
-CI additionally runs the pytest suite, Home Assistant's own `hassfest` validation, and HACS validation; a push to `main` that clears all of them tags and publishes a release automatically. The full local check recipe, release process, and version-bump checklist are in [docs/development.md](docs/development.md).
+CI also runs the pytest suite, Home Assistant's own `hassfest` validation, and HACS validation; a push to `main` that clears all of them tags and publishes a release automatically. The full local check recipe, release process, and version-bump checklist are in [docs/development.md](docs/development.md).
 
 ---
 

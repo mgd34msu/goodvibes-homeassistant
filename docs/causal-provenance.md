@@ -46,7 +46,7 @@ understand the field simply ignore it.
 ## The `causal_chain` service
 
 `goodvibes.causal_chain` returns the attributed cause for an entity's recent
-state changes and its current state. It is **admin-gated** and additionally
+state changes and its current state. It is **admin-gated** and also
 checks the caller's control permission for the target entity, matching the other
 state-touching services.
 

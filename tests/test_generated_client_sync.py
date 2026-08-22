@@ -11,7 +11,7 @@ not run the SDK's code generator, so there are two independent guards here:
   checkout and skipped when one was absent, which is always the case in CI, so
   hand-edits to the vendored copy could ship undetected.
 * when a sibling ``goodvibes-sdk`` checkout happens to be present (the local
-  development layout), the vendored copy is additionally byte-compared against
+  development layout), the vendored copy is also byte-compared against
   the SDK's artifact. That catches the other direction: a vendored copy that is
   internally consistent with its recorded hash but stale relative to upstream.
 """

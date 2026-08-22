@@ -12,7 +12,7 @@ integration can answer "why did the light turn on at 3am":
 
 * It listens for the bus events whose context *identifies a cause*, an
   automation run (``automation_triggered``), a script run (``script_started``),
-  and a service call (``call_service``) — and records, keyed by that context's
+  and a service call (``call_service``), and records, keyed by that context's
   id, what the cause was.
 * Given the context that rode with a state change, :meth:`resolve` walks back up
   the ``parent_id`` chain through that index and attributes the change to the
@@ -26,12 +26,12 @@ What the context chain genuinely provides vs. what is unknowable
   context is genuinely attributable to it, chained where Home Assistant supplies
   parent contexts.
 * A *root* context (no parent, no user, not itself a recorded cause) means the
-  change originated from the entity/integration itself — a device report or a
+  change originated from the entity/integration itself, a device report or a
   poll. We report that as ``device_or_integration``. Home Assistant does not
   record *which* integration in the context, so we do not invent one.
 * A change whose parent context we never captured (for example, it happened
   before Home Assistant started, or came from a cause this tracker does not
-  observe) is reported as ``unknown`` — the chain is broken and guessing would
+  observe) is reported as ``unknown``. The chain is broken and guessing would
   be dishonest.
 
 The indexes are recent-history caches bounded by count, not a full audit log.

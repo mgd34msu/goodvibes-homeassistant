@@ -18,7 +18,7 @@ user is not an administrator, that helper raises ``Unauthorized``. Calls with no
 user context (automations, scripts, and other trusted internal callers) are
 allowed through, matching how Home Assistant core treats admin-only services.
 Read-only query handlers stay open on purpose so dashboards and non-admin users
-can inspect state. ``home_graph_packet`` additionally accepts an entity id, so it
+can inspect state. ``home_graph_packet`` also accepts an entity id, so it
 checks the calling user's per-entity control permission for that entity.
 
     Service              Authorization  Reason
@@ -884,7 +884,7 @@ async def async_home_graph_reindex(call: ServiceCall) -> dict[str, Any]:
 async def async_causal_chain(call: ServiceCall) -> dict[str, Any]:
     """Return the causal chain for an entity's recent tracked state changes.
 
-    Admin-gated, and additionally checks the caller's control permission for the
+    Admin-gated, and also checks the caller's control permission for the
     targeted entity. For each recent change (and the current state) it walks the
     Home Assistant context chain to attribute a cause, resolving any user id to a
     display name. The tracked history is in-memory since the integration started,

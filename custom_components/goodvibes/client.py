@@ -791,7 +791,7 @@ def _error_for_status(
     A 501 carrying ``NOT_INVOKABLE`` is the same class of answer as the 404:
     the daemon knows the route but no handler is attached in the composition it
     was built with, so the capability is not available here. It is a separate
-    status because it is a different fact — the route is real and the daemon is
+    status because it is a different fact. The route is real and the daemon is
     current, which a 404 would misreport as an out-of-date daemon.
 
     The machine ``code`` is lifted off the body whenever there is one, so
@@ -816,7 +816,7 @@ def _error_code_from_detail(detail: Any) -> str | None:
     """Lift the daemon's machine error code off a JSON error body.
 
     Returns ``None`` for a body that is not JSON or carries no code, which is
-    the honest answer — the caller then falls back to its own heuristics rather
+    the honest answer. The caller then falls back to its own heuristics rather
     than acting on a code that was never sent.
     """
 
