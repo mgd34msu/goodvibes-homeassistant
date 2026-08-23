@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.16 - 2026-08-23
+
+- Validate against platform contract 2.0.23. The re-vendored client carries
+  the new reasoning-effort fields on the model verbs and the calendar-auth
+  code change (a dead Google grant reads CALENDAR_AUTH_FAILED with a 401).
+  Frontend assets rebuilt under the new integration version.
+
 ## 0.13.12 - 2026-08-21
 
 - Validate against platform contract 2.0.19, published by daemon 1.28.21. The
